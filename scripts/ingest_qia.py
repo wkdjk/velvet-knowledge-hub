@@ -171,8 +171,9 @@ def _detect_annual_header(all_rows: list) -> tuple[int, int, int, int, list[tupl
         next_row = [_safe_str(c) for c in all_rows[row_idx + 1]]
 
         # Look for a row containing 품명 and 국가명 (or 국 가 or 국가).
-        has_product = any("품명" in c for c in row)
-        has_country = any("국가" in c for c in row)
+        # Normalise by removing internal spaces before matching (handles "품  명" in 2021 files).
+        has_product = any("품명" in c.replace(" ", "") for c in row)
+        has_country = any("국가" in c.replace(" ", "") for c in row)
 
         if not (has_product and has_country):
             continue
@@ -187,8 +188,8 @@ def _detect_annual_header(all_rows: list) -> tuple[int, int, int, int, list[tupl
             if "품목명" in cell or "품 목" in cell:
                 if col_product_category == -1:
                     col_product_category = col_idx
-            # 품명 = product name (e.g. 녹용)
-            if cell in ("품명", "품 명") or cell == "품명":
+            # 품명 = product name (e.g. 녹용) — normalise spaces ("품  명" in 2021)
+            if cell.replace(" ", "") == "품명":
                 if col_product_name == -1:
                     col_product_name = col_idx
             # 국가명 / 국 가 / 국가
