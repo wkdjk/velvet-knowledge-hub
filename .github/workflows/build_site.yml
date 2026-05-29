@@ -1,0 +1,49 @@
+name: Build and deploy site
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'   # Monday 02:00 UTC (11:00 KST)
+  push:
+    branches: [main]
+  workflow_dispatch:        # allow manual trigger
+
+permissions:
+  contents: write           # needed to commit docs/ back to main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+        env:
+          PYTHONPATH: "."    # L-1: PYTHONPATH on every step
+
+      - name: Validate config
+        env:
+          PYTHONPATH: "."    # L-1: PYTHONPATH on every step
+        run: python scripts/validate_config.py
+
+      - name: Build site
+        env:
+          PYTHONPATH: "."    # L-1: PYTHONPATH on every step
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          VKH_SHEET_ID: ${{ secrets.VKH_SHEET_ID }}
+        run: python scripts/build.py
+
+      - name: Commit and push docs/
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/
+          git diff --staged --quiet || git commit -m "chore(build): update docs/ [skip ci]"
+          git push
