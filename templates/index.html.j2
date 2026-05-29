@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Velvet Knowledge Hub — Korea deer velvet trade intelligence</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+{# ── HEADER ─────────────────────────────────────────────────────────────── #}
+<header>
+  <div class="page-wrapper">
+    <h1>Velvet Knowledge Hub</h1>
+    <p class="tagline">Korea deer velvet market intelligence — NZ exporters and DINZ</p>
+    <p class="last-built caption">Last built: {{ meta.last_built_utc | default(build_date) | default("—") }}</p>
+  </div>
+</header>
+
+{# ── KPI STRIP ────────────────────────────────────────────────────────── #}
+{# Source: meta object built by build.py from cross-section data           #}
+<div class="page-wrapper">
+  <div class="kpi-strip">
+
+    {# KPI 1: Latest NZ export volume — from VTW_Trade_Monthly, series=nz_export #}
+    <div class="kpi-card">
+      <p class="kpi-label">NZ EXPORT VOLUME</p>
+      {% if kpi is defined and kpi.nz_export_volume %}
+        <p class="kpi-value">{{ kpi.nz_export_volume.value }}</p>
+        <p class="delta-indicator {{ kpi.nz_export_volume.delta_class }}">
+          {{ kpi.nz_export_volume.delta_symbol }} {{ kpi.nz_export_volume.delta_pct }} vs prior month
+        </p>
+      {% elif kpi is defined and kpi.nz_export_latest is defined and kpi.nz_export_latest != "—" %}
+        <p class="kpi-value">{{ kpi.nz_export_latest }}</p>
+        {% if kpi.nz_export_delta is defined and kpi.nz_export_delta != "—" %}
+          <p class="delta-indicator">{{ kpi.nz_export_delta }}</p>
+        {% endif %}
+      {% else %}
+        <p class="kpi-value text-muted">—</p>
+      {% endif %}
+    </div>
+
+    {# KPI 2: News articles past 30 days — from KVN_Articles #}
+    <div class="kpi-card">
+      <p class="kpi-label">NEWS ARTICLES (30 DAYS)</p>
+      {% if kpi is defined and kpi.news_count_30d is defined and kpi.news_count_30d is not none %}
+        <p class="kpi-value">{{ kpi.news_count_30d }}</p>
+        <p class="delta-indicator delta-neutral">articles classified</p>
+      {% elif kpi is defined and kpi.articles_30d is defined and kpi.articles_30d != "—" %}
+        <p class="kpi-value">{{ kpi.articles_30d }}</p>
+        <p class="delta-indicator delta-neutral">articles classified</p>
+      {% else %}
+        <p class="kpi-value text-muted">—</p>
+      {% endif %}
+    </div>
+
+    {# KPI 3: Latest MFDS import record date — from VFI_Import_Records #}
+    <div class="kpi-card">
+      <p class="kpi-label">LATEST MFDS IMPORT</p>
+      {% if kpi is defined and kpi.latest_mfds_date and kpi.latest_mfds_date != "—" %}
+        <p class="kpi-value data">{{ kpi.latest_mfds_date }}</p>
+        <p class="delta-indicator delta-neutral">most recent import record</p>
+      {% elif kpi is defined and kpi.mfds_latest_date is defined and kpi.mfds_latest_date != "—" %}
+        <p class="kpi-value data">{{ kpi.mfds_latest_date }}</p>
+        <p class="delta-indicator delta-neutral">most recent import record</p>
+      {% else %}
+        <p class="kpi-value text-muted">—</p>
+      {% endif %}
+    </div>
+
+  </div>{# /kpi-strip #}
+</div>
+
+{# ── NAVIGATION ───────────────────────────────────────────────────────── #}
+<nav class="page-wrapper">
+  <ul class="nav-list">
+    <li><a href="#trade-flows">Trade flows</a></li>
+    <li><a href="#import-intelligence">Import intelligence</a></li>
+    <li><a href="#market-presence">Market presence</a></li>
+    <li><a href="#news-pulse">News pulse</a></li>
+  </ul>
+</nav>
+
+{# ── MAIN CONTENT ─────────────────────────────────────────────────────── #}
+<main class="page-wrapper">
+
+  {# ── SECTION: TRADE FLOWS ─────────────────────────────────────────── #}
+  {# Written explicitly — future maintainers can customise per section    #}
+  {% set trade_flows = sections.trade_flows if sections is defined and sections.trade_flows is defined else {} %}
+  <section id="trade-flows">
+
+    <div class="section-header">
+      <div class="section-header-left">
+        <h2>Trade flows</h2>
+        <span class="last-updated">Last updated: {{ trade_flows.last_updated | default("—") }}</span>
+      </div>
+      {% if trade_flows.enabled and trade_flows.has_data %}
+        <a class="download-btn" href="downloads/trade_flows.csv">Download CSV</a>
+      {% endif %}
+    </div>
+
+    <p class="source-footnote">Source: Stats NZ · QIA · KSTAT API</p>
+
+    {% if trade_flows.enabled and trade_flows.has_data %}
+      {% if trade_flows.data %}
+        <table class="data-table">
+          <caption>NZ deer velvet trade flows — monthly data</caption>
+          <thead>
+            <tr>
+              <th scope="col">Date</th>
+              <th scope="col">Series</th>
+              <th scope="col">HS code</th>
+              <th scope="col">Value</th>
+              <th scope="col">Unit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in trade_flows.data %}
+              <tr>
+                <td class="data">{{ row.date | default("") }}</td>
+                <td>{{ row.series | default("") }}</td>
+                <td class="data">{{ row.hs_code | default("") }}</td>
+                <td class="data">{{ row.value | default("") }}</td>
+                <td>{{ row.unit | default("") }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    {% else %}
+      <div class="placeholder-card">
+        <p class="placeholder-title">Trade flows data not yet available</p>
+        <p class="placeholder-body">Data will appear here after the next scheduled build.</p>
+      </div>
+    {% endif %}
+
+  </section>
+
+  {# ── SECTION: IMPORT INTELLIGENCE ─────────────────────────────────── #}
+  {% set import_intelligence = sections.import_intelligence if sections is defined and sections.import_intelligence is defined else {} %}
+  <section id="import-intelligence">
+
+    <div class="section-header">
+      <div class="section-header-left">
+        <h2>Import intelligence</h2>
+        <span class="last-updated">Last updated: {{ import_intelligence.last_updated | default("—") }}</span>
+      </div>
+      {% if import_intelligence.enabled and import_intelligence.has_data %}
+        <a class="download-btn" href="downloads/import_intelligence.csv">Download CSV</a>
+      {% endif %}
+    </div>
+
+    <p class="source-footnote">Source: MFDS 수입식품 정보마루 · MFDS annual price report</p>
+
+    {% if import_intelligence.enabled and import_intelligence.has_data %}
+      {% if import_intelligence.data %}
+        <table class="data-table">
+          <caption>Korea MFDS deer velvet import records</caption>
+          <thead>
+            <tr>
+              <th scope="col">Date</th>
+              <th scope="col">Importer</th>
+              <th scope="col">Product name</th>
+              <th scope="col">Origin</th>
+              <th scope="col">Weight (kg)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in import_intelligence.data %}
+              <tr>
+                <td class="data">{{ row.date | default("") }}</td>
+                <td>{{ row.importer | default("") }}</td>
+                <td>{{ row.product_name | default("") }}</td>
+                <td>{{ row.origin | default("") }}</td>
+                <td class="data">{{ row.weight_kg | default("") }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p class="source-footnote">Source: Korea MFDS 수입식품 정보마루 CSV; MFDS annual price reports.</p>
+      {% endif %}
+    {% else %}
+      <div class="placeholder-card">
+        <p class="placeholder-title">Import intelligence data not yet available</p>
+        <p class="placeholder-body">Data will appear here after the next scheduled build.</p>
+      </div>
+    {% endif %}
+
+  </section>
+
+  {# ── SECTION: MARKET PRESENCE (enabled: false — hardcoded placeholder) #}
+  {# No download button. No last-updated label. Static "coming next phase" card. #}
+  <section id="market-presence">
+
+    <div class="section-header">
+      <div class="section-header-left">
+        <h2>Market presence</h2>
+        <span class="last-updated last-updated--deferred">Coming next phase</span>
+      </div>
+      {# No download button — no data in Phase 1 #}
+    </div>
+
+    <div class="placeholder-card">
+      <p class="placeholder-title">Market presence — coming in the next phase</p>
+      <p class="placeholder-body">Product registry data from Korean retail and food-service channels will appear here. This section will show brand presence, product formats, and retail distribution across the Korea market.</p>
+    </div>
+
+  </section>
+
+  {# ── SECTION: NEWS PULSE ──────────────────────────────────────────── #}
+  {% set news_pulse = sections.news_pulse if sections is defined and sections.news_pulse is defined else {} %}
+  <section id="news-pulse">
+
+    <div class="section-header">
+      <div class="section-header-left">
+        <h2>News pulse</h2>
+        <span class="last-updated">Last updated: {{ news_pulse.last_updated | default("—") }}</span>
+      </div>
+      {% if news_pulse.enabled and news_pulse.has_data %}
+        <a class="download-btn" href="downloads/news_pulse.csv">Download CSV</a>
+      {% endif %}
+    </div>
+
+    <p class="source-footnote">Source: Naver News API</p>
+
+    {% if news_pulse.enabled and news_pulse.has_data %}
+      <div class="news-list">
+        {% set articles = news_pulse.articles | default(news_pulse.data) | default([]) %}
+        {% for article in articles %}
+          <div class="news-article">
+            <div class="news-korean">
+              <p class="news-title-ko">{{ article.title_korean | default(article.title_ko) | default("") }}</p>
+              <p class="caption text-muted">{{ article.published_date | default(article.date) | default("") }} · {{ article.source_name | default(article.source) | default("") }}</p>
+            </div>
+            <div class="news-english">
+              <p class="news-summary-en">{{ article.english_summary | default(article.summary_en) | default("") }}</p>
+              {% if article.category %}
+                <p class="caption text-muted">Category: {{ article.category }}</p>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="placeholder-card">
+        <p class="placeholder-title">News pulse data not yet available</p>
+        <p class="placeholder-body">Classified articles will appear here after the next scheduled collection run.</p>
+      </div>
+    {% endif %}
+
+  </section>
+
+</main>
+
+{# ── FOOTER ───────────────────────────────────────────────────────────── #}
+<footer>
+  <div class="page-wrapper">
+    <p class="caption">Data sources: Stats NZ · QIA · KSTAT API · MFDS · Naver News API</p>
+    <p class="caption">Built automatically by GitHub Actions. Source code: <a href="https://github.com/wkdjk/velvet-knowledge-hub">wkdjk/velvet-knowledge-hub</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
