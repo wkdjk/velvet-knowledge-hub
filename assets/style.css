@@ -420,6 +420,71 @@ footer .caption:last-child {
   margin-top: 4px;
 }
 
+/* ── 5b. CHART SECTION STYLES ─────────────────────────────── */
+
+/* Chart panel wrapper — provides vertical rhythm between panels */
+.chart-panel {
+  margin-bottom: 32px;
+}
+
+/* Chart canvas wrapper — fixed height keeps proportions stable */
+.chart-container {
+  position: relative;
+  width: 100%;
+  min-height: 300px;
+  height: 340px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 8px;
+}
+
+/* Chart panel heading — distinguishes KG panel from value panel */
+.chart-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+/* HS-code radio toggle group */
+.hs-toggle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 20px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.hs-toggle-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.hs-toggle-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.hs-toggle-option input[type="radio"] {
+  accent-color: var(--text-primary);
+  cursor: pointer;
+}
+
 /* ── 6. STATE MODIFIERS ───────────────────────────────────── */
 
 .delta-positive {
@@ -480,8 +545,17 @@ footer .caption:last-child {
 @media print {
 
   /* Hide interactive elements */
-  .download-btn {
+  .download-btn,
+  .hs-toggle {
     display: none;
+  }
+
+  /* Chart containers: let canvas print at natural size */
+  .chart-container {
+    height: auto;
+    min-height: 0;
+    border: none;
+    padding: 0;
   }
 
   /* Remove link underlines; links print as plain text */

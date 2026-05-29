@@ -10,6 +10,7 @@
 #
 # Security: no credentials in this file. All secrets from environment only.
 
+import csv
 import json
 import os
 import sys
@@ -30,6 +31,13 @@ REPO_ROOT = Path(__file__).parent.parent
 CONFIG_PATH = REPO_ROOT / "config.yaml"
 TEMPLATE_DIR = REPO_ROOT / "templates"
 OUTPUT_PATH = REPO_ROOT / "docs" / "index.html"
+DOWNLOADS_DIR = REPO_ROOT / "docs" / "downloads"
+TRADE_FLOWS_CSV = DOWNLOADS_DIR / "trade_flows.csv"
+
+# Column order for the trade_flows CSV export.
+_TRADE_FLOWS_CSV_HEADERS = [
+    "date", "series", "hs_code", "hs_label", "value", "unit", "country", "notes",
+]
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -257,12 +265,36 @@ def assemble_sections(config: dict, tab_data: dict) -> dict:
         # Derive last_updated from the most recent date-like value in combined_data.
         last_updated = _extract_last_updated(combined_data)
 
-        sections[section_id] = {
+        section_dict: dict = {
             "enabled": True,
             "data": combined_data,
             "last_updated": last_updated,
             "has_data": len(combined_data) > 0,
         }
+
+        # M-2: For trade_flows, split kstat_api rows by hs_code so the
+        # JS HS-code toggle can switch datasets without re-reading data.
+        #
+        # L-9 note: Sheets returns numeric cells as floats (leading zero stripped).
+        # "0507.90" is stored as 507.9 in the sheet → str() gives "507.9".
+        # Normalise by stripping leading zeros after removing the dot, then
+        # comparing the numeric prefix ("507" for 0507.xx, "510" for 0510.xx).
+        if section_id == "trade_flows":
+            kstat_rows = [r for r in combined_data if r.get("series") == "kstat_api"]
+
+            def _hs_prefix(row: dict) -> str:
+                """Return the numeric prefix of the hs_code field (e.g. '507', '510')."""
+                raw = str(row.get("hs_code", "")).replace(".", "").lstrip("0")
+                return raw[:3] if len(raw) >= 3 else raw
+
+            section_dict["kstat_0507"] = [
+                r for r in kstat_rows if _hs_prefix(r) == "507"
+            ]
+            section_dict["kstat_0510"] = [
+                r for r in kstat_rows if _hs_prefix(r) == "510"
+            ]
+
+        sections[section_id] = section_dict
 
     return sections
 
@@ -383,12 +415,16 @@ def compute_kpis(sections: dict) -> dict:
 # Step 6 — Render
 # ---------------------------------------------------------------------------
 
-def render(config: dict, sections: dict, kpi: dict, build_date: str) -> int:
+def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date: str) -> int:
     """
     Render the Jinja2 template with all collected data and write docs/index.html.
     Returns the number of bytes written.
     """
+    import json as _json
+
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=False)
+    # tojson filter: serialise Python objects to JSON strings safe for <script> blocks.
+    env.filters["tojson"] = lambda obj: _json.dumps(obj, ensure_ascii=False)
     template = env.get_template("index.html.j2")
 
     # meta object satisfies template's {{ meta.last_built_utc }} reference.
@@ -399,12 +435,105 @@ def render(config: dict, sections: dict, kpi: dict, build_date: str) -> int:
         meta=meta,
         kpi=kpi,
         sections=sections,
+        chart_data=chart_data,
         config=config,
     )
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(html, encoding="utf-8")
     return len(html.encode("utf-8"))
+
+
+# ---------------------------------------------------------------------------
+# Chart data preparation
+# ---------------------------------------------------------------------------
+
+def _aggregate_series_by_date(rows: list[dict], unit_filter: str) -> dict[str, float]:
+    """
+    Aggregate rows for a single series by date, summing values across countries.
+
+    Returns {date_str: total_value} sorted by date ascending.
+    Only rows matching unit_filter are included.
+    Non-numeric values are ignored (graceful degradation — L-12).
+    """
+    totals: dict[str, float] = {}
+    for row in rows:
+        if str(row.get("unit", "")) != unit_filter:
+            continue
+        date_str = str(row.get("date", ""))
+        if not date_str:
+            continue
+        try:
+            val = float(row.get("value", 0) or 0)
+        except (ValueError, TypeError):
+            continue
+        totals[date_str] = totals.get(date_str, 0.0) + val
+
+    return dict(sorted(totals.items()))
+
+
+def prepare_chart_data(sections: dict) -> dict:
+    """
+    Build pre-aggregated chart datasets for the trade_flows section.
+
+    Returns a dict with two chart panels:
+      chart_kg:    NZ export KG, Korea quarantine KG, kstat KG (by HS toggle)
+      chart_value: NZ export NZD, kstat USD_thousands (by HS toggle)
+
+    Each dataset is a list of {x: "YYYY-MM", y: float} objects for Chart.js.
+    kstat datasets are split by hs_code: kstat_0507 and kstat_0510.
+
+    All data is pre-aggregated (summed across countries) by date.
+    """
+    tf = sections.get("trade_flows", {})
+    all_data = tf.get("data", [])
+
+    nz_rows = [r for r in all_data if r.get("series") == "nz_export"]
+    qia_rows = [r for r in all_data if r.get("series") == "korea_quarantine"]
+    kstat_0507_rows = tf.get("kstat_0507", [])
+    kstat_0510_rows = tf.get("kstat_0510", [])
+
+    def to_xy(totals: dict[str, float]) -> list[dict]:
+        return [{"x": k, "y": round(v, 2)} for k, v in totals.items()]
+
+    return {
+        # KG panel — common Y-axis, three series.
+        "nz_export_kg": to_xy(_aggregate_series_by_date(nz_rows, "KG")),
+        "qia_kg": to_xy(_aggregate_series_by_date(qia_rows, "KG")),
+        "kstat_0507_kg": to_xy(_aggregate_series_by_date(kstat_0507_rows, "KG")),
+        "kstat_0510_kg": to_xy(_aggregate_series_by_date(kstat_0510_rows, "KG")),
+        # Value panel — NZD and USD_thousands on separate Y-axes.
+        "nz_export_nzd": to_xy(_aggregate_series_by_date(nz_rows, "NZD")),
+        "kstat_0507_usd": to_xy(_aggregate_series_by_date(kstat_0507_rows, "USD_thousands")),
+        "kstat_0510_usd": to_xy(_aggregate_series_by_date(kstat_0510_rows, "USD_thousands")),
+    }
+
+
+# ---------------------------------------------------------------------------
+# CSV export
+# ---------------------------------------------------------------------------
+
+def _write_trade_flows_csv(sections: dict) -> None:
+    """
+    Write all VTW_Trade_Monthly rows (all series, all hs_codes) to
+    docs/downloads/trade_flows.csv.
+
+    Creates docs/downloads/ if it does not exist.
+    No-ops silently if trade_flows section has no data.
+    """
+    trade_data = sections.get("trade_flows", {}).get("data", [])
+    DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+    with TRADE_FLOWS_CSV.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(
+            fh,
+            fieldnames=_TRADE_FLOWS_CSV_HEADERS,
+            extrasaction="ignore",
+        )
+        writer.writeheader()
+        writer.writerows(trade_data)
+
+    print(f"  trade_flows.csv: {len(trade_data)} rows → {TRADE_FLOWS_CSV}")
 
 
 # ---------------------------------------------------------------------------
@@ -436,8 +565,14 @@ def main() -> None:
     # --- Step 5: Compute KPIs -------------------------------------------------
     kpi = compute_kpis(sections)
 
+    # --- Step 5b: Prepare chart datasets (pre-aggregated for Jinja2) ----------
+    chart_data = prepare_chart_data(sections)
+
+    # --- Step 5c: Write trade_flows CSV download ------------------------------
+    _write_trade_flows_csv(sections)
+
     # --- Step 6: Render -------------------------------------------------------
-    bytes_written = render(config, sections, kpi, build_date)
+    bytes_written = render(config, sections, kpi, chart_data, build_date)
 
     # --- Console output -------------------------------------------------------
     print("  sections rendered:")
@@ -456,6 +591,10 @@ def main() -> None:
     art = kpi.get("articles_30d", "—")
     mfds = kpi.get("mfds_latest_date", "—")
     print(f"  kpis: nz_export={nz} | articles_30d={art} | mfds_latest={mfds}")
+    tf = sections.get("trade_flows", {})
+    kstat_0507 = len(tf.get("kstat_0507", []))
+    kstat_0510 = len(tf.get("kstat_0510", []))
+    print(f"  trade_flows kstat split: 0507.90={kstat_0507} rows | 0510.00={kstat_0510} rows")
     print(f"  output: docs/index.html ({bytes_written} bytes)")
     print(f"  build complete: {build_date}")
 

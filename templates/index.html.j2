@@ -99,35 +99,45 @@
       {% endif %}
     </div>
 
-    <p class="source-footnote">Source: Stats NZ · QIA · KSTAT API</p>
-
     {% if trade_flows.enabled and trade_flows.has_data %}
-      {% if trade_flows.data %}
-        <table class="data-table">
-          <caption>NZ deer velvet trade flows — monthly data</caption>
-          <thead>
-            <tr>
-              <th scope="col">Date</th>
-              <th scope="col">Series</th>
-              <th scope="col">HS code</th>
-              <th scope="col">Value</th>
-              <th scope="col">Unit</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in trade_flows.data %}
-              <tr>
-                <td class="data">{{ row.date | default("") }}</td>
-                <td>{{ row.series | default("") }}</td>
-                <td class="data">{{ row.hs_code | default("") }}</td>
-                <td class="data">{{ row.value | default("") }}</td>
-                <td>{{ row.unit | default("") }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      {% endif %}
+
+      {# HS-code radio toggle for kstat_api series #}
+      <div class="hs-toggle" role="group" aria-label="KSTAT HS code filter">
+        <span class="hs-toggle-label">KSTAT HS code:</span>
+        <label class="hs-toggle-option">
+          <input type="radio" name="hs-code" value="0507" checked> 0507.90 (antler)
+        </label>
+        <label class="hs-toggle-option">
+          <input type="radio" name="hs-code" value="0510"> 0510.00 (animal products)
+        </label>
+        <label class="hs-toggle-option">
+          <input type="radio" name="hs-code" value="both"> Both
+        </label>
+      </div>
+
+      {# Panel 1: Weight in KG — all three series share this axis #}
+      <div class="chart-panel">
+        <p class="chart-title">Import / export volume (KG) — monthly</p>
+        <div class="chart-container">
+          <canvas id="chart-kg" aria-label="Monthly trade volume in kilograms" role="img"></canvas>
+        </div>
+      </div>
+
+      {# Panel 2: Trade value — NZD (NZ export) and USD thousands (KSTAT) #}
+      <div class="chart-panel">
+        <p class="chart-title">Trade value — NZ export (NZD) · Korea import (USD thousands) — monthly</p>
+        <div class="chart-container">
+          <canvas id="chart-value" aria-label="Monthly trade value in NZD and USD thousands" role="img"></canvas>
+        </div>
+      </div>
+
+      <p class="source-footnote">
+        Sources: Stats NZ (NZ export) · QIA (Korea quarantine) · KSTAT (Korea import)<br>
+        HS code 0507.90 (antler) and 0510.00 (animal products) shown separately — classification changed in 2022.
+      </p>
+
     {% else %}
+      <p class="source-footnote">Source: Stats NZ · QIA · KSTAT API</p>
       <div class="placeholder-card">
         <p class="placeholder-title">Trade flows data not yet available</p>
         <p class="placeholder-body">Data will appear here after the next scheduled build.</p>
@@ -135,6 +145,204 @@
     {% endif %}
 
   </section>
+
+  {# ── CHART.JS SCRIPT — trade flows (no CDN — bundled locally — M-1) ─ #}
+  {% if trade_flows.enabled and trade_flows.has_data %}
+  <script src="assets/chart.min.js"></script>
+  <script>
+  (function () {
+    'use strict';
+
+    /* ── Embedded datasets (injected by build.py) ────────────────────── */
+    var DATA = {
+      nzExportKg:   {{ chart_data.nz_export_kg   | tojson }},
+      qiaKg:        {{ chart_data.qia_kg          | tojson }},
+      kstat0507Kg:  {{ chart_data.kstat_0507_kg   | tojson }},
+      kstat0510Kg:  {{ chart_data.kstat_0510_kg   | tojson }},
+      nzExportNzd:  {{ chart_data.nz_export_nzd   | tojson }},
+      kstat0507Usd: {{ chart_data.kstat_0507_usd  | tojson }},
+      kstat0510Usd: {{ chart_data.kstat_0510_usd  | tojson }}
+    };
+
+    /* ── Merge two {x,y} arrays by date (sum values for "both" toggle) ─ */
+    function mergeSeries(a, b) {
+      var map = {};
+      (a || []).forEach(function (p) { map[p.x] = (map[p.x] || 0) + p.y; });
+      (b || []).forEach(function (p) { map[p.x] = (map[p.x] || 0) + p.y; });
+      return Object.keys(map).sort().map(function (k) { return { x: k, y: map[k] }; });
+    }
+
+    /* ── Shared chart defaults ───────────────────────────────────────── */
+    var FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif';
+    Chart.defaults.font.family = FONT_FAMILY;
+    Chart.defaults.font.size   = 11;
+    Chart.defaults.color       = '#444444';
+
+    /* ── KG chart ────────────────────────────────────────────────────── */
+    var ctxKg = document.getElementById('chart-kg').getContext('2d');
+    var kgChart = new Chart(ctxKg, {
+      type: 'line',
+      data: {
+        datasets: [
+          {
+            label: 'NZ export (KG)',
+            data: DATA.nzExportKg,
+            borderColor: '#111111',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            pointRadius: 2,
+            tension: 0.2,
+            yAxisID: 'y'
+          },
+          {
+            label: 'Korea quarantine clearances (KG)',
+            data: DATA.qiaKg,
+            borderColor: '#555555',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [4, 3],
+            pointRadius: 2,
+            tension: 0.2,
+            yAxisID: 'y'
+          },
+          {
+            label: 'Korea import — KSTAT (KG)',
+            data: DATA.kstat0507Kg,
+            borderColor: '#999999',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [2, 2],
+            pointRadius: 2,
+            tension: 0.2,
+            yAxisID: 'y'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 14, padding: 16 } },
+          tooltip: { callbacks: {
+            label: function (ctx) {
+              return ctx.dataset.label + ': ' + ctx.parsed.y.toLocaleString() + ' KG';
+            }
+          }}
+        },
+        scales: {
+          x: {
+            type: 'category',
+            ticks: { maxTicksLimit: 18, maxRotation: 45 },
+            grid: { color: '#EFEFEF' }
+          },
+          y: {
+            title: { display: true, text: 'Kilograms (KG)' },
+            ticks: { callback: function (v) { return v.toLocaleString(); } },
+            grid: { color: '#EFEFEF' }
+          }
+        }
+      }
+    });
+
+    /* ── Value chart (NZD left axis, USD_thousands right axis) ──────── */
+    var ctxVal = document.getElementById('chart-value').getContext('2d');
+    var valChart = new Chart(ctxVal, {
+      type: 'line',
+      data: {
+        datasets: [
+          {
+            label: 'NZ export FOB (NZD)',
+            data: DATA.nzExportNzd,
+            borderColor: '#111111',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            pointRadius: 2,
+            tension: 0.2,
+            yAxisID: 'yNzd'
+          },
+          {
+            label: 'Korea import — KSTAT (USD thousands)',
+            data: DATA.kstat0507Usd,
+            borderColor: '#777777',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderDash: [4, 3],
+            pointRadius: 2,
+            tension: 0.2,
+            yAxisID: 'yUsd'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 14, padding: 16 } },
+          tooltip: { callbacks: {
+            label: function (ctx) {
+              if (ctx.dataset.yAxisID === 'yNzd') {
+                return ctx.dataset.label + ': NZD ' + ctx.parsed.y.toLocaleString();
+              }
+              return ctx.dataset.label + ': USD ' + ctx.parsed.y.toLocaleString() + 'k';
+            }
+          }}
+        },
+        scales: {
+          x: {
+            type: 'category',
+            ticks: { maxTicksLimit: 18, maxRotation: 45 },
+            grid: { color: '#EFEFEF' }
+          },
+          yNzd: {
+            position: 'left',
+            title: { display: true, text: 'NZD (FOB)' },
+            ticks: { callback: function (v) { return 'NZD ' + v.toLocaleString(); } },
+            grid: { color: '#EFEFEF' }
+          },
+          yUsd: {
+            position: 'right',
+            title: { display: true, text: 'USD thousands' },
+            ticks: { callback: function (v) { return '$' + v.toLocaleString() + 'k'; } },
+            grid: { drawOnChartArea: false }
+          }
+        }
+      }
+    });
+
+    /* ── HS toggle handler ───────────────────────────────────────────── */
+    document.querySelectorAll('input[name="hs-code"]').forEach(function (radio) {
+      radio.addEventListener('change', function () {
+        var val = this.value;
+
+        /* Update KG chart dataset 2 (index 2 = kstat KG) */
+        if (val === '0507') {
+          kgChart.data.datasets[2].data  = DATA.kstat0507Kg;
+          kgChart.data.datasets[2].label = 'Korea import — KSTAT 0507.90 (KG)';
+          valChart.data.datasets[1].data  = DATA.kstat0507Usd;
+          valChart.data.datasets[1].label = 'Korea import — KSTAT 0507.90 (USD thousands)';
+        } else if (val === '0510') {
+          kgChart.data.datasets[2].data  = DATA.kstat0510Kg;
+          kgChart.data.datasets[2].label = 'Korea import — KSTAT 0510.00 (KG)';
+          valChart.data.datasets[1].data  = DATA.kstat0510Usd;
+          valChart.data.datasets[1].label = 'Korea import — KSTAT 0510.00 (USD thousands)';
+        } else {
+          /* both */
+          kgChart.data.datasets[2].data  = mergeSeries(DATA.kstat0507Kg, DATA.kstat0510Kg);
+          kgChart.data.datasets[2].label = 'Korea import — KSTAT (both HS) (KG)';
+          valChart.data.datasets[1].data  = mergeSeries(DATA.kstat0507Usd, DATA.kstat0510Usd);
+          valChart.data.datasets[1].label = 'Korea import — KSTAT (both HS) (USD thousands)';
+        }
+
+        kgChart.update();
+        valChart.update();
+      });
+    });
+
+  }());
+  </script>
+  {% endif %}
 
   {# ── SECTION: IMPORT INTELLIGENCE ─────────────────────────────────── #}
   {% set import_intelligence = sections.import_intelligence if sections is defined and sections.import_intelligence is defined else {} %}
