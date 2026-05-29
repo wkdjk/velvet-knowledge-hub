@@ -518,6 +518,17 @@ def resolve_sheet_id() -> str:
 # Dedup helpers
 # ---------------------------------------------------------------------------
 
+# L-15: Sheets coerces "0507.90" → float 507.9 at write time; str(507.9) = "507.9" ≠ "0507.90".
+# Normalise before dedup comparison.
+_FLOAT_TO_DOT: dict = {507.9: "0507.90", 510.0: "0510.00"}
+
+
+def _normalise_hs_code(raw) -> str:
+    if isinstance(raw, (int, float)):
+        return _FLOAT_TO_DOT.get(float(raw), str(raw))
+    return str(raw)
+
+
 def build_dedup_key(row: dict) -> tuple:
     """
     Return the dedup key tuple for a VTW_Trade_Monthly row.
@@ -526,12 +537,12 @@ def build_dedup_key(row: dict) -> tuple:
     Five fields are required because:
       - country: each country has its own row in the API response
       - unit: each period/country/hs_code produces two rows (KG + USD_thousands)
-    L-9: all fields compared as strings (hs_code is TEXT dot notation).
+    L-9: hs_code is TEXT dot notation. L-15: normalise before comparison.
     """
     return (
         str(row.get("date", "")),
         str(row.get("series", "")),
-        str(row.get("hs_code", "")),
+        _normalise_hs_code(row.get("hs_code", "")),
         str(row.get("country", "")),
         str(row.get("unit", "")),
     )

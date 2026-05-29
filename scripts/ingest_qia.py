@@ -72,6 +72,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_ROOT / "config.yaml"
 TARGET_TAB = "VTW_Trade_Monthly"
 SERIES_VALUE = "korea_quarantine"
+SERIES_VALUE_EXPORT = "korea_quarantine_export"
 
 # Sheets API only — no Drive API required (L-5 workaround).
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -588,21 +589,51 @@ def _is_html_xls(filepath: Path) -> bool:
         return False
 
 
+def _derive_series(filepath: Path) -> str:
+    """
+    Derive the series value from the filename.
+
+    Files containing 'EXPORT' (case-insensitive) → 'korea_quarantine_export'.
+    All other files (IMPORT, FRESH_IMPORT, annual XLSX) → 'korea_quarantine'.
+
+    GAP-2 fix (2026-05-30): import and export series are kept separate so that
+    export rows have distinct dedup keys from import rows and both are retained.
+    The existing 'korea_quarantine' series is not renamed — backward-compatible.
+    """
+    if "EXPORT" in filepath.name.upper():
+        return SERIES_VALUE_EXPORT
+    return SERIES_VALUE
+
+
 def parse_qia_file(filepath: Path) -> list[dict]:
     """
     Auto-detect file format and dispatch to the correct parser.
 
     .xlsx → openpyxl annual XLSX parser.
     .xls + HTML content → HTML table parser (monthly 2026 format).
+
+    Series is derived from the filename: EXPORT files → 'korea_quarantine_export';
+    all others → 'korea_quarantine'. GAP-2 fix (2026-05-30).
     """
+    series = _derive_series(filepath)
+
     if filepath.suffix.lower() == ".xlsx":
-        return parse_qia_annual_xlsx(filepath)
-    if _is_html_xls(filepath):
-        return parse_qia_monthly_html_xls(filepath)
-    raise ValueError(
-        f"Unrecognised file format: {filepath.name}\n"
-        "  Supported: .xlsx (annual XLSX) or .xls (HTML-disguised monthly)."
-    )
+        rows = parse_qia_annual_xlsx(filepath)
+    elif _is_html_xls(filepath):
+        rows = parse_qia_monthly_html_xls(filepath)
+    else:
+        raise ValueError(
+            f"Unrecognised file format: {filepath.name}\n"
+            "  Supported: .xlsx (annual XLSX) or .xls (HTML-disguised monthly)."
+        )
+
+    # Patch the series field if this is an export file (annual parser always
+    # emits SERIES_VALUE; monthly parser does the same).
+    if series != SERIES_VALUE:
+        for row in rows:
+            row["series"] = series
+
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -697,33 +728,58 @@ def resolve_sheet_id() -> str:
 # Dedup and write helpers
 # ---------------------------------------------------------------------------
 
+def _normalise_hs_code(raw) -> str:
+    """
+    Normalise an hs_code value to a canonical dot-notation string.
+
+    Google Sheets returns numeric cells as float (e.g. 507.9) even when the
+    stored value is the string "0507.90". Converting via str() produces "507.9",
+    which does not match the parser output "0507.90" — causing silent dedup
+    failure (L-9). This function maps both representations to "0507.90".
+
+    Mapping: 507.9 → "0507.90", 510.0 → "0510.00", "0507.90" → "0507.90".
+    Unknown values are returned as-is (str).
+    """
+    _FLOAT_TO_DOT: dict[float, str] = {
+        507.9:  "0507.90",
+        510.0:  "0510.00",
+    }
+    if isinstance(raw, float):
+        return _FLOAT_TO_DOT.get(raw, str(raw))
+    if isinstance(raw, int):
+        return _FLOAT_TO_DOT.get(float(raw), str(raw))
+    return str(raw)
+
+
 def build_dedup_key(row: dict) -> tuple:
     """
     Return the dedup key tuple for a VTW_Trade_Monthly row.
 
     L-10: key is (date, series, hs_code, unit, country) — five fields.
     Unit distinguishes shipments rows from KG rows.
-    L-9: all fields compared as strings.
+    L-9: hs_code is normalised via _normalise_hs_code() to handle the float/string
+    mismatch between Sheets (returns 507.9) and parser output ("0507.90").
     """
     return (
         str(row.get("date", "")),
         str(row.get("series", "")),
-        str(row.get("hs_code", "")),
+        _normalise_hs_code(row.get("hs_code", "")),
         str(row.get("unit", "")),
         str(row.get("country", "")),
     )
 
 
-def load_existing_keys(worksheet) -> tuple[set, int]:
+def load_existing_keys(worksheet, series_filter: str = SERIES_VALUE) -> tuple[set, int]:
     """
     Read all rows from the worksheet once and return a set of dedup keys.
 
     L-4: get_all_records() is called exactly once — never inside a loop.
-    Filters to series = korea_quarantine to keep the key set small.
+    Filters to the specified series to keep the key set small and correctly
+    scoped (import vs export rows use different series values — GAP-2 fix).
     """
     existing_rows = worksheet.get_all_records()
-    quarantine_rows = [r for r in existing_rows if r.get("series") == SERIES_VALUE]
-    return {build_dedup_key(r) for r in quarantine_rows}, len(existing_rows)
+    series_rows = [r for r in existing_rows if r.get("series") == series_filter]
+    return {build_dedup_key(r) for r in series_rows}, len(existing_rows)
 
 
 def rows_to_append(
@@ -789,9 +845,13 @@ def main() -> None:
     else:
         fmt = "unknown"
 
+    # Derive series before parsing so it can be reported to the user.
+    series_for_file = _derive_series(file_path)
+
     print("ingest_qia.py — VKH QIA quarantine ingestion")
     print(f"  file: {file_path.name}")
     print(f"  format: {fmt}")
+    print(f"  series: {series_for_file}")
     print(f"  dry-run: {args.dry_run}")
 
     # --- Parse ----------------------------------------------------------------
@@ -839,7 +899,7 @@ def main() -> None:
         sys.exit(1)
 
     # --- Dedup (L-4: one API call to read all existing rows) -----------------
-    existing_keys, existing_count = load_existing_keys(ws)
+    existing_keys, existing_count = load_existing_keys(ws, series_filter=series_for_file)
     print(f"  existing rows in tab: {existing_count}")
 
     headers = ws.row_values(1)

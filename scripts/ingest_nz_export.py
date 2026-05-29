@@ -15,7 +15,7 @@
 # L-4: get_all_records() called once; new rows written in one append_rows() call.
 # L-9: hs_code stored as TEXT ("0507.90" dot notation) in VTW_Trade_Monthly —
 #       NOT cast to int. Dedup compares strings.
-# L-10: Dedup key is (date, series, hs_code). Three fields, matching config.yaml.
+# L-10: Dedup key is (date, series, hs_code, unit, country) — five fields (GAP-1 fix 2026-05-30).
 # L-13: CSV column layout detected by header scan, not fixed index.
 #
 # Security: no credentials or secrets in this file. All secrets from .env only.
@@ -420,19 +420,49 @@ def resolve_sheet_id() -> str:
 # Dedup and write helpers
 # ---------------------------------------------------------------------------
 
+def _normalise_hs_code(raw) -> str:
+    """
+    Normalise an hs_code value to a canonical dot-notation string.
+
+    Google Sheets returns numeric cells as float (e.g. 507.9) even when the
+    stored value is the string "0507.90". Converting via str() produces "507.9",
+    which does not match the parser output "0507.90" — causing silent dedup
+    failure (L-9). This function maps both representations to "0507.90".
+
+    Mapping: 507.9 → "0507.90", 510.0 → "0510.00", "0507.90" → "0507.90".
+    Unknown values are returned as-is (str).
+    """
+    _FLOAT_TO_DOT: dict[float, str] = {
+        507.9:  "0507.90",
+        510.0:  "0510.00",
+    }
+    if isinstance(raw, float):
+        return _FLOAT_TO_DOT.get(raw, str(raw))
+    if isinstance(raw, int):
+        return _FLOAT_TO_DOT.get(float(raw), str(raw))
+    return str(raw)
+
+
 def build_dedup_key(row: dict) -> tuple:
     """
     Return the dedup key tuple for a VTW_Trade_Monthly row.
 
-    L-10: key is (date, series, hs_code) — three fields, matches config.yaml.
-    An additional 'unit' dimension is included to avoid KG and NZD rows
-    conflating each other (both share the same date/series/hs_code).
+    Key is (date, series, hs_code, unit, country) — five fields.
+    'unit' distinguishes KG and NZD rows that share the same date/series/hs_code.
+    'country' distinguishes four NZ export destinations (Korea, China, Hong Kong,
+    Taiwan) that all share hs_code "0507.90" — without it, only the first
+    destination written per month would survive dedup; the other three would be
+    silently skipped. GAP-1 fix (2026-05-30).
+
+    L-9: hs_code is normalised via _normalise_hs_code() to handle the float/string
+    mismatch between Sheets (returns 507.9) and parser output ("0507.90").
     """
     return (
         str(row.get("date", "")),
         str(row.get("series", "")),
-        str(row.get("hs_code", "")),
+        _normalise_hs_code(row.get("hs_code", "")),
         str(row.get("unit", "")),
+        str(row.get("country", "")),
     )
 
 
