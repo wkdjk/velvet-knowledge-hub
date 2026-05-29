@@ -16,7 +16,7 @@ ai_model: claude-haiku-4-5
 # ---------------------------------------------------------------------------
 # Google Sheet — leave empty until A-3 creates the sheet and records its ID.
 # ---------------------------------------------------------------------------
-sheet_id: ""
+sheet_id: "1idbPiaK_Scd8znktn2cPutWP5Lg4azo1XBfXNyt5K2U"
 
 # ---------------------------------------------------------------------------
 # Display kinds — exhaustive list of valid kind values for source blocks.
