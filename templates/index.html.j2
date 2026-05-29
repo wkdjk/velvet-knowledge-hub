@@ -56,11 +56,8 @@
 
     {# KPI 3: Latest MFDS import record date — from VFI_Import_Records #}
     <div class="kpi-card">
-      <p class="kpi-label">LATEST MFDS IMPORT</p>
-      {% if kpi is defined and kpi.latest_mfds_date and kpi.latest_mfds_date != "—" %}
-        <p class="kpi-value data">{{ kpi.latest_mfds_date }}</p>
-        <p class="delta-indicator delta-neutral">most recent import record</p>
-      {% elif kpi is defined and kpi.mfds_latest_date is defined and kpi.mfds_latest_date != "—" %}
+      <p class="kpi-label">LATEST IMPORT RECORD / 최신 수입 기록</p>
+      {% if kpi is defined and kpi.mfds_latest_date is defined and kpi.mfds_latest_date != "—" %}
         <p class="kpi-value data">{{ kpi.mfds_latest_date }}</p>
         <p class="delta-indicator delta-neutral">most recent import record</p>
       {% else %}
@@ -341,56 +338,111 @@
     });
 
   }());
+
+  /* ── B-7 price chart ─────────────────────────────────────────────── */
+  (function () {
+    var priceSeriesData = {{ price_annual_series | tojson }};
+    if (!priceSeriesData || !priceSeriesData.length) return;
+    var canvas = document.getElementById('b7PriceChart');
+    if (!canvas) return;
+    new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: { datasets: priceSeriesData },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        scales: {
+          x: {
+            type: 'category',
+            title: { display: true, text: 'Year' },
+            grid: { color: '#EFEFEF' }
+          },
+          y: {
+            title: { display: true, text: 'Price (KRW/kg)' },
+            ticks: { callback: function (v) { return v.toLocaleString(); } },
+            grid: { color: '#EFEFEF' }
+          }
+        },
+        plugins: {
+          legend: { display: true, position: 'bottom', labels: { boxWidth: 14, padding: 16 } }
+        }
+      }
+    });
+  }());
+
   </script>
   {% endif %}
 
   {# ── SECTION: IMPORT INTELLIGENCE ─────────────────────────────────── #}
+  {# B-7: price chart + records table. Each component degrades independently. #}
   {% set import_intelligence = sections.import_intelligence if sections is defined and sections.import_intelligence is defined else {} %}
   <section id="import-intelligence">
 
     <div class="section-header">
       <div class="section-header-left">
-        <h2>Import intelligence</h2>
-        <span class="last-updated">Last updated: {{ import_intelligence.last_updated | default("—") }}</span>
+        <h2>Import intelligence / 수입 현황</h2>
+        <span class="last-updated">Last updated / 최종 업데이트: {{ import_intelligence.last_updated | default("—") }}</span>
       </div>
-      {% if import_intelligence.enabled and import_intelligence.has_data %}
-        <a class="download-btn" href="downloads/import_intelligence.csv">Download CSV</a>
+      {% if import_records_has_data or price_annual_has_data %}
+        <a class="download-btn" href="downloads/import_intelligence.csv">Download CSV / CSV 다운로드</a>
       {% endif %}
     </div>
 
-    <p class="source-footnote">Source: MFDS 수입식품 정보마루 · MFDS annual price report</p>
+    <p class="source-footnote">Korea's deer velvet import records and annual price benchmarks from the MFDS import database — sourced for DINZ market intelligence use.</p>
 
-    {% if import_intelligence.enabled and import_intelligence.has_data %}
-      {% if import_intelligence.data %}
-        <table class="data-table">
-          <caption>Korea MFDS deer velvet import records</caption>
-          <thead>
-            <tr>
-              <th scope="col">Date</th>
-              <th scope="col">Importer</th>
-              <th scope="col">Product name</th>
-              <th scope="col">Origin</th>
-              <th scope="col">Weight (kg)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in import_intelligence.data %}
-              <tr>
-                <td class="data">{{ row.date | default("") }}</td>
-                <td>{{ row.importer | default("") }}</td>
-                <td>{{ row.product_name | default("") }}</td>
-                <td>{{ row.origin | default("") }}</td>
-                <td class="data">{{ row.weight_kg | default("") }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        <p class="source-footnote">Source: Korea MFDS 수입식품 정보마루 CSV; MFDS annual price reports.</p>
-      {% endif %}
+    {# ── Price chart sub-section (independent degradation) ─────────────── #}
+    {% if price_annual_has_data %}
+      <div class="chart-panel" id="b7-price-chart">
+        <h3 class="chart-title">Annual import price by country of origin / 원산지별 연도별 수입 단가</h3>
+        {% if price_annual_subtitle %}
+          <p class="chart-subtitle">Latest ranked price: KRW {{ price_annual_subtitle.price_krw }} ({{ price_annual_subtitle.year }})</p>
+        {% endif %}
+        <div class="chart-container">
+          <canvas id="b7PriceChart" aria-label="Annual import price by country of origin, 2004 to 2024"></canvas>
+        </div>
+        <p class="source-footnote">Source: MFDS 수입식품 영양성분 통계집, Table 6-3-8 (Korea Ministry of Food and Drug Safety annual import statistical report). Price rankings cover 2004–2024; country series reflect declared CIF value per kg.</p>
+      </div>
     {% else %}
       <div class="placeholder-card">
-        <p class="placeholder-title">Import intelligence data not yet available</p>
-        <p class="placeholder-body">Data will appear here after the next scheduled build.</p>
+        <p class="placeholder-title">No price data available</p>
+        <p class="placeholder-body">No price data available. Data will appear here once the MFDS annual price tab is populated.</p>
+      </div>
+    {% endif %}
+
+    {# ── Records table sub-section (independent degradation) ───────────── #}
+    {% if import_records_has_data %}
+      <h3>Import records / 수입 기록</h3>
+      <p class="source-footnote">MFDS-registered deer velvet import notifications / MFDS 등록 녹용 수입 신고 내역</p>
+      <p class="table-record-count">Showing {{ import_records_display | length }} most recent of {{ import_records_total }} records. / 상위 {{ import_records_display | length }}건 표시 (전체 {{ import_records_total }}건 중)</p>
+      <table class="data-table">
+        <caption>Import records / 수입 기록</caption>
+        <thead>
+          <tr>
+            <th scope="col">Notification date / 신고일</th>
+            <th scope="col">Importer / 수입업체</th>
+            <th scope="col">Product name / 품명</th>
+            <th scope="col">Product type / 품목유형</th>
+            <th scope="col">Country of origin / 원산지</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in import_records_display %}
+            <tr>
+              <td class="data">{{ row.date | default("") }}</td>
+              <td>{{ row._display_importer | default("—") }}</td>
+              <td>{{ row._display_product | default("—") }}</td>
+              <td>{{ row.product_type_en | default("—") }}</td>
+              <td>{{ row.country_origin_en | default("—") }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="source-footnote">Source: MFDS 수입식품 정보마루 (Korea Ministry of Food and Drug Safety import notification database). Records reflect official import notifications filed with MFDS. Data as of last build date.</p>
+      <a class="table-download-inline" href="downloads/import_intelligence.csv">Download full dataset / 전체 데이터 다운로드</a>
+    {% else %}
+      <div class="placeholder-card">
+        <p class="placeholder-title">No import records available</p>
+        <p class="placeholder-body">No import records available. Data will appear here once the MFDS import records tab is populated.</p>
       </div>
     {% endif %}
 

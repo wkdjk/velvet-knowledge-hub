@@ -13,7 +13,7 @@
   <div class="page-wrapper">
     <h1>Velvet Knowledge Hub</h1>
     <p class="tagline">Korea deer velvet market intelligence — NZ exporters and DINZ</p>
-    <p class="last-built caption">Last built: 2026-05-29</p>
+    <p class="last-built caption">Last built: 2026-05-30</p>
   </div>
 </header>
 
@@ -37,16 +37,17 @@
     <div class="kpi-card">
       <p class="kpi-label">NEWS ARTICLES (30 DAYS)</p>
       
-        <p class="kpi-value">116</p>
+        <p class="kpi-value">464</p>
         <p class="delta-indicator delta-neutral">articles classified</p>
       
     </div>
 
     
     <div class="kpi-card">
-      <p class="kpi-label">LATEST MFDS IMPORT</p>
+      <p class="kpi-label">LATEST IMPORT RECORD / 최신 수입 기록</p>
       
-        <p class="kpi-value text-muted">—</p>
+        <p class="kpi-value data">2026-04-17</p>
+        <p class="delta-indicator delta-neutral">most recent import record</p>
       
     </div>
 
@@ -317,28 +318,328 @@
     });
 
   }());
+
+  /* ── B-7 price chart ─────────────────────────────────────────────── */
+  (function () {
+    var priceSeriesData = [];
+    if (!priceSeriesData || !priceSeriesData.length) return;
+    var canvas = document.getElementById('b7PriceChart');
+    if (!canvas) return;
+    new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: { datasets: priceSeriesData },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        scales: {
+          x: {
+            type: 'category',
+            title: { display: true, text: 'Year' },
+            grid: { color: '#EFEFEF' }
+          },
+          y: {
+            title: { display: true, text: 'Price (KRW/kg)' },
+            ticks: { callback: function (v) { return v.toLocaleString(); } },
+            grid: { color: '#EFEFEF' }
+          }
+        },
+        plugins: {
+          legend: { display: true, position: 'bottom', labels: { boxWidth: 14, padding: 16 } }
+        }
+      }
+    });
+  }());
+
   </script>
   
 
+  
   
   
   <section id="import-intelligence">
 
     <div class="section-header">
       <div class="section-header-left">
-        <h2>Import intelligence</h2>
-        <span class="last-updated">Last updated: None</span>
+        <h2>Import intelligence / 수입 현황</h2>
+        <span class="last-updated">Last updated / 최종 업데이트: 2026-04-17</span>
       </div>
+      
+        <a class="download-btn" href="downloads/import_intelligence.csv">Download CSV / CSV 다운로드</a>
       
     </div>
 
-    <p class="source-footnote">Source: MFDS 수입식품 정보마루 · MFDS annual price report</p>
+    <p class="source-footnote">Korea's deer velvet import records and annual price benchmarks from the MFDS import database — sourced for DINZ market intelligence use.</p>
 
     
+    
       <div class="placeholder-card">
-        <p class="placeholder-title">Import intelligence data not yet available</p>
-        <p class="placeholder-body">Data will appear here after the next scheduled build.</p>
+        <p class="placeholder-title">No price data available</p>
+        <p class="placeholder-body">No price data available. Data will appear here once the MFDS annual price tab is populated.</p>
       </div>
+    
+
+    
+    
+      <h3>Import records / 수입 기록</h3>
+      <p class="source-footnote">MFDS-registered deer velvet import notifications / MFDS 등록 녹용 수입 신고 내역</p>
+      <p class="table-record-count">Showing 30 most recent of 576 records. / 상위 30건 표시 (전체 576건 중)</p>
+      <table class="data-table">
+        <caption>Import records / 수입 기록</caption>
+        <thead>
+          <tr>
+            <th scope="col">Notification date / 신고일</th>
+            <th scope="col">Importer / 수입업체</th>
+            <th scope="col">Product name / 품명</th>
+            <th scope="col">Product type / 품목유형</th>
+            <th scope="col">Country of origin / 원산지</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+            <tr>
+              <td class="data">2026-04-17</td>
+              <td>(주)온누리바이오생약</td>
+              <td>DEER HORN</td>
+              <td>Deer velvet (dried)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2026-04-07</td>
+              <td>(주)우성생약</td>
+              <td>DRIED RED DEER VELVET ANTLER</td>
+              <td>Deer velvet (dried)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2026-04-07</td>
+              <td>주식회사 가온제약</td>
+              <td>FROZEN RED DEER VELVET ANTLER</td>
+              <td>Deer velvet (frozen)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2026-04-03</td>
+              <td>(주)케이앤씨디어트레이드</td>
+              <td>WHOLE FROZEN DEER VELVET</td>
+              <td>Deer velvet (frozen)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2026-04-03</td>
+              <td>화용제약</td>
+              <td>FROZEN DEER HORN</td>
+              <td>Deer velvet (frozen)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2026-03-25</td>
+              <td>온바이오</td>
+              <td>FROZEN DEER VELVET</td>
+              <td>Deer velvet (frozen)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2026-03-17</td>
+              <td>(주)케이앤씨디어트레이드</td>
+              <td>FROZEN RED DEER VELVET ANTLER</td>
+              <td>Deer velvet (frozen)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2026-03-16</td>
+              <td>(주)바이오닷</td>
+              <td>FROZEN RED DEER VELVET ANTLER</td>
+              <td>Deer velvet (frozen)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2026-03-12</td>
+              <td>와이더블유 인터내셔날</td>
+              <td>FROZEN WHOLE DEER VELVET ANTLER</td>
+              <td>Deer velvet (frozen)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2026-03-12</td>
+              <td>(주)한국인삼공사</td>
+              <td>FROZEN RED DEER VELVET ANTLER</td>
+              <td>Deer velvet (frozen)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2026-03-11</td>
+              <td>유진통상</td>
+              <td>DRIED RED DEER VELVET ANTLER</td>
+              <td>Deer velvet (dried)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2026-02-20</td>
+              <td>주식회사 이룡제약</td>
+              <td>FROZEN DEER VELVET</td>
+              <td>Deer velvet (frozen)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2026-02-05</td>
+              <td>화용제약</td>
+              <td>FROZEN DEER HORN</td>
+              <td>Deer velvet (frozen)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2026-01-27</td>
+              <td>(주)케이앤씨디어트레이드</td>
+              <td>DRIED RED DEER VELVET ANTLER</td>
+              <td>Deer velvet (dried)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2026-01-15</td>
+              <td>와이더블유 인터내셔날</td>
+              <td>FROZEN WHOLE DEER VELVET ANTLER</td>
+              <td>Deer velvet (frozen)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2026-01-09</td>
+              <td>건향제약주식회사</td>
+              <td>DEER HORNS VELVET ANTLER</td>
+              <td>Deer velvet (dried)</td>
+              <td>Russia</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2026-01-09</td>
+              <td>(주)바이오닷</td>
+              <td>FROZEN RED DEER VELVET ANTLER</td>
+              <td>Deer velvet (frozen)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2025-12-15</td>
+              <td>화용제약</td>
+              <td>DEER HORN</td>
+              <td>Deer velvet (dried)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2025-12-15</td>
+              <td>(주)용보제약</td>
+              <td>DRIED RED DEER VELVET ANTLER</td>
+              <td>Deer velvet (dried)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2025-12-10</td>
+              <td>화용제약</td>
+              <td>FROZEN DEER HORN</td>
+              <td>Deer velvet (frozen)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2025-12-10</td>
+              <td>(주)케이앤씨디어트레이드</td>
+              <td>FROZEN RED DEER VELVET ANTLER</td>
+              <td>Deer velvet (frozen)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2025-12-08</td>
+              <td>유진통상</td>
+              <td>DEER HORNS VELVET ANTLER</td>
+              <td>Deer velvet (dried)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2025-12-04</td>
+              <td>조은생약</td>
+              <td>DEER HORN</td>
+              <td>Deer velvet (dried)</td>
+              <td>Russia</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2025-11-28</td>
+              <td>(주)우성생약</td>
+              <td>DRIED RED DEER VELVET ANTLER</td>
+              <td>Deer velvet (dried)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2025-11-20</td>
+              <td>온바이오</td>
+              <td>DRIED RED DEER VELVET ANTLER</td>
+              <td>Deer velvet (dried)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2025-11-14</td>
+              <td>주식회사 이룡제약</td>
+              <td>FROZEN DEER HORN</td>
+              <td>Deer velvet (frozen)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2025-11-11</td>
+              <td>(주)대원알디티</td>
+              <td>DEER HORNS VELVET ANTLER</td>
+              <td>Deer velvet (dried)</td>
+              <td>Russia</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2025-11-11</td>
+              <td>흥수녹용</td>
+              <td>MARAL DEER HORNS</td>
+              <td>Deer velvet (dried)</td>
+              <td>Russia</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2025-10-23</td>
+              <td>주식회사 이룡제약</td>
+              <td>DEER HORN</td>
+              <td>Deer velvet (dried)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+            <tr>
+              <td class="data">2025-10-23</td>
+              <td>(주)케이앤씨디어트레이드</td>
+              <td>FROZEN RED DEER VELVET ANTLER</td>
+              <td>Deer velvet (frozen)</td>
+              <td>New Zealand</td>
+            </tr>
+          
+        </tbody>
+      </table>
+      <p class="source-footnote">Source: MFDS 수입식품 정보마루 (Korea Ministry of Food and Drug Safety import notification database). Records reflect official import notifications filed with MFDS. Data as of last build date.</p>
+      <a class="table-download-inline" href="downloads/import_intelligence.csv">Download full dataset / 전체 데이터 다운로드</a>
     
 
   </section>
@@ -385,6 +686,2118 @@
 
       
       
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
       
         
       

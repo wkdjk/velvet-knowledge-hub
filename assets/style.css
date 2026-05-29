@@ -339,6 +339,28 @@ footer .caption:last-child {
   background: var(--surface-deep);
 }
 
+/* Truncation disclosure line above the records table (B-7) */
+.table-record-count {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+/* Quiet inline download link below the records table (B-7) */
+.table-download-inline {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.table-download-inline:hover {
+  color: var(--text-secondary);
+}
+
 /* Placeholder card — dashed border signals "intentionally incomplete" */
 .placeholder-card {
   background: var(--placeholder-bg);
@@ -533,6 +555,15 @@ footer .caption:last-child {
   margin-bottom: 8px;
 }
 
+/* Chart sub-caption — latest-year annotation below chart heading (B-7) */
+.chart-subtitle {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  margin-top: 4px;
+  margin-bottom: 12px;
+}
+
 /* HS-code radio toggle group */
 .hs-toggle {
   display: flex;
@@ -645,7 +676,8 @@ footer .caption:last-child {
 
   /* Hide interactive elements */
   .download-btn,
-  .hs-toggle {
+  .hs-toggle,
+  .table-download-inline {
     display: none;
   }
 

@@ -40,6 +40,14 @@ _TRADE_FLOWS_CSV_HEADERS = [
     "date", "series", "hs_code", "hs_label", "value", "unit", "country", "notes",
 ]
 
+# Column order for the import_intelligence CSV export (VFI_Import_Records only).
+_IMPORT_INTELLIGENCE_CSV_HEADERS = [
+    "date", "importer", "product_en", "product_name", "product_type_en",
+    "country_origin_en", "importer_ko", "importer_en", "notes",
+]
+
+IMPORT_INTELLIGENCE_CSV = DOWNLOADS_DIR / "import_intelligence.csv"
+
 # Column order for the news_pulse CSV export.
 # Matches KVN_Articles tab schema (from classify_articles.py).
 _NEWS_PULSE_CSV_HEADERS = [
@@ -303,6 +311,42 @@ def assemble_sections(config: dict, tab_data: dict) -> dict:
                 r for r in kstat_rows if _hs_prefix(r) == "510"
             ]
 
+        # B-7: For import_intelligence, split into import_records and
+        # price_annual subsets. The two tabs share the section but have
+        # completely different schemas — they must not be mixed.
+        #
+        # tab names: VFI_Import_Records and VFI_Price_Annual.
+        # Detection: VFI_Price_Annual rows carry a 'rank' column;
+        #   VFI_Import_Records rows carry a 'date' column but no 'rank'.
+        # We read the raw tabs separately from tab_data for a clean split.
+        if section_id == "import_intelligence":
+            import_records_rows = tab_data.get("VFI_Import_Records", [])
+            price_annual_rows_raw = tab_data.get("VFI_Price_Annual", [])
+
+            # Coerce price_krw from comma-string to int (B-7 design spec §7).
+            # Guard: Sheets may return numeric cells as int already.
+            price_annual_rows: list[dict] = []
+            for raw_row in price_annual_rows_raw:
+                row = dict(raw_row)
+                v = row.get("price_krw", "")
+                if isinstance(v, str):
+                    try:
+                        row["price_krw"] = int(v.replace(",", ""))
+                    except (ValueError, TypeError):
+                        row["price_krw"] = 0
+                elif isinstance(v, float):
+                    row["price_krw"] = int(v)
+                # else already int — leave as-is
+                price_annual_rows.append(row)
+
+            # Keep `data` pointing at import_records so compute_kpis() still works.
+            section_dict["data"] = import_records_rows
+            section_dict["has_data"] = len(import_records_rows) > 0
+            section_dict["import_records_rows"] = import_records_rows
+            section_dict["price_annual_rows"] = price_annual_rows
+            section_dict["import_records_has_data"] = len(import_records_rows) > 0
+            section_dict["price_annual_has_data"] = len(price_annual_rows) > 0
+
         sections[section_id] = section_dict
 
     return sections
@@ -439,6 +483,46 @@ def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date
     # meta object satisfies template's {{ meta.last_built_utc }} reference.
     meta = {"last_built_utc": build_date}
 
+    # B-7: build import intelligence display context.
+    ii = sections.get("import_intelligence", {})
+    all_import_records = ii.get("import_records_rows", [])
+
+    # Sort descending by date, then slice to top 30 for display.
+    try:
+        sorted_records = sorted(
+            all_import_records,
+            key=lambda r: str(r.get("date", "")),
+            reverse=True,
+        )
+    except Exception:
+        sorted_records = all_import_records
+
+    import_records_display = []
+    for row in sorted_records[:30]:
+        display_row = dict(row)
+        display_row["_display_importer"] = (
+            row.get("importer") or row.get("importer_ko") or "—"
+        )
+        display_row["_display_product"] = (
+            row.get("product_en") or row.get("product_name") or "—"
+        )
+        import_records_display.append(display_row)
+
+    import_records_total = len(all_import_records)
+    import_records_has_data = ii.get("import_records_has_data", False)
+    price_annual_has_data = ii.get("price_annual_has_data", False)
+
+    # Pre-format price_krw subtitle value as comma-separated string so the
+    # template does not need a format_number filter.
+    b7_price_subtitle_raw = chart_data.get("b7_price_subtitle")
+    if b7_price_subtitle_raw:
+        b7_price_subtitle = {
+            "price_krw": f"{b7_price_subtitle_raw['price_krw']:,}",
+            "year": b7_price_subtitle_raw["year"],
+        }
+    else:
+        b7_price_subtitle = None
+
     html = template.render(
         build_date=build_date,
         meta=meta,
@@ -446,6 +530,13 @@ def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date
         sections=sections,
         chart_data=chart_data,
         config=config,
+        # B-7 import intelligence context.
+        import_records_display=import_records_display,
+        import_records_total=import_records_total,
+        import_records_has_data=import_records_has_data,
+        price_annual_has_data=price_annual_has_data,
+        price_annual_series=chart_data.get("b7_price_series", []),
+        price_annual_subtitle=b7_price_subtitle,
     )
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -481,13 +572,125 @@ def _aggregate_series_by_date(rows: list[dict], unit_filter: str) -> dict[str, f
     return dict(sorted(totals.items()))
 
 
+def _build_b7_price_series(price_rows: list[dict]) -> list[dict]:
+    """
+    Build Chart.js dataset dicts for the B-7 annual price chart.
+
+    Groups VFI_Price_Annual rows by origin_country. Takes the top 3 countries
+    by row count. All remaining countries are aggregated into 'Other origins'
+    using the mean price_krw per year.
+
+    Returns a list of Chart.js dataset dicts, each with:
+      label, data ([{x: year_int, y: price_int}]), borderColor, backgroundColor,
+      fill, tension, borderDash, pointStyle, pointRadius.
+    """
+    if not price_rows:
+        return []
+
+    # Group rows by origin_country.
+    from collections import defaultdict
+    by_country: dict[str, list[dict]] = defaultdict(list)
+    for row in price_rows:
+        country = str(row.get("origin_country", "")).strip() or "Unknown"
+        by_country[country].append(row)
+
+    # Sort by row count descending; take top 3.
+    sorted_countries = sorted(by_country.items(), key=lambda kv: len(kv[1]), reverse=True)
+    top_3 = sorted_countries[:3]
+    other_countries = sorted_countries[3:]
+
+    # Line style definitions (design spec §2).
+    styles = [
+        {"borderDash": [],       "pointStyle": "circle",   "pointRadius": 3},
+        {"borderDash": [6, 3],   "pointStyle": "triangle", "pointRadius": 4},
+        {"borderDash": [2, 2],   "pointStyle": "rect",     "pointRadius": 3},
+    ]
+    other_style = {"borderDash": [10, 5], "pointStyle": "crossRot", "pointRadius": 3}
+
+    datasets: list[dict] = []
+
+    for i, (country_name, rows) in enumerate(top_3):
+        # Build {year: price_krw} — take first (lowest rank) if multiple rows per year.
+        year_price: dict[int, int] = {}
+        for row in sorted(rows, key=lambda r: int(r.get("rank", 999))):
+            yr = int(row.get("year", 0))
+            if yr and yr not in year_price:
+                year_price[yr] = int(row.get("price_krw", 0))
+        data_points = [{"x": yr, "y": price} for yr, price in sorted(year_price.items())]
+        style = styles[i]
+        datasets.append({
+            "label": country_name,
+            "data": data_points,
+            "borderColor": "#111111",
+            "backgroundColor": "transparent",
+            "fill": False,
+            "tension": 0,
+            "borderDash": style["borderDash"],
+            "pointStyle": style["pointStyle"],
+            "pointRadius": style["pointRadius"],
+        })
+
+    # Build "Other origins" aggregate (mean price_krw per year).
+    if other_countries:
+        other_by_year: dict[int, list[int]] = defaultdict(list)
+        for _country, rows in other_countries:
+            for row in rows:
+                yr = int(row.get("year", 0))
+                price = int(row.get("price_krw", 0))
+                if yr:
+                    other_by_year[yr].append(price)
+        if other_by_year:
+            other_points = [
+                {"x": yr, "y": round(sum(prices) / len(prices))}
+                for yr, prices in sorted(other_by_year.items())
+            ]
+            datasets.append({
+                "label": "Other origins",
+                "data": other_points,
+                "borderColor": "#111111",
+                "backgroundColor": "transparent",
+                "fill": False,
+                "tension": 0,
+                "borderDash": other_style["borderDash"],
+                "pointStyle": other_style["pointStyle"],
+                "pointRadius": other_style["pointRadius"],
+            })
+
+    return datasets
+
+
+def _build_b7_price_subtitle(price_rows: list[dict]) -> dict | None:
+    """
+    Find the row with minimum rank in the maximum year of VFI_Price_Annual.
+    Returns {"price_krw": int, "year": int} or None if no data.
+    price_krw is already coerced to int by assemble_sections.
+    """
+    if not price_rows:
+        return None
+
+    try:
+        max_year = max(int(row.get("year", 0)) for row in price_rows if row.get("year"))
+        year_rows = [r for r in price_rows if int(r.get("year", 0)) == max_year]
+        # Minimum rank = highest-ranked entry.
+        best_row = min(year_rows, key=lambda r: int(r.get("rank", 999)))
+        return {
+            "price_krw": int(best_row.get("price_krw", 0)),
+            "year": max_year,
+        }
+    except (ValueError, TypeError):
+        return None
+
+
 def prepare_chart_data(sections: dict) -> dict:
     """
-    Build pre-aggregated chart datasets for the trade_flows section.
+    Build pre-aggregated chart datasets for the trade_flows section and
+    the B-7 import intelligence price chart.
 
-    Returns a dict with two chart panels:
+    Returns a dict with:
       chart_kg:    NZ export KG, Korea quarantine KG, kstat KG (by HS toggle)
       chart_value: NZ export NZD, kstat USD_thousands (by HS toggle)
+      b7_price_series:   list of Chart.js dataset dicts (one per origin_country)
+      b7_price_subtitle: {"price_krw": int, "year": int} or None
 
     Each dataset is a list of {x: "YYYY-MM", y: float} objects for Chart.js.
     kstat datasets are split by hs_code: kstat_0507 and kstat_0510.
@@ -505,6 +708,12 @@ def prepare_chart_data(sections: dict) -> dict:
     def to_xy(totals: dict[str, float]) -> list[dict]:
         return [{"x": k, "y": round(v, 2)} for k, v in totals.items()]
 
+    # B-7: price chart data.
+    ii = sections.get("import_intelligence", {})
+    price_rows = ii.get("price_annual_rows", [])
+    b7_price_series = _build_b7_price_series(price_rows)
+    b7_price_subtitle = _build_b7_price_subtitle(price_rows)
+
     return {
         # KG panel — common Y-axis, three series.
         "nz_export_kg": to_xy(_aggregate_series_by_date(nz_rows, "KG")),
@@ -515,6 +724,9 @@ def prepare_chart_data(sections: dict) -> dict:
         "nz_export_nzd": to_xy(_aggregate_series_by_date(nz_rows, "NZD")),
         "kstat_0507_usd": to_xy(_aggregate_series_by_date(kstat_0507_rows, "USD_thousands")),
         "kstat_0510_usd": to_xy(_aggregate_series_by_date(kstat_0510_rows, "USD_thousands")),
+        # B-7 price chart.
+        "b7_price_series": b7_price_series,
+        "b7_price_subtitle": b7_price_subtitle,
     }
 
 
@@ -543,6 +755,40 @@ def _write_trade_flows_csv(sections: dict) -> None:
         writer.writerows(trade_data)
 
     print(f"  trade_flows.csv: {len(trade_data)} rows → {TRADE_FLOWS_CSV}")
+
+
+def _write_import_intelligence_csv(sections: dict) -> None:
+    """
+    Write all VFI_Import_Records rows to docs/downloads/import_intelligence.csv.
+
+    Writes ALL records (not just the display slice of 30). Applies the same
+    importer/product_en fallback logic used in the template display rows so
+    the CSV matches what the user sees on screen.
+
+    Creates docs/downloads/ if it does not exist.
+    No-ops silently if import_intelligence section has no import records.
+    """
+    ii = sections.get("import_intelligence", {})
+    all_records = ii.get("import_records_rows", [])
+    DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+    with IMPORT_INTELLIGENCE_CSV.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(
+            fh,
+            fieldnames=_IMPORT_INTELLIGENCE_CSV_HEADERS,
+            extrasaction="ignore",
+        )
+        writer.writeheader()
+        # Apply display fallbacks before writing so CSV matches dashboard.
+        rows_out = []
+        for row in all_records:
+            out = dict(row)
+            out["importer"] = row.get("importer") or row.get("importer_ko") or ""
+            out["product_en"] = row.get("product_en") or row.get("product_name") or ""
+            rows_out.append(out)
+        writer.writerows(rows_out)
+
+    print(f"  import_intelligence.csv: {len(all_records)} rows → {IMPORT_INTELLIGENCE_CSV}")
 
 
 def _write_news_pulse_csv(sections: dict) -> None:
@@ -614,7 +860,10 @@ def main() -> None:
     # --- Step 5c: Write trade_flows CSV download ------------------------------
     _write_trade_flows_csv(sections)
 
-    # --- Step 5d: Write news_pulse CSV download -------------------------------
+    # --- Step 5d: Write import_intelligence CSV download ----------------------
+    _write_import_intelligence_csv(sections)
+
+    # --- Step 5e: Write news_pulse CSV download -------------------------------
     _write_news_pulse_csv(sections)
 
     # --- Step 6: Render -------------------------------------------------------
