@@ -416,6 +416,11 @@
   </section>
 
   {# ── SECTION: NEWS PULSE ──────────────────────────────────────────── #}
+  {# Data source: KVN_Articles tab. Column schema (from classify_articles.py): #}
+  {#   content_hash | url | title_ko | description | published_date |          #}
+  {#   source_name | source_type | keyword_matched | category |                #}
+  {#   english_summary | ai_processed_at | include_on_site                     #}
+  {# Only rows where include_on_site is "TRUE" appear in the article list.     #}
   {% set news_pulse = sections.news_pulse if sections is defined and sections.news_pulse is defined else {} %}
   <section id="news-pulse">
 
@@ -429,31 +434,50 @@
       {% endif %}
     </div>
 
-    <p class="source-footnote">Source: Naver News API</p>
-
     {% if news_pulse.enabled and news_pulse.has_data %}
-      <div class="news-list">
-        {% set articles = news_pulse.articles | default(news_pulse.data) | default([]) %}
-        {% for article in articles %}
-          <div class="news-article">
-            <div class="news-korean">
-              <p class="news-title-ko">{{ article.title_korean | default(article.title_ko) | default("") }}</p>
-              <p class="caption text-muted">{{ article.published_date | default(article.date) | default("") }} · {{ article.source_name | default(article.source) | default("") }}</p>
-            </div>
-            <div class="news-english">
-              <p class="news-summary-en">{{ article.english_summary | default(article.summary_en) | default("") }}</p>
-              {% if article.category %}
-                <p class="caption text-muted">Category: {{ article.category }}</p>
-              {% endif %}
-            </div>
-          </div>
-        {% endfor %}
-      </div>
+
+      {# Filter to include_on_site == "TRUE" (string written by classify_articles.py) #}
+      {% set publishable = [] %}
+      {% for row in news_pulse.data %}
+        {% if row.include_on_site | string | upper in ("TRUE", "1", "YES") %}
+          {% set _ = publishable.append(row) %}
+        {% endif %}
+      {% endfor %}
+
+      {% if publishable %}
+        <ul class="article-list" aria-label="Korea deer velvet news articles">
+          {% for article in publishable %}
+            <li class="article-entry">
+              <div class="article-body">
+                <a class="article-title" href="{{ article.url | default('#') }}" target="_blank" rel="noopener noreferrer">{{ article.title_ko | default("") }}</a>
+                <p class="article-summary">{{ article.english_summary | default("") }}</p>
+              </div>
+              <div class="article-meta">
+                <span class="article-meta-date">{{ article.published_date | default("") }}</span>
+                {% if article.category %}
+                  <span class="article-meta-category">{{ article.category }}</span>
+                {% endif %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        {# All rows exist but none are include_on_site — placeholder #}
+        <div class="placeholder-card">
+          <p class="placeholder-title">News collection is in progress</p>
+          <p class="placeholder-body">Articles will appear after the next weekly update.</p>
+        </div>
+      {% endif %}
+
+      <p class="source-footnote">Source: Naver News API — Korean-language deer velvet news, classified and summarised by AI (Claude Haiku).</p>
+
     {% else %}
+      {# Section enabled but no data yet — graceful degradation (L-12) #}
       <div class="placeholder-card">
-        <p class="placeholder-title">News pulse data not yet available</p>
-        <p class="placeholder-body">Classified articles will appear here after the next scheduled collection run.</p>
+        <p class="placeholder-title">News collection is in progress</p>
+        <p class="placeholder-body">Articles will appear after the next weekly update.</p>
       </div>
+      <p class="source-footnote">Source: Naver News API — Korean-language deer velvet news, classified and summarised by AI (Claude Haiku).</p>
     {% endif %}
 
   </section>

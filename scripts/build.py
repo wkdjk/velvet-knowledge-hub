@@ -33,10 +33,19 @@ TEMPLATE_DIR = REPO_ROOT / "templates"
 OUTPUT_PATH = REPO_ROOT / "docs" / "index.html"
 DOWNLOADS_DIR = REPO_ROOT / "docs" / "downloads"
 TRADE_FLOWS_CSV = DOWNLOADS_DIR / "trade_flows.csv"
+NEWS_PULSE_CSV = DOWNLOADS_DIR / "news_pulse.csv"
 
 # Column order for the trade_flows CSV export.
 _TRADE_FLOWS_CSV_HEADERS = [
     "date", "series", "hs_code", "hs_label", "value", "unit", "country", "notes",
+]
+
+# Column order for the news_pulse CSV export.
+# Matches KVN_Articles tab schema (from classify_articles.py).
+_NEWS_PULSE_CSV_HEADERS = [
+    "content_hash", "url", "title_ko", "description", "published_date",
+    "source_name", "source_type", "keyword_matched",
+    "category", "english_summary", "ai_processed_at", "include_on_site",
 ]
 
 SCOPES = [
@@ -536,6 +545,40 @@ def _write_trade_flows_csv(sections: dict) -> None:
     print(f"  trade_flows.csv: {len(trade_data)} rows → {TRADE_FLOWS_CSV}")
 
 
+def _write_news_pulse_csv(sections: dict) -> None:
+    """
+    Write KVN_Articles rows where include_on_site is truthy to
+    docs/downloads/news_pulse.csv.
+
+    Creates docs/downloads/ if it does not exist (it should already exist
+    after _write_trade_flows_csv runs, but we guard here for resilience).
+    Writes a header-only file when no publishable articles exist — graceful
+    degradation (L-12): the CSV download link still works and returns a
+    valid empty CSV rather than a 404.
+    """
+    all_news = sections.get("news_pulse", {}).get("data", [])
+
+    # Filter to include_on_site truthy — Sheets writes "TRUE" / "FALSE" strings
+    # (see classify_articles.py line: include_val = "TRUE" if ... else "FALSE").
+    publishable = [
+        row for row in all_news
+        if str(row.get("include_on_site", "")).strip().upper() in ("TRUE", "1", "YES")
+    ]
+
+    DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+    with NEWS_PULSE_CSV.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(
+            fh,
+            fieldnames=_NEWS_PULSE_CSV_HEADERS,
+            extrasaction="ignore",
+        )
+        writer.writeheader()
+        writer.writerows(publishable)
+
+    print(f"  news_pulse.csv : {len(publishable)} rows (of {len(all_news)} total) → {NEWS_PULSE_CSV}")
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -570,6 +613,9 @@ def main() -> None:
 
     # --- Step 5c: Write trade_flows CSV download ------------------------------
     _write_trade_flows_csv(sections)
+
+    # --- Step 5d: Write news_pulse CSV download -------------------------------
+    _write_news_pulse_csv(sections)
 
     # --- Step 6: Render -------------------------------------------------------
     bytes_written = render(config, sections, kpi, chart_data, build_date)

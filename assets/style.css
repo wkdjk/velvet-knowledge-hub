@@ -414,6 +414,91 @@ footer .caption:last-child {
   margin-top: 8px;
 }
 
+/* ── 5c. NEWS PULSE ARTICLE LIST (B-10) ──────────────────────
+   Bilingual layout: Korean title (linked) + English summary on
+   the left; date + category meta on the right.
+   Desktop: side-by-side flex row.
+   Mobile (≤768 px): stacked column (see responsive block below).
+   ──────────────────────────────────────────────────────────── */
+
+/* Article list — replaces legacy .news-list for the new bilingual layout */
+.article-list {
+  list-style: none;
+  margin-top: 8px;
+  padding: 0;
+}
+
+/* Individual article row */
+.article-entry {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Left column: Korean title link + English summary */
+.article-body {
+  flex: 1 1 0;
+  min-width: 0;   /* prevents flex overflow on long titles */
+}
+
+/* Korean title — linked, slightly larger than body text */
+.article-title {
+  display: block;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
+               Arial, "Liberation Sans", sans-serif;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text-primary);
+  text-decoration: underline;
+  margin-bottom: 6px;
+  word-break: break-word;
+}
+
+.article-title:hover {
+  color: var(--text-secondary);
+}
+
+/* English summary — muted, readable at a glance */
+.article-summary {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+/* Right column: date + category — small caption style, right-aligned */
+.article-meta {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  white-space: nowrap;
+  min-width: 120px;
+}
+
+.article-meta-date {
+  font-family: "SF Mono", "Cascadia Code", "Fira Mono", "Courier New", monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.article-meta-category {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--surface-deep);
+  border: 1px solid var(--border);
+  padding: 2px 6px;
+  line-height: 1.4;
+}
+
 /* Build date line */
 .build-date {
   color: var(--text-muted);
@@ -529,6 +614,20 @@ footer .caption:last-child {
     flex-wrap: wrap;
   }
 
+  /* Article entry: stack body above meta on mobile */
+  .article-entry {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .article-meta {
+    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+  }
+
   /* Page wrapper: tighter padding on mobile */
   .page-wrapper {
     padding: 0 16px;
@@ -598,6 +697,11 @@ footer .caption:last-child {
 
   /* News articles: each article is an atomic unit */
   .news-article {
+    page-break-inside: avoid;
+  }
+
+  /* B-10 article list: each entry is an atomic unit */
+  .article-entry {
     page-break-inside: avoid;
   }
 
