@@ -47,3 +47,30 @@ jobs:
           git add docs/
           git diff --staged --quiet || git commit -m "chore(build): update docs/ [skip ci]"
           git push
+
+      - name: Send error alert email
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          secure: false
+          username: ${{ secrets.ALERT_EMAIL }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          to: ${{ secrets.ALERT_EMAIL }}
+          from: Velvet Knowledge Hub <${{ secrets.ALERT_EMAIL }}>
+          subject: "[VKH Alert] Weekly update failed — build #${{ github.run_number }}"
+          body: |
+            The automatic weekly update for the Velvet Knowledge Hub did not complete successfully (build #${{ github.run_number }}). The live site is unchanged and remains accessible to readers — it is showing data from the previous successful update.
+
+            To find out what went wrong:
+
+            1. Open this link: ${{ github.run_url }}
+            2. Look for any step marked with a red cross.
+            3. Click that step to expand the log and read the error message.
+            4. If the error mentions a data source (for example, Google Sheets or Naver), check that the source is accessible and try re-running the update from the same page.
+            5. If you are unsure what to do, forward this email to your technical contact.
+
+            All sections on the site may be showing data from a previous update. It is not possible to identify which specific section was affected without checking the log. The site remains live and readable.
+
+            The site remains available to readers with data from the previous successful build.
