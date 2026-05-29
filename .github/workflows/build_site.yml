@@ -33,6 +33,23 @@ jobs:
           PYTHONPATH: "."    # L-1: PYTHONPATH on every step
         run: python scripts/validate_config.py
 
+      - name: Collect Naver news
+        env:
+          PYTHONPATH: "."
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          VKH_SHEET_ID: ${{ secrets.VKH_SHEET_ID }}
+          NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
+          NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
+        run: python scripts/collect_naver.py
+
+      - name: Classify articles
+        env:
+          PYTHONPATH: "."
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          VKH_SHEET_ID: ${{ secrets.VKH_SHEET_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/classify_articles.py
+
       - name: Build site
         env:
           PYTHONPATH: "."    # L-1: PYTHONPATH on every step
