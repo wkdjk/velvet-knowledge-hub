@@ -1,0 +1,167 @@
+# config.yaml — Velvet Knowledge Hub source registry
+#
+# Design principle (Objective 2): adding a new data source requires only:
+#   1. A new Google Sheets tab, and
+#   2. One new source block below.
+# No Python edits. build.py iterates sources generically via the fields here.
+#
+# Security: no credentials or secrets in this file. All credentials live in
+# GitHub Secrets (CI/CD) or a git-ignored .env file at the repo root.
+
+# ---------------------------------------------------------------------------
+# AI model — switchable without any Python edits. Change this value only.
+# ---------------------------------------------------------------------------
+ai_model: claude-haiku-4-5
+
+# ---------------------------------------------------------------------------
+# Google Sheet — leave empty until A-3 creates the sheet and records its ID.
+# ---------------------------------------------------------------------------
+sheet_id: ""
+
+# ---------------------------------------------------------------------------
+# Display kinds — exhaustive list of valid kind values for source blocks.
+# The validator (scripts/validate_config.py) enforces this list as a CI gate.
+#
+#   timeseries  — chronological numeric data (trade volumes, prices over time)
+#   records     — tabular rows, each row a distinct event/import/entry
+#   directory   — product or company registry (stable, low-churn rows)
+#   news        — article feed (title, summary, date, category)
+#   note        — editorial narrative or static text block (no Sheets data)
+# ---------------------------------------------------------------------------
+display_kinds:
+  - timeseries
+  - records
+  - directory
+  - news
+  - note
+
+# ---------------------------------------------------------------------------
+# Sources — Phase 1 source registry.
+#
+# Required fields for every source block (enforced by validate_config.py):
+#   id       — unique snake_case identifier; used as a key throughout build.py
+#   tab      — exact name of the Google Sheets tab to read
+#   kind     — must be one of display_kinds above
+#   section  — dashboard section this source belongs to
+#   enabled  — true = build.py reads and renders; false = gracefully skipped
+#
+# Optional fields (build.py reads if present, ignores if absent):
+#   description      — human-readable note for maintainers
+#   series_value     — for timeseries tabs shared by multiple sources, the
+#                      value in the `series` column that belongs to this source
+#   hs_code_primary  — primary HS code filter (KSTAT source only)
+#   hs_code_secondary — secondary HS code filter (KSTAT source only)
+#   ai_model         — override top-level ai_model for this source only
+# ---------------------------------------------------------------------------
+sources:
+
+  # --- Trade flows ----------------------------------------------------------
+  # Long-format tab: one row per data point, `series` column discriminates
+  # which source a row belongs to. Adding a new trade series = new rows only;
+  # no schema change needed.
+
+  - id: nz_export
+    tab: VTW_Trade_Monthly
+    kind: timeseries
+    series_value: nz_export
+    section: trade_flows
+    enabled: true
+    description: >
+      Stats NZ monthly deer velvet export CSV. Manual download by Commander.
+      Contains NZ export volume by HS code and destination country.
+
+  - id: korea_quarantine
+    tab: VTW_Trade_Monthly
+    kind: timeseries
+    series_value: korea_quarantine
+    section: trade_flows
+    enabled: true
+    description: >
+      QIA Korea quarantine inspection data. Manual download by Commander.
+      Contains count and weight of deer velvet shipments cleared by QIA.
+
+  - id: kstat_api
+    tab: VTW_Trade_Monthly
+    kind: timeseries
+    series_value: kstat_api
+    section: trade_flows
+    enabled: true
+    # HS-code ambiguity (0507.90 vs 0510.00): build.py fetches both and renders
+    # a radio toggle in the Trade flows UI. See VTW Phase C domain knowledge.
+    hs_code_primary: "0507.90"
+    hs_code_secondary: "0510.00"
+    description: >
+      Korea KSTAT API automated pull. HS code 0507.90 (antler) and 0510.00
+      (animal products) both fetched; UI radio toggle lets reader filter.
+
+  # --- Import intelligence --------------------------------------------------
+
+  - id: vfi_import_records
+    tab: VFI_Import_Records
+    kind: records
+    section: import_intelligence
+    enabled: true
+    description: >
+      Korea MFDS food-use deer velvet import records (수입식품 정보마루).
+      Manual CSV download by Commander; multi-year dataset manually accumulated.
+      Dedup key: (date, importer, product_name). 576-row historical dataset
+      transferred from VFI predecessor project at Phase B knowledge inheritance.
+
+  - id: vfi_price_annual
+    tab: VFI_Price_Annual
+    kind: records
+    section: import_intelligence
+    enabled: true
+    description: >
+      MFDS annual deer velvet price rankings (premium herbal medicine category).
+      Annual cadence — one Commander download per year.
+      Dedup key: (year, rank, product_name).
+
+  # --- Market presence ------------------------------------------------------
+  # Deferred to Phase 3: no data collection pipeline exists yet.
+  # Build.py skips this source and renders a "Coming in the next phase" card
+  # for the market_presence section.
+
+  - id: market_presence
+    tab: KPL_Products
+    kind: directory
+    section: market_presence
+    enabled: false
+    description: >
+      Korea deer velvet product registry — auto-collected from product launch
+      news and major retailer scraping. Deferred to Phase 3; KPL predecessor
+      project data will seed this tab at Phase C knowledge inheritance.
+
+  # --- News pulse -----------------------------------------------------------
+
+  - id: kvn_articles
+    tab: KVN_Articles
+    kind: news
+    section: news_pulse
+    enabled: true
+    # This source uses the top-level ai_model for classification and
+    # Korean→English summary. To switch models for this source only, set an
+    # ai_model field here. Cost control: keyword pre-filter → content_hash
+    # dedup → batch API call → ai_processed_at cache flag.
+    description: >
+      Korean-language deer velvet news via Naver News API. Weekly automated
+      collection. AI classification (category) and English summary generated
+      by the model named in ai_model above. Keyword list maintained in the
+      _keywords Sheets tab (Phase B — Phase A ships hard-coded).
+
+# ---------------------------------------------------------------------------
+# Markets — Phase 3 cross-market expansion placeholder.
+# Each market reuses the same five-section spine. Add markets here in Phase 3;
+# no structural Python change required — build.py will iterate this block.
+# ---------------------------------------------------------------------------
+markets:
+  - id: korea
+    display_name: Korea
+    default_language: ko
+    enabled: true
+  # Add new markets here in Phase 3. Each market reuses the same five-section spine.
+  # Example:
+  # - id: china
+  #   display_name: China
+  #   default_language: zh
+  #   enabled: false
