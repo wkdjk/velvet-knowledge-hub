@@ -366,9 +366,8 @@ def connect_sheets(sheet_id: str):
     except json.JSONDecodeError as exc:
         print(
             f"ERROR: GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON — {exc}\n"
-            "  Tip: minify with: "
-            'python -c "import json,sys; print(json.dumps(json.load(sys.stdin), '
-            "separators=(',',':')))" < key.json",
+            "  Minify: python -c \"import json,sys; "
+            "print(json.dumps(json.load(sys.stdin), separators=(',',':')))\" < key.json",
             file=sys.stderr,
         )
         sys.exit(1)
