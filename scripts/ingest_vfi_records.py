@@ -474,7 +474,7 @@ def connect_sheets(sheet_id: str):
             f"ERROR: GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON — {exc}\n"
             "  Tip: minify with: "
             'python -c "import json,sys; print(json.dumps(json.load(sys.stdin), '
-            "separators=(',',':')))" < key.json",
+            "separators=(',',':')))\" < key.json",
             file=sys.stderr,
         )
         sys.exit(1)
