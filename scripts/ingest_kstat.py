@@ -1,27 +1,44 @@
-# Run as: PYTHONPATH=. python scripts/ingest_kstat.py [--recent N] [--dry-run]
+# Run as: PYTHONPATH=. python scripts/ingest_kstat.py [--recent N | --file PATH | --historical DIR] [--dry-run]
 #
-# ingest_kstat.py — KSTAT Korea Customs API ingestion for Velvet Knowledge Hub.
+# ingest_kstat.py — KSTAT Korea Customs data ingestion for Velvet Knowledge Hub.
 #
-# Fetches monthly Korea import data for deer velvet HS codes from the KSTAT
-# data.go.kr OpenAPI and upserts new rows into the VTW_Trade_Monthly tab of
-# VKH_Data Google Sheet.
+# Supports three input modes (mutually exclusive):
+#   --recent N        Fetch the last N months from the KSTAT API (requires KSTAT_API_KEY).
+#   --file PATH       Parse a single KSTAT CSV file (offline / historical).
+#   --historical DIR  Parse all *.csv files in DIR (offline / historical bulk load).
+#
+# Upserts new rows into the VTW_Trade_Monthly tab of VKH_Data Google Sheet.
 #
 # Usage:
 #   PYTHONPATH=. python scripts/ingest_kstat.py
 #   PYTHONPATH=. python scripts/ingest_kstat.py --recent 6
-#   PYTHONPATH=. python scripts/ingest_kstat.py --dry-run
+#   PYTHONPATH=. python scripts/ingest_kstat.py --file /path/to/CUSTOMS_2024.csv
+#   PYTHONPATH=. python scripts/ingest_kstat.py --historical /path/to/customs_dir/
+#   PYTHONPATH=. python scripts/ingest_kstat.py --file /path/to/CUSTOMS_2024.csv --dry-run
 #
-# L-1: PYTHONPATH=. ensures repo root is importable.
-# L-2: .env must be at repo root (/Users/Qs/C/velvet-knowledge-hub/.env).
-# L-3: GOOGLE_SERVICE_ACCOUNT_JSON must be single-line JSON in .env.
-# L-4: get_all_records() called once; new rows written in one append_rows() call.
-# L-9: hs_code stored as TEXT dot notation ("0507.90") — not cast to int.
-#      Dedup comparison uses string equality.
+# CSV format (utf-8-sig BOM, comma-separated):
+#   기간,국가,HS코드,품목명,수출 중량,수출 금액,수입 중량,수입 금액,무역수지
+#
+# Parsing rules:
+#   - Skip rows where 국가 is empty or "총계" (summary rows).
+#   - Skip rows where 수입 중량 == 0 AND 수입 금액 == 0.
+#   - HS코드 mapped to dot notation TEXT ("0507.90") — L-9.
+#   - Emits two rows per CSV data row: unit=KG and unit=USD_thousands.
+#   - notes = "source=<basename>".
+#   - Encoding: utf-8-sig (BOM-aware).
+#
+# L-1:  PYTHONPATH=. ensures repo root is importable.
+# L-2:  .env must be at repo root (/Users/Qs/C/velvet-knowledge-hub/.env).
+# L-3:  GOOGLE_SERVICE_ACCOUNT_JSON must be single-line JSON in .env.
+# L-4:  get_all_records() called once; new rows written in one append_rows() call.
+# L-9:  hs_code stored as TEXT dot notation ("0507.90") — not cast to int.
+#       Dedup comparison uses string equality.
 # L-10: Dedup key is (date, series, hs_code, country, unit) — five fields.
 #       country is required because each country is a separate API row.
 #       unit is required because each period/country/hs_code yields two rows (KG + USD_thousands).
+# L-13: CSV column positions detected by header name — never by fixed index.
 #
-# KSTAT_API_KEY: read from .env at repo root.
+# KSTAT_API_KEY: read from .env at repo root (API mode only).
 # Commander action: copy KSTAT_API_KEY from /Users/Qs/C/velvet-trade-watch/.env
 #
 # API endpoint: https://apis.data.go.kr/1220000/Itemtrade/getItemtradeList
@@ -30,6 +47,7 @@
 # Security: no credentials or secrets in this file. All secrets from .env only.
 
 import argparse
+import csv
 import json
 import logging
 import os
@@ -253,6 +271,161 @@ def api_records_to_sheet_rows(raw_records: list[dict]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# CSV file parsing helpers (--file / --historical modes)
+# ---------------------------------------------------------------------------
+
+# Column name constants for the KSTAT CSV format (Korean headers).
+_CSV_COL_PERIOD = "기간"
+_CSV_COL_COUNTRY = "국가"
+_CSV_COL_HS = "HS코드"
+_CSV_COL_LABEL = "품목명"
+_CSV_COL_IMP_WEIGHT = "수입 중량"
+_CSV_COL_IMP_VALUE = "수입 금액"
+
+# Summary row markers — these rows carry totals, not per-country data.
+_CSV_SKIP_COUNTRY_VALUES = {"", "총계"}
+
+
+def _hs_code_to_dot(raw_hs: str) -> str:
+    """
+    Map a raw KSTAT HS code string to dot notation TEXT.
+
+    The KSTAT CSV uses 10-digit codes (e.g. "0507901110").
+    VKH schema stores the 6-digit WCO heading in dot notation ("0507.90").
+
+    Mapping rules (L-9: store as TEXT dot notation):
+      - Starts with "050790" → "0507.90"
+      - Starts with "051000" → "0510.00"
+      - Default: first 4 chars + "." + chars 5-6 (e.g. "0507901110" → "0507.90").
+    """
+    raw = raw_hs.strip().replace(".", "").replace(" ", "")
+    if raw.startswith("050790"):
+        return "0507.90"
+    if raw.startswith("051000"):
+        return "0510.00"
+    # Generic fallback: first 4 digits + "." + next 2 digits.
+    if len(raw) >= 6:
+        return f"{raw[:4]}.{raw[4:6]}"
+    return raw
+
+
+def parse_kstat_csv(filepath: Path) -> list[dict]:
+    """
+    Parse a single KSTAT CSV file into VTW_Trade_Monthly schema rows.
+
+    Each data row emits TWO output rows:
+      1. unit = "KG",            value = 수입 중량
+      2. unit = "USD_thousands", value = 수입 금액
+
+    Skip rules:
+      - 국가 is empty or "총계" (summary rows).
+      - Both 수입 중량 == 0 AND 수입 금액 == 0.
+
+    Encoding: utf-8-sig (BOM-aware — KSTAT CSVs start with BOM U+FEFF).
+    L-13: column positions detected by header name, never by fixed index.
+    L-9:  hs_code stored as TEXT dot notation.
+    """
+    logger.info("Parsing KSTAT CSV: %s", filepath)
+    source_note = f"source={filepath.name}"
+    output: list[dict] = []
+
+    with filepath.open(encoding="utf-8-sig", newline="") as fh:
+        reader = csv.DictReader(fh)
+
+        # Validate required columns are present (L-13: dynamic header check).
+        if reader.fieldnames is None:
+            raise ValueError(f"CSV has no header row: {filepath}")
+
+        # Strip whitespace from field names to normalise.
+        fieldnames = [f.strip() if f else f for f in reader.fieldnames]
+        required = {_CSV_COL_PERIOD, _CSV_COL_COUNTRY, _CSV_COL_HS, _CSV_COL_LABEL,
+                    _CSV_COL_IMP_WEIGHT, _CSV_COL_IMP_VALUE}
+        missing = required - set(fieldnames)
+        if missing:
+            raise ValueError(
+                f"CSV missing required columns {missing} in {filepath.name}.\n"
+                f"  Found columns: {fieldnames}"
+            )
+
+        for row in reader:
+            # Strip keys to match normalised fieldnames.
+            row = {k.strip() if k else k: v for k, v in row.items()}
+
+            country = row.get(_CSV_COL_COUNTRY, "").strip().strip('"')
+            # Skip summary rows.
+            if country in _CSV_SKIP_COUNTRY_VALUES:
+                continue
+
+            period = row.get(_CSV_COL_PERIOD, "").strip().strip('"')
+            raw_hs = row.get(_CSV_COL_HS, "").strip().strip('"')
+            hs_label = row.get(_CSV_COL_LABEL, "").strip().strip('"')
+
+            # Parse weight and value — strip commas from formatted numbers.
+            try:
+                imp_weight = int(float(row.get(_CSV_COL_IMP_WEIGHT, "0").strip().replace(",", "") or "0"))
+                imp_value = int(float(row.get(_CSV_COL_IMP_VALUE, "0").strip().replace(",", "") or "0"))
+            except (ValueError, TypeError):
+                logger.debug("Skipping malformed CSV row: %s", row)
+                continue
+
+            # Skip rows with no import activity.
+            if imp_weight == 0 and imp_value == 0:
+                continue
+
+            hs_dot = _hs_code_to_dot(raw_hs)
+
+            # KG row.
+            output.append({
+                "date":     period,
+                "series":   SERIES_VALUE,
+                "hs_code":  hs_dot,
+                "hs_label": hs_label,
+                "value":    imp_weight,
+                "unit":     "KG",
+                "country":  country,
+                "notes":    source_note,
+            })
+
+            # USD_thousands row.
+            output.append({
+                "date":     period,
+                "series":   SERIES_VALUE,
+                "hs_code":  hs_dot,
+                "hs_label": hs_label,
+                "value":    imp_value,
+                "unit":     "USD_thousands",
+                "country":  country,
+                "notes":    source_note,
+            })
+
+    logger.info("KSTAT CSV parse complete: %d schema rows from %s", len(output), filepath.name)
+    return output
+
+
+def parse_kstat_historical(directory: Path) -> list[dict]:
+    """
+    Parse all *.csv files in directory and return combined schema rows.
+
+    Files are sorted by name (ascending) to process chronologically.
+    L-13: relies on parse_kstat_csv for per-file column detection.
+    """
+    csv_files = sorted(directory.glob("*.csv"))
+    if not csv_files:
+        raise ValueError(f"No *.csv files found in directory: {directory}")
+
+    all_rows: list[dict] = []
+    for csv_path in csv_files:
+        try:
+            rows = parse_kstat_csv(csv_path)
+            all_rows.extend(rows)
+            print(f"  parsed {csv_path.name}: {len(rows)} schema rows")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Skipping %s — %s", csv_path.name, exc)
+
+    return all_rows
+
+
+# ---------------------------------------------------------------------------
 # Google Sheets helpers
 # ---------------------------------------------------------------------------
 
@@ -405,32 +578,117 @@ def rows_to_append(
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Fetch KSTAT Korea Customs API data and upsert into "
-            "the VTW_Trade_Monthly tab of VKH_Data Google Sheet."
+            "Ingest KSTAT Korea Customs data into the VTW_Trade_Monthly tab "
+            "of VKH_Data Google Sheet. Three input modes: --recent (API), "
+            "--file (single CSV), --historical (directory of CSVs)."
         )
     )
-    parser.add_argument(
+
+    # Input mode arguments — mutually exclusive.
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
         "--recent",
         type=int,
-        default=3,
+        default=None,
         metavar="N",
-        help="Fetch the last N calendar months from the API (default: 3).",
+        help="Fetch the last N calendar months from the KSTAT API (requires KSTAT_API_KEY).",
     )
+    mode_group.add_argument(
+        "--file",
+        metavar="PATH",
+        help="Parse a single KSTAT CSV file (offline / historical mode).",
+    )
+    mode_group.add_argument(
+        "--historical",
+        metavar="DIR",
+        help="Parse all *.csv files in DIR (offline / bulk historical load).",
+    )
+
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Fetch and parse only — do not write to Google Sheets.",
+        help="Parse only — do not write to Google Sheets.",
     )
     args = parser.parse_args()
 
-    print("ingest_kstat.py — VKH KSTAT API ingestion")
-    print(f"  months_back: {args.recent}")
-    print(f"  dry-run: {args.dry_run}")
+    # Default to --recent 3 if no mode supplied.
+    if args.file is None and args.historical is None and args.recent is None:
+        args.recent = 3
 
     # L-2: load .env from repo root.
     load_dotenv(REPO_ROOT / ".env")
 
-    # Graceful skip if KSTAT_API_KEY is not set (as per brief).
+    # ----- Mode: --file -------------------------------------------------------
+    if args.file is not None:
+        csv_path = Path(args.file).resolve()
+        print("ingest_kstat.py — VKH KSTAT CSV file mode")
+        print(f"  file: {csv_path.name}")
+        print(f"  dry-run: {args.dry_run}")
+
+        if not csv_path.exists():
+            print(f"ERROR: CSV file not found: {csv_path}", file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            sheet_rows = parse_kstat_csv(csv_path)
+        except Exception as exc:  # noqa: BLE001
+            print(f"ERROR: CSV parse failed — {exc}", file=sys.stderr)
+            sys.exit(1)
+
+        rows_parsed = len(sheet_rows)
+        print(f"  schema rows parsed: {rows_parsed}")
+
+        if args.dry_run:
+            print()
+            print("[DRY RUN] Parse complete — no Sheets write.")
+            print("  Sample rows (first 3):")
+            for row in sheet_rows[:3]:
+                print(f"    {row}")
+            print(f"rows_parsed: {rows_parsed} | new_rows: 0 | skipped_duplicates: 0")
+            sys.exit(0)
+
+        _write_rows_to_sheets(sheet_rows, rows_parsed)
+        return
+
+    # ----- Mode: --historical ------------------------------------------------
+    if args.historical is not None:
+        hist_dir = Path(args.historical).resolve()
+        print("ingest_kstat.py — VKH KSTAT historical CSV mode")
+        print(f"  directory: {hist_dir}")
+        print(f"  dry-run: {args.dry_run}")
+
+        if not hist_dir.is_dir():
+            print(f"ERROR: directory not found: {hist_dir}", file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            sheet_rows = parse_kstat_historical(hist_dir)
+        except Exception as exc:  # noqa: BLE001
+            print(f"ERROR: historical parse failed — {exc}", file=sys.stderr)
+            sys.exit(1)
+
+        rows_parsed = len(sheet_rows)
+        print(f"  total schema rows parsed: {rows_parsed}")
+
+        if args.dry_run:
+            print()
+            print("[DRY RUN] Parse complete — no Sheets write.")
+            print("  Sample rows (first 3):")
+            for row in sheet_rows[:3]:
+                print(f"    {row}")
+            print(f"rows_parsed: {rows_parsed} | new_rows: 0 | skipped_duplicates: 0")
+            sys.exit(0)
+
+        _write_rows_to_sheets(sheet_rows, rows_parsed)
+        return
+
+    # ----- Mode: --recent (API) -----------------------------------------------
+    months_back = args.recent
+    print("ingest_kstat.py — VKH KSTAT API ingestion")
+    print(f"  months_back: {months_back}")
+    print(f"  dry-run: {args.dry_run}")
+
+    # Graceful skip if KSTAT_API_KEY is not set.
     api_key = os.environ.get("KSTAT_API_KEY", "").strip()
     if not api_key:
         print(
@@ -439,15 +697,13 @@ def main() -> None:
             "  Commander action: copy KSTAT_API_KEY from "
             "/Users/Qs/C/velvet-trade-watch/.env"
         )
-        print(f"rows_fetched: 0 | new_rows: 0 | skipped_duplicates: 0")
+        print("rows_fetched: 0 | new_rows: 0 | skipped_duplicates: 0")
         sys.exit(0)
 
-    # --- Fetch from API -------------------------------------------------------
-    print(f"  fetching last {args.recent} month(s) from KSTAT API...")
-    raw_records = fetch_kstat_recent(api_key, months_back=args.recent)
+    print(f"  fetching last {months_back} month(s) from KSTAT API...")
+    raw_records = fetch_kstat_recent(api_key, months_back=months_back)
     print(f"  raw API records: {len(raw_records)}")
 
-    # Convert to VTW_Trade_Monthly schema (two rows per raw record: KG + USD).
     sheet_rows = api_records_to_sheet_rows(raw_records)
     rows_fetched = len(sheet_rows)
     print(f"  schema rows generated: {rows_fetched}")
@@ -455,7 +711,7 @@ def main() -> None:
     if args.dry_run:
         print()
         print("[DRY RUN] Fetch complete — no Sheets write.")
-        print(f"  Sample rows (first 3):")
+        print("  Sample rows (first 3):")
         for row in sheet_rows[:3]:
             print(f"    {row}")
         print(f"rows_fetched: {rows_fetched} | new_rows: 0 | skipped_duplicates: 0")
@@ -463,17 +719,24 @@ def main() -> None:
 
     if rows_fetched == 0:
         print("  No API records returned — nothing to write.")
-        print(f"rows_fetched: 0 | new_rows: 0 | skipped_duplicates: 0")
+        print("rows_fetched: 0 | new_rows: 0 | skipped_duplicates: 0")
         sys.exit(0)
 
-    # --- Connect to Sheets ----------------------------------------------------
+    _write_rows_to_sheets(sheet_rows, rows_fetched)
+
+
+def _write_rows_to_sheets(sheet_rows: list[dict], rows_count: int) -> None:
+    """
+    Connect to Google Sheets, dedup, and write new rows.
+
+    Shared by all three input modes. L-4: one read call, one write call.
+    """
     sheet_id = resolve_sheet_id()
     print(f"  sheet_id: {sheet_id}")
 
     spreadsheet = connect_sheets(sheet_id)
     print(f"  sheet title: {spreadsheet.title}")
 
-    # Locate target tab (L-12: graceful skip if tab is missing).
     try:
         ws = spreadsheet.worksheet(TARGET_TAB)
     except gspread.exceptions.WorksheetNotFound:
@@ -484,11 +747,10 @@ def main() -> None:
         )
         sys.exit(1)
 
-    # --- Dedup (L-4: one API call to read all existing rows) ------------------
+    # L-4: one read call to load existing rows.
     existing_keys, existing_count = load_existing_keys(ws)
     print(f"  existing rows in tab: {existing_count}")
 
-    # Read tab headers from row 1 (L-4: one additional call for header only).
     headers = ws.row_values(1)
     if not headers:
         print(
@@ -504,18 +766,18 @@ def main() -> None:
     if rows_new == 0:
         print("  Nothing to write — all rows already present.")
         print(
-            f"rows_fetched: {rows_fetched} | new_rows: 0 | "
+            f"rows_count: {rows_count} | new_rows: 0 | "
             f"skipped_duplicates: {rows_skipped}"
         )
         sys.exit(0)
 
-    # --- Write (L-4: one bulk append_rows call — never in a loop) -------------
+    # L-4: one bulk append_rows call — never in a loop.
     ws.append_rows(new_rows_lists, value_input_option="USER_ENTERED")
 
     print()
     print(f"  DONE: {rows_new} rows written to '{TARGET_TAB}'.")
     print(
-        f"rows_fetched: {rows_fetched} | new_rows: {rows_new} | "
+        f"rows_count: {rows_count} | new_rows: {rows_new} | "
         f"skipped_duplicates: {rows_skipped}"
     )
 
