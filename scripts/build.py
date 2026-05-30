@@ -400,37 +400,28 @@ def compute_kpis(sections: dict) -> dict:
     }
 
     # --- KPI 1 & 2: NZ export (trade_flows section, series=nz_export) -------
+    # Aggregate KG totals by date (same logic as prepare_chart_data) so the KPI
+    # reflects the monthly total across all countries, not a single raw row.
     trade_data = sections.get("trade_flows", {}).get("data", [])
     nz_export_rows = [r for r in trade_data if r.get("series") == "nz_export"]
 
     if nz_export_rows:
-        # Sort by date descending; date column assumed YYYY-MM format.
         try:
-            sorted_rows = sorted(
-                nz_export_rows,
-                key=lambda r: str(r.get("date", "")),
-                reverse=True,
-            )
-            latest_row = sorted_rows[0]
-            latest_value = latest_row.get("value", "")
-            if latest_value != "" and latest_value is not None:
-                kpi["nz_export_latest"] = str(latest_value)
+            nz_kg_by_date = _aggregate_series_by_date(nz_export_rows, "KG")
+            if nz_kg_by_date:
+                sorted_dates = sorted(nz_kg_by_date.keys(), reverse=True)
+                latest_date = sorted_dates[0]
+                latest_kg = nz_kg_by_date[latest_date]
+                kpi["nz_export_latest"] = f"{int(latest_kg):,}"
 
-            if len(sorted_rows) >= 2:
-                prior_row = sorted_rows[1]
-                prior_value = prior_row.get("value")
-                if (
-                    prior_value is not None
-                    and prior_value != ""
-                    and float(prior_value) != 0
-                ):
-                    delta_pct = (
-                        (float(latest_value) - float(prior_value)) / float(prior_value)
-                    ) * 100
-                    symbol = "▲" if delta_pct >= 0 else "▼"
-                    kpi["nz_export_delta"] = f"{symbol} {abs(delta_pct):.1f}%"
+                if len(sorted_dates) >= 2:
+                    prior_date = sorted_dates[1]
+                    prior_kg = nz_kg_by_date[prior_date]
+                    if prior_kg != 0:
+                        delta_pct = (latest_kg - prior_kg) / prior_kg * 100
+                        symbol = "▲" if delta_pct >= 0 else "▼"
+                        kpi["nz_export_delta"] = f"{symbol} {abs(delta_pct):.1f}%"
         except (ValueError, TypeError, ZeroDivisionError):
-            # Cannot compute delta — leave as "—".
             pass
 
     # --- KPI 3: Articles past 30 days ----------------------------------------
