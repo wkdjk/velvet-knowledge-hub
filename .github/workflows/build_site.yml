@@ -43,6 +43,7 @@ jobs:
         run: python scripts/collect_naver.py
 
       - name: Classify articles
+        continue-on-error: true   # API key issues must not block the site build
         env:
           PYTHONPATH: "."
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
