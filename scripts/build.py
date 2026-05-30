@@ -13,6 +13,7 @@
 import csv
 import json
 import os
+import shutil
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -868,6 +869,15 @@ def main() -> None:
 
     # --- Step 6: Render -------------------------------------------------------
     bytes_written = render(config, sections, kpi, chart_data, build_date)
+
+    # --- Step 7: Copy static assets to docs/assets/ (GitHub Pages serves from docs/) ---
+    src_assets = REPO_ROOT / "assets"
+    dst_assets = REPO_ROOT / "docs" / "assets"
+    if src_assets.is_dir():
+        if dst_assets.exists():
+            shutil.rmtree(dst_assets)
+        shutil.copytree(src_assets, dst_assets)
+        print(f"  assets: copied {len(list(dst_assets.iterdir()))} files to docs/assets/")
 
     # --- Console output -------------------------------------------------------
     print("  sections rendered:")
