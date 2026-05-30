@@ -58,6 +58,37 @@ jobs:
           VKH_SHEET_ID: ${{ secrets.VKH_SHEET_ID }}
         run: python scripts/build.py
 
+      - name: Install Playwright Chromium
+        # L-7: --with-deps installs system libs (libnss3, libgbm1, etc.) required
+        # on a clean Ubuntu runner. Without this flag Chromium fails to launch.
+        run: playwright install --with-deps chromium
+
+      - name: Generate PDF
+        # L-12: continue-on-error so HTML publish is not blocked by PDF failure.
+        # The HTML site remains live even if Playwright rendering fails.
+        continue-on-error: true
+        env:
+          PYTHONPATH: "."    # L-1: PYTHONPATH on every step
+        run: python scripts/generate_pdf.py --url "https://wkdjk.github.io/velvet-knowledge-hub/"
+
+      - name: Verify PDF file size
+        # Build step audit: confirm the PDF was written and exceeds the minimum
+        # size threshold. Reports size to the log. Does not fail the build.
+        continue-on-error: true
+        run: |
+          PDF_PATH="docs/velvet-knowledge-hub.pdf"
+          if [ -f "$PDF_PATH" ]; then
+            SIZE=$(wc -c < "$PDF_PATH")
+            echo "PDF size: ${SIZE} bytes"
+            if [ "$SIZE" -lt 10000 ]; then
+              echo "WARNING: PDF is suspiciously small (${SIZE} bytes) — render may have failed."
+            else
+              echo "PDF size check passed (${SIZE} bytes)."
+            fi
+          else
+            echo "WARNING: PDF file not found at ${PDF_PATH} — generation step may have failed."
+          fi
+
       - name: Commit and push docs/
         run: |
           git config user.name "github-actions[bot]"
