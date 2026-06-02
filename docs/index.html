@@ -116,8 +116,8 @@
       
       <div class="chart-panel">
         <h3>Volume — monthly and rolling 12-month (dried-equivalent kg)</h3>
-        <div class="chart-canvas-wrapper">
-          <canvas id="chart-volume" height="320"
+        <div class="chart-canvas-wrapper" style="height:320px;">
+          <canvas id="chart-volume"
             aria-label="Monthly and rolling 12-month trade volume in dried-equivalent kg" role="img"></canvas>
         </div>
         <p class="chart-annotation">All volumes are shown as dried-equivalent kg. Conversion applied: fresh/frozen velvet × 0.33 = dried-equivalent kg. Dried velvet requires no conversion.</p>
@@ -126,8 +126,8 @@
       
       <div class="chart-panel">
         <h3>Unit price — blended NZD and USD per dried-equivalent kg</h3>
-        <div class="chart-canvas-wrapper">
-          <canvas id="chart-price" height="240"
+        <div class="chart-canvas-wrapper" style="height:240px;">
+          <canvas id="chart-price"
             aria-label="Monthly blended unit price NZD and USD per dried-equivalent kg" role="img"></canvas>
         </div>
         <p class="chart-annotation">Unit price = total value ÷ dried-equivalent kg for each month. NZD = FOB export price (New Zealand origin). USD = customs import price (Korea origin). The two prices use different currencies and valuation bases (freight and insurance are included differently), so they should be read as separate indicators rather than compared directly.<br>
@@ -142,8 +142,8 @@
       
       <div class="chart-panel">
         <h3>NZ velvet exports by destination — FOB value (NZD)</h3>
-        <div class="chart-canvas-wrapper">
-          <canvas id="chart-destination-area" height="280"
+        <div class="chart-canvas-wrapper" style="height:280px;">
+          <canvas id="chart-destination-area"
             aria-label="NZ deer velvet exports by destination, stacked area chart of NZD FOB value" role="img"></canvas>
         </div>
         <p class="chart-annotation">Source: Stats NZ. All available months shown. Countries not individually listed are grouped as Other.</p>
@@ -152,8 +152,8 @@
       
       <div class="chart-panel">
         <h3>NZ velvet exports by destination — volume share (2025)</h3>
-        <div class="chart-canvas-wrapper" style="max-width: 480px;">
-          <canvas id="chart-destination-pie" height="280"
+        <div class="chart-canvas-wrapper" style="height:280px;max-width:480px;">
+          <canvas id="chart-destination-pie"
             aria-label="NZ deer velvet export volume share by destination, pie chart" role="img"></canvas>
         </div>
         <p class="chart-annotation">Source: Stats NZ. Latest full calendar year with at least 10 months of data. Volume shown as raw KG (all product types).</p>
@@ -166,8 +166,8 @@
       
         <div class="chart-panel">
           <h3>South Korean velvet imports by origin — QIA quarantine records (KG)</h3>
-          <div class="chart-canvas-wrapper">
-            <canvas id="chart-qia-origin" height="300"
+          <div class="chart-canvas-wrapper" style="height:300px;">
+            <canvas id="chart-qia-origin"
               aria-label="South Korean deer velvet imports by country of origin, grouped bar chart" role="img"></canvas>
           </div>
           <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Volumes shown as raw import KG as recorded at quarantine inspection. No dried-equivalent conversion applied.</p>
