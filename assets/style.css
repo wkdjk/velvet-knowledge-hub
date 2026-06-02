@@ -544,6 +544,18 @@ footer .caption:last-child {
 
 /* ── 5b. CHART SECTION STYLES ─────────────────────────────── */
 
+/* C-3h: section sub-heading between chart panels within a section */
+.section-subheading {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 36px;
+  margin-bottom: 16px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+}
+
 /* Chart panel wrapper — provides vertical rhythm between panels */
 .chart-panel {
   margin-bottom: 32px;

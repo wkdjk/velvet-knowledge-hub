@@ -530,6 +530,10 @@ def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date
         tf_harvest_boundaries=chart_data.get("harvest_boundaries", []),
         tf_yoy_chip=chart_data.get("yoy_chip", {"label": "—", "direction": "neutral"}),
         tf_window=chart_data.get("window", {}),
+        # C-3h destination breakdown charts.
+        tf_destination_area=chart_data.get("tf_destination_area", {}),
+        tf_destination_pie=chart_data.get("tf_destination_pie", {}),
+        tf_qia_by_origin=chart_data.get("tf_qia_by_origin", []),
         # B-7 import intelligence context.
         import_records_display=import_records_display,
         import_records_total=import_records_total,
@@ -903,6 +907,201 @@ def _compute_yoy_chip(rolling_by_date: dict[str, float]) -> dict:
     return {"pct": pct, "direction": direction, "label": label}
 
 
+# ---------------------------------------------------------------------------
+# C-3h helper functions — destination breakdown charts (Panel C + Panel D)
+# ---------------------------------------------------------------------------
+
+# Countries to display individually in destination charts. All other countries
+# are collapsed into "Other".
+_DEST_COUNTRIES: list[str] = ["China", "Korea", "Hong Kong"]
+
+# Colour palette for destination charts (Panel C: NZ by destination).
+# Taiwan → "Other" (grey). These match the task brief exactly.
+DEST_COLOURS: dict[str, str] = {
+    "China":      "#A78230",  # DINZ gold
+    "Korea":      "#1A5276",  # dark blue
+    "Hong Kong":  "#7D6608",  # dark amber
+    "Other":      "#9E9E9E",  # grey
+}
+
+# Colour palette for QIA origin chart (Panel D).
+QIA_COLOURS: dict[str, str] = {
+    "New Zealand":       "#1A5276",
+    "China":             "#A78230",
+    "Russia":            "#888888",
+    "Hong Kong (SAR)":   "#7D6608",
+    "Kazakhstan":        "#E8A87C",
+    "Australia":         "#2C3E50",
+    "Other":             "#BDBDBD",
+}
+
+# Korean → English country name map for QIA rows.
+_QIA_COUNTRY_MAP: dict[str, str] = {
+    "뉴질랜드":   "New Zealand",
+    "중국":       "China",
+    "러시아":     "Russia",
+    "홍콩":       "Hong Kong (SAR)",
+    "카자흐스탄": "Kazakhstan",
+    "호주":       "Australia",
+}
+
+
+def _normalise_dest_country(raw: str) -> str:
+    """
+    Collapse countries not in _DEST_COUNTRIES into 'Other'.
+
+    Used for NZ export destination charts (Panel C).
+    """
+    return raw if raw in _DEST_COUNTRIES else "Other"
+
+
+def _normalise_qia_country(raw: str) -> str:
+    """
+    Map Korean QIA country names to English display names.
+
+    Unknown values are preserved as-is (kept rather than silently dropped).
+    """
+    return _QIA_COUNTRY_MAP.get(raw.strip(), raw.strip())
+
+
+def _aggregate_nz_by_destination(nz_rows: list[dict]) -> dict[str, dict[str, float]]:
+    """
+    Aggregate NZ export NZD FOB value rows by destination country and date.
+
+    Countries not in _DEST_COUNTRIES are collapsed into "Other".
+    Returns {country: {date_str: nzd_value}} with all dates sorted ascending.
+
+    C-3h Panel C1: stacked area chart data.
+    """
+    result: dict[str, dict[str, float]] = {c: {} for c in _DEST_COUNTRIES + ["Other"]}
+
+    for row in nz_rows:
+        if str(row.get("unit", "")) != "NZD":
+            continue
+        date_str = str(row.get("date", ""))
+        if not date_str:
+            continue
+        try:
+            val = float(row.get("value", 0) or 0)
+        except (ValueError, TypeError):
+            continue
+
+        raw_country = str(row.get("country", ""))
+        country = _normalise_dest_country(raw_country)
+        result[country][date_str] = result[country].get(date_str, 0.0) + val
+
+    # Sort each country's date dict ascending.
+    return {c: dict(sorted(v.items())) for c, v in result.items()}
+
+
+def _latest_full_year_kg_by_destination(nz_rows: list[dict]) -> dict:
+    """
+    Find the most recent calendar year where at least 10 months of KG data exist,
+    then sum KG by destination for that year.
+
+    Countries not in _DEST_COUNTRIES are collapsed to "Other".
+    Returns {"year": YYYY, "China": kg, "Korea": kg, "Hong Kong": kg, "Other": kg}.
+
+    C-3h Panel C2: pie chart data.
+    """
+    kg_rows = [r for r in nz_rows if str(r.get("unit", "")) == "KG"]
+
+    # Gather all months present per year (across all countries combined).
+    from collections import defaultdict
+    months_per_year: dict[str, set] = defaultdict(set)
+    for row in kg_rows:
+        date_str = str(row.get("date", ""))
+        if date_str and len(date_str) >= 7:
+            months_per_year[date_str[:4]].add(date_str[5:7])
+
+    # Latest full year: most recent year with >=10 months.
+    full_years = sorted(
+        [yr for yr, months in months_per_year.items() if len(months) >= 10],
+        reverse=True,
+    )
+    if not full_years:
+        return {"year": None}
+
+    latest_year = full_years[0]
+
+    # Sum KG by destination for that year.
+    kg_by_dest: dict[str, float] = {c: 0.0 for c in _DEST_COUNTRIES + ["Other"]}
+    for row in kg_rows:
+        date_str = str(row.get("date", ""))
+        if not date_str or date_str[:4] != latest_year:
+            continue
+        try:
+            val = float(row.get("value", 0) or 0)
+        except (ValueError, TypeError):
+            continue
+        raw_country = str(row.get("country", ""))
+        country = _normalise_dest_country(raw_country)
+        kg_by_dest[country] = kg_by_dest.get(country, 0.0) + val
+
+    kg_by_dest["year"] = int(latest_year)
+    return kg_by_dest
+
+
+def _qia_annual_by_country(qia_rows: list[dict], n_years: int = 2) -> list[dict]:
+    """
+    Find the n most recent calendar years where at least 10 months of KG data
+    exist in the QIA rows, then return annual KG totals by (English) country name.
+
+    Returns [{"year": YYYY, "countries": {country_en: total_kg}}, ...] sorted
+    ascending by year.
+
+    Country names are normalised via _normalise_qia_country() (Korean → English).
+    Countries not in QIA_COLOURS keys are placed under "Other".
+
+    C-3h Panel D: grouped bar chart data.
+    """
+    from collections import defaultdict
+
+    kg_rows = [r for r in qia_rows if str(r.get("unit", "")) == "KG"]
+
+    if not kg_rows:
+        return []
+
+    # Gather months present per year.
+    months_per_year: dict[str, set] = defaultdict(set)
+    for row in kg_rows:
+        date_str = str(row.get("date", ""))
+        if date_str and len(date_str) >= 7:
+            months_per_year[date_str[:4]].add(date_str[5:7])
+
+    # Select n most recent years with >=10 months.
+    full_years = sorted(
+        [yr for yr, months in months_per_year.items() if len(months) >= 10],
+        reverse=True,
+    )[:n_years]
+    full_years = sorted(full_years)  # ascending for chart
+
+    if not full_years:
+        return []
+
+    result = []
+    for yr in full_years:
+        kg_by_country: dict[str, float] = {}
+        for row in kg_rows:
+            date_str = str(row.get("date", ""))
+            if not date_str or date_str[:4] != yr:
+                continue
+            try:
+                val = float(row.get("value", 0) or 0)
+            except (ValueError, TypeError):
+                continue
+            raw_country = str(row.get("country", ""))
+            country_en = _normalise_qia_country(raw_country)
+            # Collapse unknown countries to "Other".
+            if country_en not in QIA_COLOURS:
+                country_en = "Other"
+            kg_by_country[country_en] = kg_by_country.get(country_en, 0.0) + val
+
+        result.append({"year": int(yr), "countries": kg_by_country})
+
+    return result
+
+
 def prepare_chart_data(sections: dict) -> dict:
     """
     Build pre-aggregated chart datasets for the trade_flows section and
@@ -918,6 +1117,11 @@ def prepare_chart_data(sections: dict) -> dict:
       - yoy_chip: section-level KPI chip data (primary source = NZ exports)
       - source objects: nz_export, korea_qia, korea_kstat (each with monthly/rolling arrays)
       - window: {"start": "YYYY-MM", "end": "YYYY-MM"} for the 24-month display range
+
+    C-3h additions:
+      - tf_destination_area: {country: [{x, y}, ...]} — NZD FOB by destination, all dates
+      - tf_destination_pie: {year, China, Korea, Hong Kong, Other} — KG by dest, latest year
+      - tf_qia_by_origin: [{year, countries: {country_en: kg}}, ...] — QIA annual by origin
 
     Also retains legacy keys for backward compatibility with any existing template
     references during migration:
@@ -1017,6 +1221,24 @@ def prepare_chart_data(sections: dict) -> dict:
         "labels":                [p["x"] for p in align_to_window(kstat_kg_raw, win_start, win_end)],
     }
 
+    # ── C-3h: destination breakdown charts ───────────────────────────────────
+    # Panel C: NZ exports by destination (stacked area + pie).
+    # Panel D: QIA Korea quarantine imports by origin (annual grouped bar).
+
+    # Panel C1 — stacked area: FOB NZD by destination, all available dates.
+    dest_by_country = _aggregate_nz_by_destination(nz_rows)
+    tf_destination_area: dict[str, list] = {}
+    for country, by_date in dest_by_country.items():
+        tf_destination_area[country] = [
+            {"x": d, "y": round(v, 0)} for d, v in by_date.items()
+        ]
+
+    # Panel C2 — pie: KG by destination, latest full year.
+    tf_destination_pie = _latest_full_year_kg_by_destination(nz_rows)
+
+    # Panel D — grouped bar: QIA annual KG by origin, latest 2 complete years.
+    tf_qia_by_origin = _qia_annual_by_country(qia_rows, n_years=2)
+
     # ── B-7 price chart data ──────────────────────────────────────────────────
     ii = sections.get("import_intelligence", {})
     price_rows = ii.get("price_annual_rows", [])
@@ -1044,6 +1266,11 @@ def prepare_chart_data(sections: dict) -> dict:
         # ── B-7 price chart ───────────────────────────────────────────────────
         "b7_price_series":   b7_price_series,
         "b7_price_subtitle": b7_price_subtitle,
+
+        # ── C-3h: destination breakdown charts ───────────────────────────────
+        "tf_destination_area": tf_destination_area,   # Panel C1: stacked area
+        "tf_destination_pie":  tf_destination_pie,    # Panel C2: pie (latest year KG)
+        "tf_qia_by_origin":    tf_qia_by_origin,      # Panel D: QIA annual by origin
     }
 
 
@@ -1228,6 +1455,14 @@ def main() -> None:
     print(f"  harvest_boundaries: {hb} October months marked")
     print(f"  yoy_chip: {chip.get('label', '—')}")
     print(f"  source pts (dried-eq KG): NZ={nz_pts} QIA={qia_pts} KSTAT={kstat_pts}")
+    # C-3h: destination chart stats.
+    dest_area = cd.get("tf_destination_area", {})
+    dest_pie = cd.get("tf_destination_pie", {})
+    qia_origin = cd.get("tf_qia_by_origin", [])
+    dest_countries = [c for c in dest_area if dest_area[c]]
+    print(f"  C-3h dest area countries: {dest_countries}")
+    print(f"  C-3h dest pie year: {dest_pie.get('year', '—')}")
+    print(f"  C-3h QIA origin years: {[r['year'] for r in qia_origin]}")
     print(f"  output: docs/index.html ({bytes_written} bytes)")
     print(f"  build complete: {build_date}")
 

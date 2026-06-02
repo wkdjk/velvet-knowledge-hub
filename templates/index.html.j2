@@ -152,6 +152,51 @@
         Prices are blended across fresh/frozen and dried velvet within each month. A shift in the product mix may affect the blended price independently of actual unit price movements.</p>
       </div>
 
+      {# ── Panel C — Export destination breakdown ──────────────────────── #}
+      {# C-3h: NZ exports by destination. Sub-chart C1 = stacked area (FOB NZD). #}
+      {# Sub-chart C2 = pie (latest full year KG). Placement: after Panel B.     #}
+      <h3 class="section-subheading">Export destination breakdown</h3>
+
+      {# C1 — Stacked area chart: NZD FOB by destination, all available dates #}
+      <div class="chart-panel">
+        <h3>NZ velvet exports by destination — FOB value (NZD)</h3>
+        <div class="chart-canvas-wrapper">
+          <canvas id="chart-destination-area" height="280"
+            aria-label="NZ deer velvet exports by destination, stacked area chart of NZD FOB value" role="img"></canvas>
+        </div>
+        <p class="chart-annotation">Source: Stats NZ. All available months shown. Countries not individually listed are grouped as Other.</p>
+      </div>
+
+      {# C2 — Pie chart: KG by destination, latest full calendar year #}
+      <div class="chart-panel">
+        <h3>NZ velvet exports by destination — volume share ({{ tf_destination_pie.year | default("latest year") }})</h3>
+        <div class="chart-canvas-wrapper" style="max-width: 480px;">
+          <canvas id="chart-destination-pie" height="280"
+            aria-label="NZ deer velvet export volume share by destination, pie chart" role="img"></canvas>
+        </div>
+        <p class="chart-annotation">Source: Stats NZ. Latest full calendar year with at least 10 months of data. Volume shown as raw KG (all product types).</p>
+      </div>
+
+      {# ── Panel D — Korean market: imports by origin ───────────────────── #}
+      {# C-3h: QIA quarantine data, grouped by country, latest 2 full years.  #}
+      <h3 class="section-subheading">Korean market — imports by origin</h3>
+
+      {% if tf_qia_by_origin and tf_qia_by_origin | length > 0 %}
+        <div class="chart-panel">
+          <h3>South Korean velvet imports by origin — QIA quarantine records (KG)</h3>
+          <div class="chart-canvas-wrapper">
+            <canvas id="chart-qia-origin" height="300"
+              aria-label="South Korean deer velvet imports by country of origin, grouped bar chart" role="img"></canvas>
+          </div>
+          <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Volumes shown as raw import KG as recorded at quarantine inspection. No dried-equivalent conversion applied.</p>
+        </div>
+      {% else %}
+        <div class="placeholder-card">
+          <p class="placeholder-title">Korean import origin data not yet available</p>
+          <p class="placeholder-body">QIA quarantine data will appear here after the next scheduled ingest. Source: Animal and Plant Quarantine Agency (South Korea).</p>
+        </div>
+      {% endif %}
+
       {# ── Source discrepancy accordion ─────────────────────────────────── #}
       <details class="discrepancy-accordion">
         <summary class="discrepancy-accordion__trigger" aria-label="Why do the three sources show different volumes?">
@@ -502,6 +547,236 @@
     }
 
     updatePriceChart(true, true);
+
+    /* ── Panel C — Destination charts ───────────────────────────────── */
+    /* C1: Stacked area — NZD FOB by destination, all available dates.  */
+    /* C2: Pie — KG share by destination, latest full year.             */
+
+    var DEST_AREA_DATA  = {{ tf_destination_area | tojson }};
+    var DEST_PIE_DATA   = {{ tf_destination_pie  | tojson }};
+    var DEST_COLOURS = {
+      'China':      '#A78230',
+      'Korea':      '#1A5276',
+      'Hong Kong':  '#7D6608',
+      'Other':      '#9E9E9E'
+    };
+    var DEST_ORDER = ['China', 'Korea', 'Hong Kong', 'Other'];
+
+    /* Build sorted label array from all dates across all destinations */
+    (function buildDestCharts() {
+      var ctxArea = document.getElementById('chart-destination-area');
+      if (!ctxArea) return;
+
+      /* Collect all unique dates across all destination series */
+      var dateSet = {};
+      DEST_ORDER.forEach(function (c) {
+        var series = DEST_AREA_DATA[c] || [];
+        series.forEach(function (pt) { dateSet[pt.x] = true; });
+      });
+      var areaLabels = Object.keys(dateSet).sort();
+      if (!areaLabels.length) return;
+
+      /* Build a lookup for each country: date -> value */
+      function buildDataset(country) {
+        var lookup = {};
+        (DEST_AREA_DATA[country] || []).forEach(function (pt) { lookup[pt.x] = pt.y; });
+        return areaLabels.map(function (d) { return lookup[d] || 0; });
+      }
+
+      var hexToRgba = function (hex, alpha) {
+        var r = parseInt(hex.slice(1, 3), 16);
+        var g = parseInt(hex.slice(3, 5), 16);
+        var b = parseInt(hex.slice(5, 7), 16);
+        return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+      };
+
+      var areaDsets = DEST_ORDER.map(function (country) {
+        return {
+          label: country,
+          data: buildDataset(country),
+          backgroundColor: hexToRgba(DEST_COLOURS[country], 0.65),
+          borderColor: DEST_COLOURS[country],
+          borderWidth: 1.5,
+          fill: true,
+          tension: 0.2,
+          pointRadius: 0,
+          pointHoverRadius: 4
+        };
+      });
+
+      new Chart(ctxArea.getContext('2d'), {
+        type: 'line',
+        data: { labels: areaLabels, datasets: areaDsets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              position: 'top',
+              align: 'start',
+              labels: { boxWidth: 12, padding: 14 }
+            },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  return ctx.dataset.label + ': NZD ' + Math.round(ctx.parsed.y).toLocaleString();
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: 'category',
+              ticks: { maxTicksLimit: 10, maxRotation: 45 },
+              grid: { color: 'rgba(204,204,204,0.4)' }
+            },
+            y: {
+              beginAtZero: true,
+              stacked: true,
+              title: { display: true, text: 'FOB value (NZD)' },
+              ticks: { callback: function (v) { return v.toLocaleString(); } },
+              grid: { color: 'rgba(204,204,204,0.4)' }
+            }
+          }
+        }
+      });
+
+      /* ── C2: Pie chart ──────────────────────────────────────────────── */
+      var ctxPie = document.getElementById('chart-destination-pie');
+      if (!ctxPie) return;
+      if (!DEST_PIE_DATA || !DEST_PIE_DATA.year) return;
+
+      var pieLabels = [];
+      var pieData   = [];
+      var pieColours = [];
+      DEST_ORDER.forEach(function (c) {
+        var kg = DEST_PIE_DATA[c] || 0;
+        if (kg > 0) {
+          pieLabels.push(c);
+          pieData.push(kg);
+          pieColours.push(DEST_COLOURS[c]);
+        }
+      });
+
+      if (!pieLabels.length) return;
+
+      var totalKg = pieData.reduce(function (a, b) { return a + b; }, 0);
+
+      new Chart(ctxPie.getContext('2d'), {
+        type: 'pie',
+        data: {
+          labels: pieLabels,
+          datasets: [{
+            data: pieData,
+            backgroundColor: pieColours,
+            borderColor: '#FFFFFF',
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right',
+              align: 'center',
+              labels: { boxWidth: 12, padding: 12 }
+            },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  var pct = totalKg > 0 ? (ctx.parsed / totalKg * 100).toFixed(1) : '0.0';
+                  return ctx.label + ': ' + Math.round(ctx.parsed).toLocaleString() + ' kg (' + pct + '%)';
+                }
+              }
+            }
+          }
+        }
+      });
+    }());
+
+    /* ── Panel D — QIA imports by origin ────────────────────────────── */
+    /* Graceful skip if QIA data is empty (placeholder card shown in HTML) */
+    (function buildQiaChart() {
+      var ctxQia = document.getElementById('chart-qia-origin');
+      if (!ctxQia) return;
+
+      var QIA_DATA = {{ tf_qia_by_origin | tojson }};
+      if (!QIA_DATA || !QIA_DATA.length) return;
+
+      var QIA_COLOURS = {
+        'New Zealand':     '#1A5276',
+        'China':           '#A78230',
+        'Russia':          '#888888',
+        'Hong Kong (SAR)': '#7D6608',
+        'Kazakhstan':      '#E8A87C',
+        'Australia':       '#2C3E50',
+        'Other':           '#BDBDBD'
+      };
+
+      /* Build the set of all countries that appear across both years */
+      var allCountries = {};
+      QIA_DATA.forEach(function (yr) {
+        Object.keys(yr.countries).forEach(function (c) { allCountries[c] = true; });
+      });
+      /* Sort: named countries first in preferred order, then alphabetically */
+      var preferred = ['New Zealand','China','Russia','Hong Kong (SAR)','Kazakhstan','Australia','Other'];
+      var countryList = preferred.filter(function (c) { return allCountries[c]; });
+      Object.keys(allCountries).forEach(function (c) {
+        if (countryList.indexOf(c) < 0) countryList.push(c);
+      });
+
+      /* One dataset per country across years */
+      var yearLabels = QIA_DATA.map(function (d) { return String(d.year); });
+
+      var qiaDsets = countryList.map(function (country) {
+        return {
+          label: country,
+          data: QIA_DATA.map(function (yr) { return yr.countries[country] || 0; }),
+          backgroundColor: QIA_COLOURS[country] || '#BDBDBD',
+          borderColor: QIA_COLOURS[country] || '#BDBDBD',
+          borderWidth: 1
+        };
+      });
+
+      new Chart(ctxQia.getContext('2d'), {
+        type: 'bar',
+        data: { labels: yearLabels, datasets: qiaDsets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              position: 'top',
+              align: 'start',
+              labels: { boxWidth: 12, padding: 14 }
+            },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  return ctx.dataset.label + ': ' + Math.round(ctx.parsed.y).toLocaleString() + ' kg';
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: 'category',
+              grid: { color: 'rgba(204,204,204,0.4)' }
+            },
+            y: {
+              beginAtZero: true,
+              stacked: true,
+              title: { display: true, text: 'Import weight (kg)' },
+              ticks: { callback: function (v) { return v.toLocaleString(); } },
+              grid: { color: 'rgba(204,204,204,0.4)' }
+            }
+          }
+        }
+      });
+    }());
 
     /* ── Source toggle handler ───────────────────────────────────────── */
     function getChecked() {
