@@ -37,6 +37,12 @@
 #       country is required because each country is a separate API row.
 #       unit is required because each period/country/hs_code yields two rows (KG + USD_thousands).
 # L-13: CSV column positions detected by header name — never by fixed index.
+# GAP-5 fix (C-3e 2026-06-02): hs_code_10digit and product_type columns added.
+#   hs_code_10digit stores the 10-digit KSTAT code as TEXT ("0507901110").
+#   product_type is derived from hs10:
+#     0507901110 → "frozen"  (deer velvet, immature = fresh/frozen)
+#     0507901190 → "dried"   (deer velvet, other = dried)
+#   The existing hs_code dot-notation column is preserved unchanged.
 #
 # KSTAT_API_KEY: read from .env at repo root (API mode only).
 # Commander action: copy KSTAT_API_KEY from /Users/Qs/C/velvet-trade-watch/.env
@@ -101,6 +107,14 @@ _HS10_LABEL_MAP: dict[str, str] = {
 
 # VKH schema stores hs_code as TEXT dot notation — not the 10-digit API code.
 _HS_CODE_DOT = "0507.90"
+
+# GAP-5 fix: product_type derived from 10-digit HS code.
+# 0507901110 = immature (= fresh/frozen 생녹용) → "frozen"
+# 0507901190 = other (= dried 녹용)             → "dried"
+_HS10_PRODUCT_TYPE: dict[str, str] = {
+    "0507901110": "frozen",
+    "0507901190": "dried",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -233,6 +247,8 @@ def api_records_to_sheet_rows(raw_records: list[dict]) -> list[dict]:
       2. USD row (unit = "USD_thousands", value = imp_value_usd_thousands)
 
     L-9: hs_code stored as TEXT dot notation "0507.90" — not the 10-digit API code.
+    GAP-5: hs_code_10digit stores the actual 10-digit code; product_type is
+           derived from it (frozen / dried).
     """
     output: list[dict] = []
 
@@ -242,29 +258,34 @@ def api_records_to_sheet_rows(raw_records: list[dict]) -> list[dict]:
         notes = f"hs10={hs10}"
         period = rec["period"]
         country = rec["country"]
+        product_type = _HS10_PRODUCT_TYPE.get(hs10, "other")
 
         # KG row.
         output.append({
-            "date": period,
-            "series": SERIES_VALUE,
-            "hs_code": _HS_CODE_DOT,   # TEXT dot notation — L-9 note
-            "hs_label": hs_label,
-            "value": rec["imp_weight_kg"],
-            "unit": "KG",
-            "country": country,
-            "notes": notes,
+            "date":            period,
+            "series":          SERIES_VALUE,
+            "hs_code":         _HS_CODE_DOT,   # TEXT dot notation — L-9 note
+            "hs_label":        hs_label,
+            "value":           rec["imp_weight_kg"],
+            "unit":            "KG",
+            "country":         country,
+            "notes":           notes,
+            "hs_code_10digit": hs10,            # GAP-5: full 10-digit code
+            "product_type":    product_type,    # GAP-5: frozen | dried | other
         })
 
         # USD_thousands row.
         output.append({
-            "date": period,
-            "series": SERIES_VALUE,
-            "hs_code": _HS_CODE_DOT,   # TEXT dot notation — L-9 note
-            "hs_label": hs_label,
-            "value": rec["imp_value_usd_thousands"],
-            "unit": "USD_thousands",
-            "country": country,
-            "notes": notes,
+            "date":            period,
+            "series":          SERIES_VALUE,
+            "hs_code":         _HS_CODE_DOT,   # TEXT dot notation — L-9 note
+            "hs_label":        hs_label,
+            "value":           rec["imp_value_usd_thousands"],
+            "unit":            "USD_thousands",
+            "country":         country,
+            "notes":           notes,
+            "hs_code_10digit": hs10,            # GAP-5: full 10-digit code
+            "product_type":    product_type,    # GAP-5: frozen | dried | other
         })
 
     return output
@@ -373,29 +394,37 @@ def parse_kstat_csv(filepath: Path) -> list[dict]:
                 continue
 
             hs_dot = _hs_code_to_dot(raw_hs)
+            # GAP-5: store 10-digit code and derive product_type from it.
+            # raw_hs from CSV is the 10-digit code; normalise to remove dots/spaces.
+            hs_10digit = raw_hs.strip().replace(".", "").replace(" ", "")
+            product_type = _HS10_PRODUCT_TYPE.get(hs_10digit, "other")
 
             # KG row.
             output.append({
-                "date":     period,
-                "series":   SERIES_VALUE,
-                "hs_code":  hs_dot,
-                "hs_label": hs_label,
-                "value":    imp_weight,
-                "unit":     "KG",
-                "country":  country,
-                "notes":    source_note,
+                "date":            period,
+                "series":          SERIES_VALUE,
+                "hs_code":         hs_dot,
+                "hs_label":        hs_label,
+                "value":           imp_weight,
+                "unit":            "KG",
+                "country":         country,
+                "notes":           source_note,
+                "hs_code_10digit": hs_10digit,   # GAP-5: full 10-digit code
+                "product_type":    product_type, # GAP-5: frozen | dried | other
             })
 
             # USD_thousands row.
             output.append({
-                "date":     period,
-                "series":   SERIES_VALUE,
-                "hs_code":  hs_dot,
-                "hs_label": hs_label,
-                "value":    imp_value,
-                "unit":     "USD_thousands",
-                "country":  country,
-                "notes":    source_note,
+                "date":            period,
+                "series":          SERIES_VALUE,
+                "hs_code":         hs_dot,
+                "hs_label":        hs_label,
+                "value":           imp_value,
+                "unit":            "USD_thousands",
+                "country":         country,
+                "notes":           source_note,
+                "hs_code_10digit": hs_10digit,   # GAP-5: full 10-digit code
+                "product_type":    product_type, # GAP-5: frozen | dried | other
             })
 
     logger.info("KSTAT CSV parse complete: %d schema rows from %s", len(output), filepath.name)

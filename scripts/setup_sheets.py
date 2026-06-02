@@ -63,15 +63,25 @@ VTW_TRADE_MONTHLY_HEADERS = [
     "unit",
     "country",
     "notes",
+    "hs_code_10digit",
+    "product_type",
 ]
 # date: YYYY-MM format (monthly)
 # series: nz_export | korea_quarantine | kstat_api
 # hs_code: stored as TEXT string - e.g. "0507.90" - preserves dot notation (L-9 note: not int here)
 # hs_label: human-readable HS code description
 # value: numeric
-# unit: NZD | KG | shipments
+# unit: NZD | KG | USD_thousands
 # country: origin or destination country
 # notes: free text
+# hs_code_10digit: full 10-digit HS code as TEXT (GAP-5 fix, C-3e 2026-06-02)
+#   NZ: "0507901110" (frozen), "0507901190" (dried/other)
+#   KSTAT: "0507901110" (immature/frozen), "0507901190" (other/dried)
+#   Existing rows without this field will have empty string (backward compatible).
+# product_type: "frozen" | "dried" | "other" (GAP-5 fix, C-3e 2026-06-02)
+#   frozen → apply 0.33 dried-equivalent conversion in build.py
+#   dried  → no conversion (1:1)
+#   other  → no conversion (treated same as dried; flagged for review)
 
 # VFI historical xlsx: 16 columns (positions 0-15) mapped to snake_case.
 # Source: VFI_PhaseA_progress_2026-05-28.md - confirmed against actual file.

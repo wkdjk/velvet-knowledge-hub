@@ -39,6 +39,7 @@ NEWS_PULSE_CSV = DOWNLOADS_DIR / "news_pulse.csv"
 # Column order for the trade_flows CSV export.
 _TRADE_FLOWS_CSV_HEADERS = [
     "date", "series", "hs_code", "hs_label", "value", "unit", "country", "notes",
+    "hs_code_10digit", "product_type",
 ]
 
 # Column order for the import_intelligence CSV export (VFI_Import_Records only).
@@ -522,6 +523,13 @@ def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date
         sections=sections,
         chart_data=chart_data,
         config=config,
+        # C-3e trade flows — new structured source objects.
+        tf_nz_export=chart_data.get("nz_export", {}),
+        tf_korea_qia=chart_data.get("korea_qia", {}),
+        tf_korea_kstat=chart_data.get("korea_kstat", {}),
+        tf_harvest_boundaries=chart_data.get("harvest_boundaries", []),
+        tf_yoy_chip=chart_data.get("yoy_chip", {"label": "—", "direction": "neutral"}),
+        tf_window=chart_data.get("window", {}),
         # B-7 import intelligence context.
         import_records_display=import_records_display,
         import_records_total=import_records_total,
@@ -673,51 +681,368 @@ def _build_b7_price_subtitle(price_rows: list[dict]) -> dict | None:
         return None
 
 
+def _compute_dried_eq_kg(rows: list[dict], unit_filter: str = "KG") -> dict[str, float]:
+    """
+    Aggregate rows by date, applying the 0.33 dried-equivalent conversion.
+
+    For each row:
+      - product_type == "frozen": value × 0.33
+      - product_type == "dried" or "": value × 1.0
+      - product_type == "other" or absent: value × 1.0 (with warning logged once)
+
+    Returns {date_str: dried_eq_kg} sorted ascending.
+    GAP-5 note: rows ingested before C-3e will have empty product_type.
+    These are treated as "other" (no conversion) with a single warning log.
+    """
+    warned_empty = False
+    totals: dict[str, float] = {}
+    for row in rows:
+        if str(row.get("unit", "")) != unit_filter:
+            continue
+        date_str = str(row.get("date", ""))
+        if not date_str:
+            continue
+        try:
+            raw_val = float(row.get("value", 0) or 0)
+        except (ValueError, TypeError):
+            continue
+
+        pt = str(row.get("product_type", "")).strip().lower()
+        if pt == "frozen":
+            converted = raw_val * 0.33
+        elif pt in ("dried", "other"):
+            converted = raw_val
+        else:
+            # Empty product_type — pre-C-3e row; treat as "other".
+            if not warned_empty:
+                print(
+                    "  WARNING: rows with empty product_type found — treating as 'other' "
+                    "(no 0.33 conversion). Re-ingest after GAP-5 fix for accurate dried-eq KG."
+                )
+                warned_empty = True
+            converted = raw_val
+
+        totals[date_str] = totals.get(date_str, 0.0) + converted
+
+    return dict(sorted(totals.items()))
+
+
+def _compute_rolling_12m(monthly: dict[str, float]) -> dict[str, float]:
+    """
+    Compute rolling 12-month sum for each month in monthly.
+
+    For each date M, sum months M-11 through M (inclusive).
+    Returns {date_str: rolling_12m_total} for all dates in monthly.
+    Months with fewer than 12 prior months still return the available sum.
+    """
+    dates = sorted(monthly.keys())
+    rolling: dict[str, float] = {}
+    for i, d in enumerate(dates):
+        window = dates[max(0, i - 11): i + 1]
+        rolling[d] = sum(monthly[w] for w in window)
+    return rolling
+
+
+def _compute_yoy_pct(rolling: dict[str, float]) -> dict[str, float | None]:
+    """
+    Compute year-on-year % change for each month in rolling.
+
+    For date YYYY-MM, compare rolling[YYYY-MM] vs rolling[(YYYY-1)-MM].
+    Returns {date_str: pct_change or None} — None if prior year not available.
+    """
+    result: dict[str, float | None] = {}
+    for d, val in rolling.items():
+        year, month = d[:4], d[5:7]
+        prior_year = str(int(year) - 1)
+        prior_d = f"{prior_year}-{month}"
+        prior_val = rolling.get(prior_d)
+        if prior_val is not None and prior_val != 0:
+            result[d] = round((val - prior_val) / prior_val * 100, 1)
+        else:
+            result[d] = None
+    return result
+
+
+def _compute_unit_price(
+    rows: list[dict],
+    value_unit: str,
+    value_multiplier: float = 1.0,
+) -> dict[str, float]:
+    """
+    Compute monthly blended unit price = sum(value) / sum(dried_eq_kg).
+
+    value_unit: "NZD" for NZ, "USD_thousands" for KSTAT.
+    value_multiplier: multiply raw value before dividing (e.g. 1000 for USD_thousands → USD).
+    Omits months where dried_eq_kg sum is zero.
+    Returns {date_str: price} sorted ascending.
+    """
+    kg_by_date: dict[str, float] = {}
+    val_by_date: dict[str, float] = {}
+
+    for row in rows:
+        date_str = str(row.get("date", ""))
+        if not date_str:
+            continue
+        unit = str(row.get("unit", ""))
+
+        if unit == "KG":
+            try:
+                raw_kg = float(row.get("value", 0) or 0)
+            except (ValueError, TypeError):
+                continue
+            pt = str(row.get("product_type", "")).strip().lower()
+            converted = raw_kg * 0.33 if pt == "frozen" else raw_kg
+            kg_by_date[date_str] = kg_by_date.get(date_str, 0.0) + converted
+
+        elif unit == value_unit:
+            try:
+                raw_val = float(row.get("value", 0) or 0) * value_multiplier
+            except (ValueError, TypeError):
+                continue
+            val_by_date[date_str] = val_by_date.get(date_str, 0.0) + raw_val
+
+    prices: dict[str, float] = {}
+    for d in sorted(set(kg_by_date.keys()) & set(val_by_date.keys())):
+        kg = kg_by_date[d]
+        val = val_by_date[d]
+        if kg > 0:
+            prices[d] = round(val / kg, 2)
+
+    return prices
+
+
+def _last_24_months_window(all_dates: list[str]) -> tuple[str, str]:
+    """
+    Return (start_date, end_date) strings for the last 24 months of data.
+
+    end_date is the most recent date in all_dates.
+    start_date is 23 months before end_date (inclusive range = 24 months).
+    If fewer than 24 months of data exist, start from the earliest available.
+    """
+    if not all_dates:
+        return ("", "")
+    sorted_dates = sorted(all_dates)
+    end_date = sorted_dates[-1]
+    end_year, end_month = int(end_date[:4]), int(end_date[5:7])
+
+    start_month = end_month - 23
+    start_year = end_year
+    while start_month <= 0:
+        start_month += 12
+        start_year -= 1
+
+    start_date = f"{start_year:04d}-{start_month:02d}"
+    return (start_date, end_date)
+
+
+def _filter_to_window(data: dict[str, float], start: str, end: str) -> dict[str, float]:
+    """Return only entries whose date key falls within [start, end] inclusive."""
+    return {d: v for d, v in data.items() if start <= d <= end}
+
+
+def _harvest_boundaries(start: str, end: str) -> list[str]:
+    """
+    Return list of YYYY-10 date strings (October months) within [start, end].
+    These mark harvest-year season starts for Panel A chart annotations.
+    """
+    if not start or not end:
+        return []
+    boundaries = []
+    year = int(start[:4])
+    end_year = int(end[:4])
+    while year <= end_year + 1:
+        candidate = f"{year:04d}-10"
+        if start <= candidate <= end:
+            boundaries.append(candidate)
+        year += 1
+    return boundaries
+
+
+def _compute_yoy_chip(rolling_by_date: dict[str, float]) -> dict:
+    """
+    Compute the section-level YoY KPI chip value.
+
+    Finds the most recent complete Oct-Sep window and compares to the
+    same window one year prior. Returns:
+      {
+        "pct": float or None,
+        "direction": "up" | "down" | "neutral",
+        "label": "▲ X%" | "▼ X%" | "—",
+      }
+    """
+    if not rolling_by_date:
+        return {"pct": None, "direction": "neutral", "label": "—"}
+
+    # Find the most recent September (end of a complete harvest year).
+    sep_dates = [d for d in rolling_by_date if d.endswith("-09")]
+    if not sep_dates:
+        # Fall back to the most recent month with data.
+        most_recent = max(rolling_by_date.keys())
+        prior_year = f"{int(most_recent[:4]) - 1}-{most_recent[5:7]}"
+    else:
+        most_recent = max(sep_dates)
+        prior_year = f"{int(most_recent[:4]) - 1}-09"
+
+    current_val = rolling_by_date.get(most_recent)
+    prior_val = rolling_by_date.get(prior_year)
+
+    if current_val is None or prior_val is None or prior_val == 0:
+        return {"pct": None, "direction": "neutral", "label": "—"}
+
+    pct = round((current_val - prior_val) / prior_val * 100, 1)
+    if abs(pct) < 0.5:
+        direction = "neutral"
+        label = "—"
+    elif pct > 0:
+        direction = "up"
+        label = f"▲ {pct}%"
+    else:
+        direction = "down"
+        label = f"▼ {abs(pct)}%"
+
+    return {"pct": pct, "direction": direction, "label": label}
+
+
 def prepare_chart_data(sections: dict) -> dict:
     """
     Build pre-aggregated chart datasets for the trade_flows section and
     the B-7 import intelligence price chart.
 
-    Returns a dict with:
-      chart_kg:    NZ export KG, Korea quarantine KG, kstat KG (by HS toggle)
-      chart_value: NZ export NZD, kstat USD_thousands (by HS toggle)
-      b7_price_series:   list of Chart.js dataset dicts (one per origin_country)
-      b7_price_subtitle: {"price_krw": int, "year": int} or None
+    C-3e additions:
+      - dried_eq_kg per source (0.33 conversion applied per product_type)
+      - rolling_12m_dried_eq_kg per source
+      - yoy_pct per source (rolling YoY % change)
+      - unit_price_nzd_per_dried_eq_kg (NZ monthly blended)
+      - unit_price_usd_per_dried_eq_kg (KSTAT monthly blended)
+      - harvest_boundaries: list of "YYYY-10" dates in the 24-month window
+      - yoy_chip: section-level KPI chip data (primary source = NZ exports)
+      - source objects: nz_export, korea_qia, korea_kstat (each with monthly/rolling arrays)
+      - window: {"start": "YYYY-MM", "end": "YYYY-MM"} for the 24-month display range
 
-    Each dataset is a list of {x: "YYYY-MM", y: float} objects for Chart.js.
-    kstat datasets are split by hs_code: kstat_0507 and kstat_0510.
-
-    All data is pre-aggregated (summed across countries) by date.
+    Also retains legacy keys for backward compatibility with any existing template
+    references during migration:
+      nz_export_kg, qia_kg, kstat_0507_kg, kstat_0510_kg,
+      nz_export_nzd, kstat_0507_usd, kstat_0510_usd.
     """
     tf = sections.get("trade_flows", {})
     all_data = tf.get("data", [])
 
     nz_rows = [r for r in all_data if r.get("series") == "nz_export"]
     qia_rows = [r for r in all_data if r.get("series") == "korea_quarantine"]
+    kstat_all_rows = [r for r in all_data if r.get("series") == "kstat_api"]
+    # Legacy split kept for backward compat.
     kstat_0507_rows = tf.get("kstat_0507", [])
     kstat_0510_rows = tf.get("kstat_0510", [])
 
     def to_xy(totals: dict[str, float]) -> list[dict]:
         return [{"x": k, "y": round(v, 2)} for k, v in totals.items()]
 
-    # B-7: price chart data.
+    def align_to_window(data: dict, start: str, end: str) -> list[dict]:
+        """Return xy pairs for all months in window, filling missing months with 0."""
+        result = []
+        if not start or not end:
+            return to_xy(data)
+        year, month = int(start[:4]), int(start[5:7])
+        end_year, end_month = int(end[:4]), int(end[5:7])
+        while (year, month) <= (end_year, end_month):
+            d = f"{year:04d}-{month:02d}"
+            result.append({"x": d, "y": round(data.get(d, 0.0), 2)})
+            month += 1
+            if month > 12:
+                month = 1
+                year += 1
+        return result
+
+    # ── Raw KG aggregations (legacy + new) ────────────────────────────────────
+    nz_kg_raw = _aggregate_series_by_date(nz_rows, "KG")
+    qia_kg_raw = _aggregate_series_by_date(qia_rows, "KG")
+    kstat_kg_raw = _aggregate_series_by_date(kstat_all_rows, "KG")
+
+    # ── Dried-equivalent KG ───────────────────────────────────────────────────
+    nz_dried_eq = _compute_dried_eq_kg(nz_rows, "KG")
+    qia_dried_eq = _compute_dried_eq_kg(qia_rows, "KG")
+    kstat_dried_eq = _compute_dried_eq_kg(kstat_all_rows, "KG")
+
+    # ── Rolling 12-month dried-eq KG ─────────────────────────────────────────
+    nz_rolling = _compute_rolling_12m(nz_dried_eq)
+    qia_rolling = _compute_rolling_12m(qia_dried_eq)
+    kstat_rolling = _compute_rolling_12m(kstat_dried_eq)
+
+    # ── YoY % per rolling series ──────────────────────────────────────────────
+    nz_yoy = _compute_yoy_pct(nz_rolling)
+    kstat_yoy = _compute_yoy_pct(kstat_rolling)
+
+    # ── Unit prices ───────────────────────────────────────────────────────────
+    nz_unit_price = _compute_unit_price(nz_rows, "NZD", value_multiplier=1.0)
+    kstat_unit_price = _compute_unit_price(kstat_all_rows, "USD_thousands", value_multiplier=1000.0)
+
+    # ── 24-month display window ───────────────────────────────────────────────
+    all_dates = (
+        list(nz_kg_raw.keys())
+        + list(qia_kg_raw.keys())
+        + list(kstat_kg_raw.keys())
+    )
+    win_start, win_end = _last_24_months_window(all_dates)
+
+    # ── Harvest boundaries ────────────────────────────────────────────────────
+    harvest_boundaries = _harvest_boundaries(win_start, win_end)
+
+    # ── YoY KPI chip (primary source = NZ exports) ───────────────────────────
+    yoy_chip = _compute_yoy_chip(nz_rolling)
+
+    # ── Source objects (windowed to 24 months) ────────────────────────────────
+    nz_source = {
+        "monthly_kg":            align_to_window(nz_kg_raw,   win_start, win_end),
+        "monthly_dried_eq_kg":   align_to_window(nz_dried_eq, win_start, win_end),
+        "rolling_12m_dried_eq_kg": align_to_window(nz_rolling, win_start, win_end),
+        "unit_price":            align_to_window(nz_unit_price, win_start, win_end),
+        "yoy_pct":               {d: nz_yoy.get(d) for d in nz_rolling if win_start <= d <= win_end},
+        "labels":                [p["x"] for p in align_to_window(nz_kg_raw, win_start, win_end)],
+    }
+
+    qia_source = {
+        "monthly_kg":            align_to_window(qia_kg_raw,   win_start, win_end),
+        "monthly_dried_eq_kg":   align_to_window(qia_dried_eq, win_start, win_end),
+        "rolling_12m_dried_eq_kg": align_to_window(qia_rolling, win_start, win_end),
+        "yoy_pct":               {},
+        "labels":                [p["x"] for p in align_to_window(qia_kg_raw, win_start, win_end)],
+    }
+
+    kstat_source = {
+        "monthly_kg":            align_to_window(kstat_kg_raw,   win_start, win_end),
+        "monthly_dried_eq_kg":   align_to_window(kstat_dried_eq, win_start, win_end),
+        "rolling_12m_dried_eq_kg": align_to_window(kstat_rolling, win_start, win_end),
+        "unit_price":            align_to_window(kstat_unit_price, win_start, win_end),
+        "yoy_pct":               {d: kstat_yoy.get(d) for d in kstat_rolling if win_start <= d <= win_end},
+        "labels":                [p["x"] for p in align_to_window(kstat_kg_raw, win_start, win_end)],
+    }
+
+    # ── B-7 price chart data ──────────────────────────────────────────────────
     ii = sections.get("import_intelligence", {})
     price_rows = ii.get("price_annual_rows", [])
     b7_price_series = _build_b7_price_series(price_rows)
     b7_price_subtitle = _build_b7_price_subtitle(price_rows)
 
     return {
-        # KG panel — common Y-axis, three series.
-        "nz_export_kg": to_xy(_aggregate_series_by_date(nz_rows, "KG")),
-        "qia_kg": to_xy(_aggregate_series_by_date(qia_rows, "KG")),
-        "kstat_0507_kg": to_xy(_aggregate_series_by_date(kstat_0507_rows, "KG")),
-        "kstat_0510_kg": to_xy(_aggregate_series_by_date(kstat_0510_rows, "KG")),
-        # Value panel — NZD and USD_thousands on separate Y-axes.
-        "nz_export_nzd": to_xy(_aggregate_series_by_date(nz_rows, "NZD")),
-        "kstat_0507_usd": to_xy(_aggregate_series_by_date(kstat_0507_rows, "USD_thousands")),
-        "kstat_0510_usd": to_xy(_aggregate_series_by_date(kstat_0510_rows, "USD_thousands")),
-        # B-7 price chart.
-        "b7_price_series": b7_price_series,
+        # ── C-3e: new structured source objects ──────────────────────────────
+        "nz_export":          nz_source,
+        "korea_qia":          qia_source,
+        "korea_kstat":        kstat_source,
+        "harvest_boundaries": harvest_boundaries,
+        "yoy_chip":           yoy_chip,
+        "window":             {"start": win_start, "end": win_end},
+
+        # ── Legacy keys (backward compat — kept during template migration) ───
+        "nz_export_kg":    to_xy(nz_kg_raw),
+        "qia_kg":          to_xy(qia_kg_raw),
+        "kstat_0507_kg":   to_xy(_aggregate_series_by_date(kstat_0507_rows, "KG")),
+        "kstat_0510_kg":   to_xy(_aggregate_series_by_date(kstat_0510_rows, "KG")),
+        "nz_export_nzd":   to_xy(_aggregate_series_by_date(nz_rows, "NZD")),
+        "kstat_0507_usd":  to_xy(_aggregate_series_by_date(kstat_0507_rows, "USD_thousands")),
+        "kstat_0510_usd":  to_xy(_aggregate_series_by_date(kstat_0510_rows, "USD_thousands")),
+
+        # ── B-7 price chart ───────────────────────────────────────────────────
+        "b7_price_series":   b7_price_series,
         "b7_price_subtitle": b7_price_subtitle,
     }
 
@@ -891,6 +1216,18 @@ def main() -> None:
     kstat_0507 = len(tf.get("kstat_0507", []))
     kstat_0510 = len(tf.get("kstat_0510", []))
     print(f"  trade_flows kstat split: 0507.90={kstat_0507} rows | 0510.00={kstat_0510} rows")
+    # C-3e: report new data structure stats.
+    cd = chart_data
+    win = cd.get("window", {})
+    chip = cd.get("yoy_chip", {})
+    nz_pts = len(cd.get("nz_export", {}).get("monthly_dried_eq_kg", []))
+    kstat_pts = len(cd.get("korea_kstat", {}).get("monthly_dried_eq_kg", []))
+    qia_pts = len(cd.get("korea_qia", {}).get("monthly_dried_eq_kg", []))
+    hb = len(cd.get("harvest_boundaries", []))
+    print(f"  window: {win.get('start', '?')} → {win.get('end', '?')}")
+    print(f"  harvest_boundaries: {hb} October months marked")
+    print(f"  yoy_chip: {chip.get('label', '—')}")
+    print(f"  source pts (dried-eq KG): NZ={nz_pts} QIA={qia_pts} KSTAT={kstat_pts}")
     print(f"  output: docs/index.html ({bytes_written} bytes)")
     print(f"  build complete: {build_date}")
 

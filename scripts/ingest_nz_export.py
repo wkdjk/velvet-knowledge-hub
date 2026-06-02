@@ -17,6 +17,10 @@
 #       NOT cast to int. Dedup compares strings.
 # L-10: Dedup key is (date, series, hs_code, unit, country) — five fields (GAP-1 fix 2026-05-30).
 # L-13: CSV column layout detected by header scan, not fixed index.
+# GAP-5 fix (C-3e 2026-06-02): hs_code_10digit and product_type columns added.
+#   hs_code_10digit stores the raw NZ sub-code as TEXT (e.g. "0507901110").
+#   product_type is derived: "frozen", "dried", or "other".
+#   The existing hs_code column (dot notation "0507.90") is preserved unchanged.
 #
 # Security: no credentials or secrets in this file. All secrets from .env only.
 
@@ -58,14 +62,24 @@ SERIES_VALUE = "nz_export"
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # HS code map — order matters: most specific patterns tested first.
-# Each entry maps a substring of the product description to a dot-notation
-# HS code string (as stored in VTW_Trade_Monthly, schema from setup_sheets.py).
-_HS_CODE_MAP: list[tuple[str, str]] = [
-    ("other than frozen or dried", "0507.90"),  # velvet other (most specific)
-    ("frozen",                     "0507.90"),  # velvet frozen
-    ("dried",                      "0507.90"),  # velvet dried
-    ("excluding powder",           "0507.90"),  # horns & antlers (no frozen/dried)
-    ("powder",                     "0507.90"),  # powder of horns & velvet
+# Each entry maps a substring of the product description to:
+#   (dot_notation_hs_code, hs_code_10digit, product_type)
+#
+# GAP-5 fix: hs_code_10digit and product_type are now stored alongside the
+# existing dot-notation hs_code. NZ Stats CSV does not contain 10-digit codes;
+# we derive a representative 10-digit code from the description:
+#   "frozen" → 0507901110 (matches Korea KSTAT immature/fresh code)
+#   "dried"  → 0507901190 (matches Korea KSTAT other/dried code)
+#   "other"  → 0507901190 (best available; flagged as "other" in product_type)
+#
+# The dot-notation hs_code column is preserved unchanged for backward compatibility.
+_HS_CODE_MAP: list[tuple[str, str, str, str]] = [
+    # (description substring, dot_hs, hs_10digit, product_type)
+    ("other than frozen or dried", "0507.90", "0507901190", "other"),   # most specific
+    ("frozen",                     "0507.90", "0507901110", "frozen"),
+    ("dried",                      "0507.90", "0507901190", "dried"),
+    ("excluding powder",           "0507.90", "0507901190", "other"),   # horns/antlers
+    ("powder",                     "0507.90", "0507901190", "other"),   # powder forms
 ]
 
 # HS labels — human-readable descriptions for the hs_label column.
@@ -90,13 +104,20 @@ _DESTINATION_MAP: dict[str, str] = {
 # CSV parsing helpers
 # ---------------------------------------------------------------------------
 
-def _resolve_hs_code(description: str) -> str | None:
-    """Return dot-notation HS code for a product description, or None if not matched."""
+def _resolve_hs_code(description: str) -> tuple[str | None, str, str]:
+    """
+    Return (dot_notation_hs_code, hs_code_10digit, product_type) for a
+    product description.
+
+    Returns (None, "", "other") if no match is found.
+    GAP-5 fix: now returns all three fields so the parser can populate the
+    new hs_code_10digit and product_type columns.
+    """
     desc_lower = description.lower()
-    for substring, hs_code in _HS_CODE_MAP:
+    for substring, hs_code, hs_10digit, product_type in _HS_CODE_MAP:
         if substring in desc_lower:
-            return hs_code
-    return None
+            return hs_code, hs_10digit, product_type
+    return None, "", "other"
 
 
 def _parse_date(raw: str) -> str:
@@ -154,7 +175,7 @@ def _build_column_map(row2: list[str], row3: list[str], row4: list[str]) -> list
         if desc_cell and desc_cell != " ":
             current_desc = desc_cell
 
-        hs_code = _resolve_hs_code(current_desc)
+        hs_code, hs_10digit, product_type = _resolve_hs_code(current_desc)
 
         if "free on board" in metric_cell:
             metric = "fob"
@@ -167,6 +188,8 @@ def _build_column_map(row2: list[str], row3: list[str], row4: list[str]) -> list
             "col_index": col_idx,
             "destination": destination,
             "hs_code": hs_code,
+            "hs_code_10digit": hs_10digit,
+            "product_type": product_type,
             "metric": metric,
         })
 
@@ -181,18 +204,21 @@ def parse_nz_export_csv(filepath: Path, source_file_name: str) -> list[dict]:
     Returns long-format rows ready for the VTW_Trade_Monthly schema:
 
         {
-            "date":        "2024-01",   # YYYY-MM
-            "series":      "nz_export",
-            "hs_code":     "0507.90",   # dot notation TEXT (schema requirement)
-            "hs_label":    "Horns, antlers...",
-            "value":       622.0,       # numeric — quantity OR fob depending on unit
-            "unit":        "KG",        # KG for quantity rows, NZD for fob rows
-            "country":     "Korea",
-            "notes":       "source: NZ_EXPORT_2024.csv | provisional: False",
+            "date":            "2024-01",       # YYYY-MM
+            "series":          "nz_export",
+            "hs_code":         "0507.90",        # dot notation TEXT (preserved — backward compat)
+            "hs_label":        "Horns, antlers...",
+            "value":           622.0,            # numeric — quantity OR fob depending on unit
+            "unit":            "KG",             # KG for quantity rows, NZD for fob rows
+            "country":         "Korea",
+            "notes":           "source: NZ_EXPORT_2024.csv | provisional: False",
+            "hs_code_10digit": "0507901110",     # GAP-5: full 10-digit code as TEXT
+            "product_type":    "frozen",         # GAP-5: frozen | dried | other
         }
 
     Both KG and NZD rows are produced for each (date, hs_code, destination) tuple.
     L-9: hs_code is TEXT ("0507.90") — matches VTW_Trade_Monthly schema (not int).
+    GAP-5: hs_code_10digit and product_type are new fields added in C-3e.
     """
     logger.info("Parsing NZ Export CSV: %s", filepath)
 
@@ -239,8 +265,10 @@ def parse_nz_export_csv(filepath: Path, source_file_name: str) -> list[dict]:
     # ------------------------------------------------------------------
     # Pass 2 — pair Quantity / FOB columns; emit one row per measurement.
     # ------------------------------------------------------------------
-    # Build (destination, hs_code, qty_col, fob_col) tuples from column_map.
-    product_slots: list[tuple[str, str | None, int, int]] = []
+    # Build (destination, hs_code, hs_code_10digit, product_type, qty_col, fob_col)
+    # tuples from column_map.
+    # GAP-5: tuples now carry hs_code_10digit and product_type alongside hs_code.
+    product_slots: list[tuple[str, str | None, str, str, int, int]] = []
     i = 0
     while i < len(column_map):
         qty_desc = column_map[i]
@@ -256,6 +284,8 @@ def parse_nz_export_csv(filepath: Path, source_file_name: str) -> list[dict]:
                 product_slots.append((
                     qty_desc["destination"],
                     qty_desc["hs_code"],
+                    qty_desc["hs_code_10digit"],
+                    qty_desc["product_type"],
                     qty_desc["col_index"],
                     fob_desc["col_index"],
                 ))
@@ -275,7 +305,7 @@ def parse_nz_export_csv(filepath: Path, source_file_name: str) -> list[dict]:
             continue
         is_provisional = parsed_date in provisional_dates
 
-        for destination, hs_code, qty_col, fob_col in product_slots:
+        for destination, hs_code, hs_10digit, product_type, qty_col, fob_col in product_slots:
             # Only include velvet-related HS codes.
             if hs_code not in _VELVET_HS_CODES:
                 continue
@@ -295,27 +325,33 @@ def parse_nz_export_csv(filepath: Path, source_file_name: str) -> list[dict]:
             hs_label = _HS_LABEL_MAP.get(hs_code, hs_code)
 
             # Quantity row (unit = KG).
+            # GAP-5: hs_code_10digit and product_type added.
             output.append({
-                "date":    parsed_date,
-                "series":  SERIES_VALUE,
-                "hs_code": hs_code,
-                "hs_label": hs_label,
-                "value":   qty,
-                "unit":    "KG",
-                "country": destination,
-                "notes":   notes_base,
+                "date":            parsed_date,
+                "series":          SERIES_VALUE,
+                "hs_code":         hs_code,
+                "hs_label":        hs_label,
+                "value":           qty,
+                "unit":            "KG",
+                "country":         destination,
+                "notes":           notes_base,
+                "hs_code_10digit": hs_10digit,
+                "product_type":    product_type,
             })
 
             # FOB value row (unit = NZD).
+            # GAP-5: hs_code_10digit and product_type added.
             output.append({
-                "date":    parsed_date,
-                "series":  SERIES_VALUE,
-                "hs_code": hs_code,
-                "hs_label": hs_label,
-                "value":   fob,
-                "unit":    "NZD",
-                "country": destination,
-                "notes":   notes_base,
+                "date":            parsed_date,
+                "series":          SERIES_VALUE,
+                "hs_code":         hs_code,
+                "hs_label":        hs_label,
+                "value":           fob,
+                "unit":            "NZD",
+                "country":         destination,
+                "notes":           notes_base,
+                "hs_code_10digit": hs_10digit,
+                "product_type":    product_type,
             })
 
     logger.info(

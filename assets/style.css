@@ -9,28 +9,40 @@
 /* ── 1. DESIGN TOKENS (CSS custom properties) ─────────────── */
 :root {
   /* Backgrounds */
-  --bg:              #FFFFFF;
-  --surface:         #F7F7F7;
-  --surface-deep:    #EFEFEF;
+  --bg:                #FFFFFF;
+  --surface:           #F7F7F7;
+  --surface-deep:      #EFEFEF;
 
   /* Borders */
-  --border:          #CCCCCC;
-  --border-heavy:    #999999;
+  --border:            #CCCCCC;
+  --border-heavy:      #999999;
 
   /* Text */
-  --text-primary:    #111111;
-  --text-secondary:  #444444;
-  --text-muted:      #777777;
-  --text-inverse:    #FFFFFF;
+  --text-primary:      #111111;
+  --text-secondary:    #444444;
+  --text-muted:        #777777;
+  --text-inverse:      #FFFFFF;
 
   /* Delta / state colours */
-  --delta-positive:  #2A6929;   /* dark green — AA on white (5.1:1) */
-  --delta-negative:  #8B0000;   /* dark red   — AA on white (5.9:1) */
-  --delta-neutral:   #555555;
+  --delta-positive:    #2A6929;   /* dark green — AA on white (5.1:1) */
+  --delta-negative:    #8B0000;   /* dark red   — AA on white (5.9:1) */
+  --delta-neutral:     #555555;
 
   /* Placeholder card */
-  --placeholder-bg:     #F7F7F7;
-  --placeholder-border: #CCCCCC;
+  --placeholder-bg:    #F7F7F7;
+  --placeholder-border:#CCCCCC;
+
+  /* DINZ brand accent — gold, confirmed from deernz.org theme CSS 2026-06-01 */
+  /* Applied as border only; never as text colour or fill */
+  --accent:            #A78230;
+
+  /* Trade flows section — source colours (C-3e C-3c) */
+  --source-nz:         #1A5276;
+  --source-qia:        #7D6608;
+  --source-kstat:      #6E2F0A;
+
+  /* Harvest-year band — gold at low opacity (C-3e) */
+  --harvest-band:      rgba(167, 130, 48, 0.08);
 }
 
 /* ── 2. RESET ─────────────────────────────────────────────── */
@@ -54,9 +66,10 @@ body {
   background-color: var(--bg);
 }
 
-/* Headings — h1, h2, h3: Georgia for editorial board-report weight */
+/* Headings — h1, h2, h3: Trebuchet MS humanist stack (DINZ brand alignment — C-3g) */
+/* Overrides previous Georgia/serif stack. Font sizes and weights unchanged. */
 h1, h2, h3 {
-  font-family: "Georgia", "Times New Roman", "Liberation Serif", serif;
+  font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
   color: var(--text-primary);
 }
 
@@ -183,13 +196,14 @@ section {
 }
 
 /* Section header row — flex: h2 + last-updated left, button right */
+/* C-3g: border-bottom uses DINZ gold accent token instead of --border-heavy */
 .section-header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
   padding-bottom: 12px;
-  border-bottom: 2px solid var(--border-heavy);
+  border-bottom: 2px solid var(--accent);
   margin-bottom: 16px;
 }
 
@@ -236,10 +250,11 @@ footer .caption:last-child {
 /* ── 5. COMPONENT STYLES ──────────────────────────────────── */
 
 /* KPI card */
+/* C-3g: border-top uses DINZ gold accent token instead of --border-heavy */
 .kpi-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-top: 3px solid var(--border-heavy);  /* visual anchor — not a colour accent */
+  border-top: 3px solid var(--accent);        /* DINZ gold accent — structural, not decorative */
   border-radius: 0;                            /* square corners throughout */
   padding: 24px;
   min-height: 120px;
@@ -534,7 +549,22 @@ footer .caption:last-child {
   margin-bottom: 32px;
 }
 
-/* Chart canvas wrapper — fixed height keeps proportions stable */
+/* C-3e: chart panel h3 headings */
+.chart-panel h3 {
+  font-size: 1.0rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+}
+
+/* C-3e: chart canvas wrapper — position relative for harvest-band overlay */
+.chart-canvas-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+/* Chart canvas wrapper — fixed height keeps proportions stable (legacy .chart-container) */
 .chart-container {
   position: relative;
   width: 100%;
@@ -545,7 +575,7 @@ footer .caption:last-child {
   padding: 8px;
 }
 
-/* Chart panel heading — distinguishes KG panel from value panel */
+/* Chart panel heading — distinguishes KG panel from value panel (legacy .chart-title) */
 .chart-title {
   font-size: 0.8125rem;
   font-weight: 600;
@@ -564,7 +594,15 @@ footer .caption:last-child {
   margin-bottom: 12px;
 }
 
-/* HS-code radio toggle group */
+/* C-3e: chart annotation text below canvas */
+.chart-annotation {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+/* HS-code radio toggle group (legacy — kept for backward compat) */
 .hs-toggle {
   display: flex;
   align-items: center;
@@ -599,6 +637,207 @@ footer .caption:last-child {
 .hs-toggle-option input[type="radio"] {
   accent-color: var(--text-primary);
   cursor: pointer;
+}
+
+/* ── 5c. TRADE FLOWS C-3e COMPONENTS ─────────────────────── */
+
+/* YoY KPI chip */
+.trade-flows-kpi-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+  margin-bottom: 16px;
+}
+
+.trade-flows-kpi-chip .chip-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.trade-flows-kpi-chip .chip-source {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.trade-flows-kpi-chip .chip-delta {
+  font-family: "SF Mono", "Cascadia Code", "Fira Mono", "Courier New", monospace;
+  font-size: 1.0rem;
+  font-weight: 600;
+}
+
+.trade-flows-kpi-chip .chip-suffix {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+/* Source toggle pills */
+.source-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.source-toggle__pill {
+  position: relative;
+  display: inline-block;
+}
+
+.source-toggle__pill input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.source-toggle__pill label {
+  display: inline-block;
+  padding: 5px 14px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+  letter-spacing: 0.02em;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  user-select: none;
+}
+
+/* NZ exports pill */
+.source-toggle__pill--nz label {
+  color: var(--source-nz);
+  border: 2px solid var(--source-nz);
+  background: transparent;
+}
+
+.source-toggle__pill--nz input:checked + label {
+  background: var(--source-nz);
+  color: #FFFFFF;
+}
+
+/* Korea quarantine (QIA) pill */
+.source-toggle__pill--qia label {
+  color: var(--source-qia);
+  border: 2px solid var(--source-qia);
+  background: transparent;
+}
+
+.source-toggle__pill--qia input:checked + label {
+  background: var(--source-qia);
+  color: #FFFFFF;
+}
+
+/* Korea customs (KSTAT) pill */
+.source-toggle__pill--kstat label {
+  color: var(--source-kstat);
+  border: 2px solid var(--source-kstat);
+  background: transparent;
+}
+
+.source-toggle__pill--kstat input:checked + label {
+  background: var(--source-kstat);
+  color: #FFFFFF;
+}
+
+/* Harvest-year band — CSS fallback if annotation plugin not available */
+.harvest-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--harvest-band);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.harvest-band__label {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Source discrepancy accordion */
+.discrepancy-accordion {
+  border: 1px solid var(--border);
+  margin-top: 20px;
+}
+
+.discrepancy-accordion__trigger {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  cursor: pointer;
+  background: var(--surface);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  user-select: none;
+  list-style: none;
+}
+
+/* Remove default <details> marker in all browsers */
+.discrepancy-accordion__trigger::-webkit-details-marker { display: none; }
+
+.discrepancy-accordion__trigger:hover {
+  background: var(--surface-deep);
+}
+
+.discrepancy-accordion__chevron {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+details.discrepancy-accordion[open] .discrepancy-accordion__chevron {
+  transform: rotate(90deg);
+}
+
+.discrepancy-accordion__body {
+  padding: 16px 14px;
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border);
+}
+
+.discrepancy-accordion__body h4 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+  font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+}
+
+.discrepancy-accordion__body ol {
+  padding-left: 20px;
+  margin-top: 10px;
+}
+
+.discrepancy-accordion__body li {
+  margin-bottom: 8px;
+}
+
+.discrepancy-accordion__body p {
+  margin-bottom: 8px;
+}
+
+.discrepancy-accordion__body .closing-note {
+  margin-top: 12px;
+  font-style: italic;
+  color: var(--text-muted);
 }
 
 /* ── 6. STATE MODIFIERS ───────────────────────────────────── */
@@ -668,6 +907,16 @@ footer .caption:last-child {
   h1 {
     font-size: 1.5rem;
   }
+
+  /* C-3e: Source toggle stacks vertically on mobile */
+  .source-toggle {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  /* C-3e: Chart canvases — min-height on mobile */
+  #chart-volume { min-height: 260px; }
+  #chart-price  { min-height: 200px; }
 }
 
 /* ── 8. PRINT / @media print ─────────────────────────────── */
@@ -677,7 +926,32 @@ footer .caption:last-child {
   /* Hide interactive elements */
   .download-btn,
   .hs-toggle,
-  .table-download-inline {
+  .table-download-inline,
+  .source-toggle {
+    display: none;
+  }
+
+  /* C-3e: KPI chip — keep visible (editorial content); degrade gold border to grey */
+  .trade-flows-kpi-chip {
+    border-left: 3px solid #888;
+  }
+
+  /* C-3e: Accordion — expand body for print (DINZ board receives PDF) */
+  .discrepancy-accordion__body {
+    display: block !important;
+  }
+
+  .discrepancy-accordion__trigger .discrepancy-accordion__chevron {
+    display: none;
+  }
+
+  /* C-3e: Chart panels — keep together across page breaks */
+  .chart-panel {
+    page-break-inside: avoid;
+  }
+
+  /* C-3e: Harvest band — suppress CSS overlay in print */
+  .harvest-band {
     display: none;
   }
 
