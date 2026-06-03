@@ -354,11 +354,36 @@ def assemble_sections(config: dict, tab_data: dict) -> dict:
     return sections
 
 
+def _normalise_date_str(raw: str) -> str:
+    """
+    Normalise a date string to ISO format so lexicographic comparison is reliable.
+
+    Handles:
+      "YYYY-M"   → "YYYY-0M"   (KSTAT CSV months without zero-padding)
+      "YYYY-MM"  → "YYYY-MM"   (already correct)
+      "YYYY-MM-DD" → "YYYY-MM-DD" (already correct)
+
+    Anything else is returned unchanged.
+    F-05 fix: KSTAT source files store months as "2026-3" rather than "2026-03",
+    causing the Sheets-derived last_updated value to render as "2026-3" on site.
+    """
+    import re as _re
+    # Match "YYYY-M" (4-digit year, dash, 1-digit month) — pad month to 2 digits.
+    m = _re.fullmatch(r"(\d{4})-(\d)$", raw.strip())
+    if m:
+        return f"{m.group(1)}-0{m.group(2)}"
+    return raw.strip()
+
+
 def _extract_last_updated(rows: list[dict]) -> str | None:
     """
     Return the most recent date string found in the 'date' or 'published_date'
     columns of the given row list. Returns None if no date column exists or rows
     is empty.
+
+    Dates are normalised to ISO format before comparison so that KSTAT months
+    stored as "YYYY-M" (e.g. "2026-3") sort correctly against "YYYY-MM" strings.
+    F-05: always returns a zero-padded string such as "2026-03", never "2026-3".
     """
     if not rows:
         return None
@@ -368,7 +393,7 @@ def _extract_last_updated(rows: list[dict]) -> str | None:
         for col in ("date", "published_date"):
             val = row.get(col)
             if val:
-                date_candidates.append(str(val))
+                date_candidates.append(_normalise_date_str(str(val)))
 
     if not date_candidates:
         return None

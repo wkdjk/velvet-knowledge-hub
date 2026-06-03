@@ -141,20 +141,11 @@
         <p class="chart-annotation">All volumes are shown as dried-equivalent kg. Conversion applied: fresh/frozen velvet × 0.33 = dried-equivalent kg. Dried velvet requires no conversion.</p>
       </div>
 
-      {# ── Panel B — Unit price chart ───────────────────────────────────── #}
-      <div class="chart-panel">
-        <h3>Unit price — blended NZD and USD per dried-equivalent kg</h3>
-        <div class="chart-canvas-wrapper" style="height:240px;">
-          <canvas id="chart-price"
-            aria-label="Monthly blended unit price NZD and USD per dried-equivalent kg" role="img"></canvas>
-        </div>
-        <p class="chart-annotation">Unit price = total value ÷ dried-equivalent kg for each month. NZD = FOB export price (New Zealand origin). USD = customs import price (Korea origin). The two prices use different currencies and valuation bases (freight and insurance are included differently), so they should be read as separate indicators rather than compared directly.<br>
-        Prices are blended across fresh/frozen and dried velvet within each month. A shift in the product mix may affect the blended price independently of actual unit price movements.</p>
-      </div>
+      {# Panel B (unit price chart) removed per Commander feedback F-06. #}
 
       {# ── Panel C — Export destination breakdown ──────────────────────── #}
-      {# C-3h: NZ exports by destination. Sub-chart C1 = stacked area (FOB NZD). #}
-      {# Sub-chart C2 = pie (latest full year KG). Placement: after Panel B.     #}
+      {# C-3h: NZ exports by destination. Stacked area (FOB NZD).           #}
+      {# C2 pie removed per F-12. Panel B unit price removed per F-06.      #}
       <h3 class="section-subheading">Export destination breakdown</h3>
 
       {# C1 — Stacked area chart: NZD FOB by destination, all available dates #}
@@ -167,15 +158,7 @@
         <p class="chart-annotation">Source: Stats NZ. All available months shown. Countries not individually listed are grouped as Other.</p>
       </div>
 
-      {# C2 — Pie chart: KG by destination, latest full calendar year #}
-      <div class="chart-panel">
-        <h3>NZ velvet exports by destination — volume share ({{ tf_destination_pie.year | default("latest year") }})</h3>
-        <div class="chart-canvas-wrapper" style="height:280px;max-width:480px;">
-          <canvas id="chart-destination-pie"
-            aria-label="NZ deer velvet export volume share by destination, pie chart" role="img"></canvas>
-        </div>
-        <p class="chart-annotation">Source: Stats NZ. Latest full calendar year with at least 10 months of data. Volume shown as raw KG (all product types).</p>
-      </div>
+      {# C2 (pie chart — 2025 volume share) removed per Commander feedback F-12. #}
 
       {# ── Panel D — Korean market: imports by origin ───────────────────── #}
       {# C-3h: QIA quarantine data, grouped by country, latest 2 full years.  #}
@@ -431,129 +414,14 @@
       }
     });
 
-    /* ── Panel B — Unit price chart ──────────────────────────────────── */
-    var ctxPrice = document.getElementById('chart-price');
-    var priceChart = null;
-    var PRICE_EMPTY_MSG = 'Select NZ exports or Korea customs (KSTAT) to see unit price data.';
-
-    function buildPriceDatasets(showNz, showKstat) {
-      var ds = [];
-      if (showNz && NZ.unit_price) {
-        ds.push({
-          label: 'NZ exports — NZD FOB / dried-equiv. kg',
-          data: xyFrom(NZ.unit_price),
-          borderColor: C_NZ,
-          backgroundColor: 'transparent',
-          borderWidth: 2,
-          borderDash: [],
-          pointStyle: 'circle',
-          pointRadius: 3,
-          tension: 0.3,
-          yAxisID: 'yNzd'
-        });
-      }
-      if (showKstat && KSTAT.unit_price) {
-        ds.push({
-          label: 'Korea customs (KSTAT) — USD import / dried-equiv. kg',
-          data: xyFrom(KSTAT.unit_price),
-          borderColor: C_KSTAT,
-          backgroundColor: 'transparent',
-          borderWidth: 2,
-          borderDash: [2, 4],
-          pointStyle: 'triangle',
-          pointRadius: 3,
-          tension: 0.3,
-          yAxisID: 'yUsd'
-        });
-      }
-      return ds;
-    }
-
-    function updatePriceChart(showNz, showKstat) {
-      var priceDsets = buildPriceDatasets(showNz, showKstat);
-      var priceLabels = (NZ.monthly_dried_eq_kg || []).map(function (p) { return p.x; });
-
-      if (priceChart) {
-        priceChart.data.labels = priceLabels;
-        priceChart.data.datasets = priceDsets;
-        priceChart.update();
-      } else if (ctxPrice) {
-        priceChart = new Chart(ctxPrice.getContext('2d'), {
-          type: 'line',
-          data: { labels: priceLabels, datasets: priceDsets },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            plugins: {
-              legend: {
-                position: 'top',
-                align: 'start',
-                labels: { boxWidth: 12, padding: 14 }
-              },
-              tooltip: {
-                callbacks: {
-                  label: function (ctx) {
-                    var currency = ctx.dataset.yAxisID === 'yNzd' ? 'NZD ' : 'USD ';
-                    return ctx.dataset.label + ': ' + currency + ctx.parsed.y.toFixed(2);
-                  }
-                }
-              }
-            },
-            scales: {
-              x: {
-                type: 'category',
-                ticks: { maxTicksLimit: 8, maxRotation: 45 },
-                grid: { color: 'rgba(204,204,204,0.4)' }
-              },
-              yNzd: {
-                position: 'left',
-                beginAtZero: true,
-                title: { display: true, text: 'NZD / dried-equiv. kg' },
-                ticks: { callback: function (v) { return v.toFixed(1); } },
-                grid: { color: 'rgba(204,204,204,0.4)' }
-              },
-              yUsd: {
-                position: 'right',
-                beginAtZero: true,
-                title: { display: true, text: 'USD / dried-equiv. kg' },
-                ticks: { callback: function (v) { return v.toFixed(1); } },
-                grid: { drawOnChartArea: false }
-              }
-            }
-          }
-        });
-      }
-
-      /* Show placeholder text if no price sources selected */
-      var priceWrap = ctxPrice ? ctxPrice.closest('.chart-canvas-wrapper') : null;
-      if (priceWrap) {
-        var msgEl = priceWrap.querySelector('.price-empty-msg');
-        if (!showNz && !showKstat) {
-          if (!msgEl) {
-            msgEl = document.createElement('p');
-            msgEl.className = 'price-empty-msg chart-annotation';
-            msgEl.style.textAlign = 'center';
-            msgEl.style.paddingTop = '60px';
-            msgEl.textContent = PRICE_EMPTY_MSG;
-            priceWrap.appendChild(msgEl);
-          }
-          ctxPrice.style.display = 'none';
-        } else {
-          if (msgEl) msgEl.remove();
-          ctxPrice.style.display = '';
-        }
-      }
-    }
-
-    updatePriceChart(true, true);
+    /* Panel B (unit price chart) removed per Commander feedback F-06. */
 
     /* ── Panel C — Destination charts ───────────────────────────────── */
     /* C1: Stacked area — NZD FOB by destination, all available dates.  */
     /* C2: Pie — KG share by destination, latest full year.             */
 
     var DEST_AREA_DATA  = {{ tf_destination_area | tojson }};
-    var DEST_PIE_DATA   = {{ tf_destination_pie  | tojson }};
+    /* DEST_PIE_DATA removed per F-12 (pie chart removed). */
     var DEST_COLOURS = {
       'China':      '#A78230',
       'Korea':      '#1A5276',
@@ -642,58 +510,7 @@
         }
       });
 
-      /* ── C2: Pie chart ──────────────────────────────────────────────── */
-      var ctxPie = document.getElementById('chart-destination-pie');
-      if (!ctxPie) return;
-      if (!DEST_PIE_DATA || !DEST_PIE_DATA.year) return;
-
-      var pieLabels = [];
-      var pieData   = [];
-      var pieColours = [];
-      DEST_ORDER.forEach(function (c) {
-        var kg = DEST_PIE_DATA[c] || 0;
-        if (kg > 0) {
-          pieLabels.push(c);
-          pieData.push(kg);
-          pieColours.push(DEST_COLOURS[c]);
-        }
-      });
-
-      if (!pieLabels.length) return;
-
-      var totalKg = pieData.reduce(function (a, b) { return a + b; }, 0);
-
-      new Chart(ctxPie.getContext('2d'), {
-        type: 'pie',
-        data: {
-          labels: pieLabels,
-          datasets: [{
-            data: pieData,
-            backgroundColor: pieColours,
-            borderColor: '#FFFFFF',
-            borderWidth: 2
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'right',
-              align: 'center',
-              labels: { boxWidth: 12, padding: 12 }
-            },
-            tooltip: {
-              callbacks: {
-                label: function (ctx) {
-                  var pct = totalKg > 0 ? (ctx.parsed / totalKg * 100).toFixed(1) : '0.0';
-                  return ctx.label + ': ' + Math.round(ctx.parsed).toLocaleString() + ' kg (' + pct + '%)';
-                }
-              }
-            }
-          }
-        }
-      });
+      /* C2 (pie chart) removed per Commander feedback F-12. */
     }());
 
     /* ── Panel D — QIA imports by origin ────────────────────────────── */
@@ -795,8 +612,7 @@
         volChart.data.datasets = buildVolDatasets(sel.nz, sel.qia, sel.kstat);
         volChart.update();
 
-        /* Rebuild Panel B datasets (QIA never in Panel B) */
-        updatePriceChart(sel.nz, sel.kstat);
+        /* Panel B (unit price) removed per F-06 — no price chart to update. */
       });
     });
 

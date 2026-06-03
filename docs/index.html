@@ -13,7 +13,7 @@
   <div class="page-wrapper">
     <h1>Velvet Knowledge Hub</h1>
     <p class="tagline">Korea deer velvet market intelligence — NZ exporters and DINZ</p>
-    <p class="last-built caption">Last built: 2026-06-02</p>
+    <p class="last-built caption">Last built: 2026-06-04</p>
   </div>
 </header>
 
@@ -37,7 +37,7 @@
     <div class="kpi-card">
       <p class="kpi-label">NEWS ARTICLES (30 DAYS)</p>
       
-        <p class="kpi-value">1740</p>
+        <p class="kpi-value">1808</p>
         <p class="delta-indicator delta-neutral">articles classified</p>
       
     </div>
@@ -75,7 +75,7 @@
     <div class="section-header">
       <div class="section-header-left">
         <h2>Trade flows</h2>
-        <span class="last-updated">Last updated: 2026-3</span>
+        <span class="last-updated">Last updated: 2026-04</span>
       </div>
       
         <a class="download-btn" href="downloads/trade_flows.csv">Download CSV</a>
@@ -124,15 +124,6 @@
       </div>
 
       
-      <div class="chart-panel">
-        <h3>Unit price — blended NZD and USD per dried-equivalent kg</h3>
-        <div class="chart-canvas-wrapper" style="height:240px;">
-          <canvas id="chart-price"
-            aria-label="Monthly blended unit price NZD and USD per dried-equivalent kg" role="img"></canvas>
-        </div>
-        <p class="chart-annotation">Unit price = total value ÷ dried-equivalent kg for each month. NZD = FOB export price (New Zealand origin). USD = customs import price (Korea origin). The two prices use different currencies and valuation bases (freight and insurance are included differently), so they should be read as separate indicators rather than compared directly.<br>
-        Prices are blended across fresh/frozen and dried velvet within each month. A shift in the product mix may affect the blended price independently of actual unit price movements.</p>
-      </div>
 
       
       
@@ -150,14 +141,6 @@
       </div>
 
       
-      <div class="chart-panel">
-        <h3>NZ velvet exports by destination — volume share (2025)</h3>
-        <div class="chart-canvas-wrapper" style="height:280px;max-width:480px;">
-          <canvas id="chart-destination-pie"
-            aria-label="NZ deer velvet export volume share by destination, pie chart" role="img"></canvas>
-        </div>
-        <p class="chart-annotation">Source: Stats NZ. Latest full calendar year with at least 10 months of data. Volume shown as raw KG (all product types).</p>
-      </div>
 
       
       
@@ -402,129 +385,14 @@
       }
     });
 
-    /* ── Panel B — Unit price chart ──────────────────────────────────── */
-    var ctxPrice = document.getElementById('chart-price');
-    var priceChart = null;
-    var PRICE_EMPTY_MSG = 'Select NZ exports or Korea customs (KSTAT) to see unit price data.';
-
-    function buildPriceDatasets(showNz, showKstat) {
-      var ds = [];
-      if (showNz && NZ.unit_price) {
-        ds.push({
-          label: 'NZ exports — NZD FOB / dried-equiv. kg',
-          data: xyFrom(NZ.unit_price),
-          borderColor: C_NZ,
-          backgroundColor: 'transparent',
-          borderWidth: 2,
-          borderDash: [],
-          pointStyle: 'circle',
-          pointRadius: 3,
-          tension: 0.3,
-          yAxisID: 'yNzd'
-        });
-      }
-      if (showKstat && KSTAT.unit_price) {
-        ds.push({
-          label: 'Korea customs (KSTAT) — USD import / dried-equiv. kg',
-          data: xyFrom(KSTAT.unit_price),
-          borderColor: C_KSTAT,
-          backgroundColor: 'transparent',
-          borderWidth: 2,
-          borderDash: [2, 4],
-          pointStyle: 'triangle',
-          pointRadius: 3,
-          tension: 0.3,
-          yAxisID: 'yUsd'
-        });
-      }
-      return ds;
-    }
-
-    function updatePriceChart(showNz, showKstat) {
-      var priceDsets = buildPriceDatasets(showNz, showKstat);
-      var priceLabels = (NZ.monthly_dried_eq_kg || []).map(function (p) { return p.x; });
-
-      if (priceChart) {
-        priceChart.data.labels = priceLabels;
-        priceChart.data.datasets = priceDsets;
-        priceChart.update();
-      } else if (ctxPrice) {
-        priceChart = new Chart(ctxPrice.getContext('2d'), {
-          type: 'line',
-          data: { labels: priceLabels, datasets: priceDsets },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            plugins: {
-              legend: {
-                position: 'top',
-                align: 'start',
-                labels: { boxWidth: 12, padding: 14 }
-              },
-              tooltip: {
-                callbacks: {
-                  label: function (ctx) {
-                    var currency = ctx.dataset.yAxisID === 'yNzd' ? 'NZD ' : 'USD ';
-                    return ctx.dataset.label + ': ' + currency + ctx.parsed.y.toFixed(2);
-                  }
-                }
-              }
-            },
-            scales: {
-              x: {
-                type: 'category',
-                ticks: { maxTicksLimit: 8, maxRotation: 45 },
-                grid: { color: 'rgba(204,204,204,0.4)' }
-              },
-              yNzd: {
-                position: 'left',
-                beginAtZero: true,
-                title: { display: true, text: 'NZD / dried-equiv. kg' },
-                ticks: { callback: function (v) { return v.toFixed(1); } },
-                grid: { color: 'rgba(204,204,204,0.4)' }
-              },
-              yUsd: {
-                position: 'right',
-                beginAtZero: true,
-                title: { display: true, text: 'USD / dried-equiv. kg' },
-                ticks: { callback: function (v) { return v.toFixed(1); } },
-                grid: { drawOnChartArea: false }
-              }
-            }
-          }
-        });
-      }
-
-      /* Show placeholder text if no price sources selected */
-      var priceWrap = ctxPrice ? ctxPrice.closest('.chart-canvas-wrapper') : null;
-      if (priceWrap) {
-        var msgEl = priceWrap.querySelector('.price-empty-msg');
-        if (!showNz && !showKstat) {
-          if (!msgEl) {
-            msgEl = document.createElement('p');
-            msgEl.className = 'price-empty-msg chart-annotation';
-            msgEl.style.textAlign = 'center';
-            msgEl.style.paddingTop = '60px';
-            msgEl.textContent = PRICE_EMPTY_MSG;
-            priceWrap.appendChild(msgEl);
-          }
-          ctxPrice.style.display = 'none';
-        } else {
-          if (msgEl) msgEl.remove();
-          ctxPrice.style.display = '';
-        }
-      }
-    }
-
-    updatePriceChart(true, true);
+    /* Panel B (unit price chart) removed per Commander feedback F-06. */
 
     /* ── Panel C — Destination charts ───────────────────────────────── */
     /* C1: Stacked area — NZD FOB by destination, all available dates.  */
     /* C2: Pie — KG share by destination, latest full year.             */
 
     var DEST_AREA_DATA  = {"China": [{"x": "2021-01", "y": 10009896.0}, {"x": "2021-02", "y": 1446959.0}, {"x": "2021-04", "y": 9103027.0}, {"x": "2021-05", "y": 7128641.0}, {"x": "2021-06", "y": 5123728.0}, {"x": "2021-07", "y": 2339997.0}, {"x": "2021-08", "y": 235049.0}, {"x": "2021-09", "y": 383346.0}, {"x": "2021-10", "y": 0.0}, {"x": "2021-11", "y": 4117915.0}, {"x": "2021-12", "y": 6380584.0}, {"x": "2021-3", "y": 0.0}, {"x": "2021-6", "y": 96542.0}, {"x": "2021-9", "y": 0.0}, {"x": "2022-01", "y": 15002765.0}, {"x": "2022-03", "y": 8850616.0}, {"x": "2022-04", "y": 11032155.0}, {"x": "2022-05", "y": 4620880.0}, {"x": "2022-07", "y": 950405.0}, {"x": "2022-08", "y": 360692.0}, {"x": "2022-10", "y": 0.0}, {"x": "2022-11", "y": 1139710.0}, {"x": "2022-12", "y": 5159028.0}, {"x": "2022-2", "y": 13690625.0}, {"x": "2022-6", "y": 3406510.0}, {"x": "2022-7", "y": 4137757.0}, {"x": "2022-9", "y": 0.0}, {"x": "2023-02", "y": 10725576.0}, {"x": "2023-03", "y": 0.0}, {"x": "2023-04", "y": 15729621.0}, {"x": "2023-05", "y": 7936167.0}, {"x": "2023-06", "y": 0.0}, {"x": "2023-07", "y": 785053.0}, {"x": "2023-08", "y": 0.0}, {"x": "2023-09", "y": 0.0}, {"x": "2023-1", "y": 7313649.0}, {"x": "2023-10", "y": 297000.0}, {"x": "2023-11", "y": 8128816.0}, {"x": "2023-12", "y": 24079148.0}, {"x": "2023-3", "y": 0.0}, {"x": "2023-5", "y": 0.0}, {"x": "2023-6", "y": 180029.0}, {"x": "2023-9", "y": 0.0}, {"x": "2024-01", "y": 8468835.0}, {"x": "2024-02", "y": 26183208.0}, {"x": "2024-03", "y": 14402665.0}, {"x": "2024-04", "y": 26705.0}, {"x": "2024-05", "y": 86571.0}, {"x": "2024-06", "y": 262979.0}, {"x": "2024-07", "y": 0.0}, {"x": "2024-08", "y": 0.0}, {"x": "2024-09", "y": 0.0}, {"x": "2024-10", "y": 0.0}, {"x": "2024-11", "y": 0.0}, {"x": "2024-12", "y": 11603464.0}, {"x": "2024-4", "y": 1042473.0}, {"x": "2024-6", "y": 0.0}, {"x": "2025-01", "y": 2314606.0}, {"x": "2025-02", "y": 16277254.0}, {"x": "2025-03", "y": 17047353.0}, {"x": "2025-06", "y": 0.0}, {"x": "2025-07", "y": 215758.0}, {"x": "2025-08", "y": 78846.0}, {"x": "2025-09", "y": 267677.0}, {"x": "2025-10", "y": 264592.0}, {"x": "2025-11", "y": 1377919.0}, {"x": "2025-12", "y": 7853631.0}, {"x": "2025-3", "y": 0.0}, {"x": "2025-4", "y": 14969057.0}, {"x": "2025-5", "y": 7873295.0}, {"x": "2025-6", "y": 6903900.0}, {"x": "2026-01", "y": 10132831.0}, {"x": "2026-02", "y": 7916781.0}, {"x": "2026-03", "y": 14169374.0}, {"x": "2026-3", "y": 0.0}], "Korea": [{"x": "2021-01", "y": 1072414.0}, {"x": "2021-02", "y": 1490261.0}, {"x": "2021-03", "y": 2483310.0}, {"x": "2021-04", "y": 2053006.0}, {"x": "2021-05", "y": 1285256.0}, {"x": "2021-06", "y": 1393865.0}, {"x": "2021-07", "y": 1129187.0}, {"x": "2021-08", "y": 0.0}, {"x": "2021-09", "y": 0.0}, {"x": "2021-10", "y": 298083.0}, {"x": "2021-11", "y": 604566.0}, {"x": "2021-12", "y": 3942352.0}, {"x": "2022-01", "y": 3334699.0}, {"x": "2022-02", "y": 560835.0}, {"x": "2022-03", "y": 1099801.0}, {"x": "2022-04", "y": 2886896.0}, {"x": "2022-05", "y": 1849104.0}, {"x": "2022-06", "y": 627779.0}, {"x": "2022-07", "y": 181523.0}, {"x": "2022-08", "y": 2126205.0}, {"x": "2022-10", "y": 1841383.0}, {"x": "2022-11", "y": 550000.0}, {"x": "2022-12", "y": 1941315.0}, {"x": "2022-2", "y": 195694.0}, {"x": "2022-6", "y": 2637457.0}, {"x": "2022-9", "y": 1884885.0}, {"x": "2023-02", "y": 0.0}, {"x": "2023-03", "y": 4623208.0}, {"x": "2023-04", "y": 400174.0}, {"x": "2023-05", "y": 504562.0}, {"x": "2023-06", "y": 573885.0}, {"x": "2023-07", "y": 845898.0}, {"x": "2023-08", "y": 2139034.0}, {"x": "2023-09", "y": 1480878.0}, {"x": "2023-1", "y": 2299385.0}, {"x": "2023-10", "y": 1074585.0}, {"x": "2023-11", "y": 1233241.0}, {"x": "2023-12", "y": 1026991.0}, {"x": "2023-4", "y": 2777184.0}, {"x": "2023-6", "y": 1868230.0}, {"x": "2023-7", "y": 1963564.0}, {"x": "2024-01", "y": 2814432.0}, {"x": "2024-02", "y": 512701.0}, {"x": "2024-03", "y": 180000.0}, {"x": "2024-04", "y": 1261916.0}, {"x": "2024-05", "y": 1256191.0}, {"x": "2024-06", "y": 6818.0}, {"x": "2024-07", "y": 1445700.0}, {"x": "2024-08", "y": 295218.0}, {"x": "2024-09", "y": 0.0}, {"x": "2024-1", "y": 121000.0}, {"x": "2024-10", "y": 392000.0}, {"x": "2024-11", "y": 1034264.0}, {"x": "2024-12", "y": 1657460.0}, {"x": "2024-5", "y": 0.0}, {"x": "2024-6", "y": 0.0}, {"x": "2024-7", "y": 0.0}, {"x": "2025-01", "y": 641073.0}, {"x": "2025-02", "y": 3016138.0}, {"x": "2025-03", "y": 831074.0}, {"x": "2025-07", "y": 13500.0}, {"x": "2025-08", "y": 686809.0}, {"x": "2025-09", "y": 1568665.0}, {"x": "2025-10", "y": 93750.0}, {"x": "2025-11", "y": 28360.0}, {"x": "2025-12", "y": 898814.0}, {"x": "2025-4", "y": 1022647.0}, {"x": "2025-5", "y": 115367.0}, {"x": "2025-6", "y": 671263.0}, {"x": "2026-01", "y": 268745.0}, {"x": "2026-02", "y": 1017313.0}, {"x": "2026-03", "y": 1095701.0}], "Hong Kong": [{"x": "2021-01", "y": 24908.0}, {"x": "2021-02", "y": 0.0}, {"x": "2021-04", "y": 0.0}, {"x": "2021-05", "y": 50346.0}, {"x": "2021-07", "y": 0.0}, {"x": "2021-08", "y": 0.0}, {"x": "2021-10", "y": 0.0}, {"x": "2021-11", "y": 0.0}, {"x": "2021-12", "y": 35505.0}, {"x": "2021-3", "y": 153219.0}, {"x": "2021-6", "y": 0.0}, {"x": "2021-9", "y": 67032.0}, {"x": "2022-01", "y": 0.0}, {"x": "2022-03", "y": 0.0}, {"x": "2022-04", "y": 0.0}, {"x": "2022-05", "y": 0.0}, {"x": "2022-06", "y": 0.0}, {"x": "2022-07", "y": 0.0}, {"x": "2022-08", "y": 0.0}, {"x": "2022-09", "y": 0.0}, {"x": "2022-10", "y": 863820.0}, {"x": "2022-11", "y": 35406.0}, {"x": "2022-12", "y": 0.0}, {"x": "2022-2", "y": 0.0}, {"x": "2022-6", "y": 87992.0}, {"x": "2022-8", "y": 0.0}, {"x": "2022-9", "y": 38815.0}, {"x": "2023-01", "y": 0.0}, {"x": "2023-02", "y": 82296.0}, {"x": "2023-04", "y": 6500.0}, {"x": "2023-05", "y": 53434.0}, {"x": "2023-06", "y": 0.0}, {"x": "2023-07", "y": 0.0}, {"x": "2023-09", "y": 0.0}, {"x": "2023-10", "y": 326673.0}, {"x": "2023-11", "y": 340289.0}, {"x": "2023-12", "y": 0.0}, {"x": "2023-3", "y": 20568.0}, {"x": "2023-7", "y": 0.0}, {"x": "2023-8", "y": 0.0}, {"x": "2024-01", "y": 52272.0}, {"x": "2024-02", "y": 0.0}, {"x": "2024-03", "y": 217827.0}, {"x": "2024-04", "y": 162210.0}, {"x": "2024-05", "y": 0.0}, {"x": "2024-06", "y": 0.0}, {"x": "2024-07", "y": 297700.0}, {"x": "2024-08", "y": 0.0}, {"x": "2024-09", "y": 69651.0}, {"x": "2024-10", "y": 181256.0}, {"x": "2024-11", "y": 127898.0}, {"x": "2024-12", "y": 487990.0}, {"x": "2024-5", "y": 180983.0}, {"x": "2025-01", "y": 103659.0}, {"x": "2025-02", "y": 0.0}, {"x": "2025-06", "y": 12338.0}, {"x": "2025-07", "y": 0.0}, {"x": "2025-08", "y": 0.0}, {"x": "2025-09", "y": 0.0}, {"x": "2025-10", "y": 0.0}, {"x": "2025-11", "y": 315259.0}, {"x": "2025-12", "y": 0.0}, {"x": "2025-3", "y": 0.0}, {"x": "2025-4", "y": 194500.0}, {"x": "2025-5", "y": 21186.0}, {"x": "2026-01", "y": 0.0}, {"x": "2026-02", "y": 33008.0}, {"x": "2026-3", "y": 0.0}], "Other": [{"x": "2021-01", "y": 0.0}, {"x": "2021-02", "y": 0.0}, {"x": "2021-04", "y": 17291.0}, {"x": "2021-05", "y": 254994.0}, {"x": "2021-07", "y": 0.0}, {"x": "2021-08", "y": 0.0}, {"x": "2021-10", "y": 0.0}, {"x": "2021-11", "y": 24110.0}, {"x": "2021-12", "y": 0.0}, {"x": "2021-3", "y": 0.0}, {"x": "2021-6", "y": 0.0}, {"x": "2021-9", "y": 0.0}, {"x": "2022-01", "y": 0.0}, {"x": "2022-02", "y": 0.0}, {"x": "2022-03", "y": 174127.0}, {"x": "2022-04", "y": 102167.0}, {"x": "2022-05", "y": 492315.0}, {"x": "2022-06", "y": 0.0}, {"x": "2022-07", "y": 0.0}, {"x": "2022-09", "y": 47403.0}, {"x": "2022-10", "y": 213555.0}, {"x": "2022-11", "y": 125658.0}, {"x": "2022-12", "y": 39225.0}, {"x": "2022-2", "y": 0.0}, {"x": "2022-8", "y": 42444.0}, {"x": "2023-01", "y": 0.0}, {"x": "2023-02", "y": 52900.0}, {"x": "2023-04", "y": 182803.0}, {"x": "2023-05", "y": 0.0}, {"x": "2023-06", "y": 0.0}, {"x": "2023-07", "y": 0.0}, {"x": "2023-08", "y": 1100.0}, {"x": "2023-09", "y": 0.0}, {"x": "2023-10", "y": 48176.0}, {"x": "2023-11", "y": 0.0}, {"x": "2023-12", "y": 0.0}, {"x": "2023-3", "y": 482116.0}, {"x": "2023-7", "y": 0.0}, {"x": "2023-9", "y": 0.0}, {"x": "2024-01", "y": 0.0}, {"x": "2024-02", "y": 39540.0}, {"x": "2024-03", "y": 493433.0}, {"x": "2024-04", "y": 0.0}, {"x": "2024-05", "y": 0.0}, {"x": "2024-06", "y": 0.0}, {"x": "2024-07", "y": 61635.0}, {"x": "2024-08", "y": 2900.0}, {"x": "2024-09", "y": 0.0}, {"x": "2024-10", "y": 0.0}, {"x": "2024-11", "y": 0.0}, {"x": "2024-12", "y": 0.0}, {"x": "2024-4", "y": 44601.0}, {"x": "2024-5", "y": 13095.0}, {"x": "2024-6", "y": 0.0}, {"x": "2025-01", "y": 0.0}, {"x": "2025-02", "y": 358163.0}, {"x": "2025-06", "y": 0.0}, {"x": "2025-07", "y": 0.0}, {"x": "2025-08", "y": 0.0}, {"x": "2025-09", "y": 7044.0}, {"x": "2025-10", "y": 0.0}, {"x": "2025-11", "y": 39103.0}, {"x": "2025-12", "y": 0.0}, {"x": "2025-3", "y": 153662.0}, {"x": "2025-4", "y": 74704.0}, {"x": "2025-5", "y": 50445.0}, {"x": "2026-01", "y": 0.0}, {"x": "2026-02", "y": 42000.0}, {"x": "2026-3", "y": 55241.0}]};
-    var DEST_PIE_DATA   = {"China": 952111.0, "Korea": 85754.0, "Hong Kong": 4018.0, "Other": 5980.0, "year": 2025};
+    /* DEST_PIE_DATA removed per F-12 (pie chart removed). */
     var DEST_COLOURS = {
       'China':      '#A78230',
       'Korea':      '#1A5276',
@@ -613,58 +481,7 @@
         }
       });
 
-      /* ── C2: Pie chart ──────────────────────────────────────────────── */
-      var ctxPie = document.getElementById('chart-destination-pie');
-      if (!ctxPie) return;
-      if (!DEST_PIE_DATA || !DEST_PIE_DATA.year) return;
-
-      var pieLabels = [];
-      var pieData   = [];
-      var pieColours = [];
-      DEST_ORDER.forEach(function (c) {
-        var kg = DEST_PIE_DATA[c] || 0;
-        if (kg > 0) {
-          pieLabels.push(c);
-          pieData.push(kg);
-          pieColours.push(DEST_COLOURS[c]);
-        }
-      });
-
-      if (!pieLabels.length) return;
-
-      var totalKg = pieData.reduce(function (a, b) { return a + b; }, 0);
-
-      new Chart(ctxPie.getContext('2d'), {
-        type: 'pie',
-        data: {
-          labels: pieLabels,
-          datasets: [{
-            data: pieData,
-            backgroundColor: pieColours,
-            borderColor: '#FFFFFF',
-            borderWidth: 2
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'right',
-              align: 'center',
-              labels: { boxWidth: 12, padding: 12 }
-            },
-            tooltip: {
-              callbacks: {
-                label: function (ctx) {
-                  var pct = totalKg > 0 ? (ctx.parsed / totalKg * 100).toFixed(1) : '0.0';
-                  return ctx.label + ': ' + Math.round(ctx.parsed).toLocaleString() + ' kg (' + pct + '%)';
-                }
-              }
-            }
-          }
-        }
-      });
+      /* C2 (pie chart) removed per Commander feedback F-12. */
     }());
 
     /* ── Panel D — QIA imports by origin ────────────────────────────── */
@@ -766,8 +583,7 @@
         volChart.data.datasets = buildVolDatasets(sel.nz, sel.qia, sel.kstat);
         volChart.update();
 
-        /* Rebuild Panel B datasets (QIA never in Panel B) */
-        updatePriceChart(sel.nz, sel.kstat);
+        /* Panel B (unit price) removed per F-06 — no price chart to update. */
       });
     });
 
@@ -1141,6 +957,690 @@
 
       
       
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
       
         
       
