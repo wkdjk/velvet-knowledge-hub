@@ -1175,6 +1175,11 @@ details.discrepancy-accordion[open] .discrepancy-accordion__chevron {
     display: none;
   }
 
+  /* R-2 / PS-1: Keep accordion trigger and expanded body on the same page */
+  .discrepancy-accordion {
+    page-break-inside: avoid;
+  }
+
   /* C-3e: Chart panels — keep together across page breaks */
   .chart-panel {
     page-break-inside: avoid;
@@ -1261,8 +1266,14 @@ details.discrepancy-accordion[open] .discrepancy-accordion__chevron {
   }
 
   /* Page margins — bottom ≥ 22 mm for Playwright footer clearance (L-8) */
+  /* R-1: Page numbers at bottom-centre for board-pack readability */
   @page {
     margin: 20mm 20mm 25mm 20mm;
+    @bottom-center {
+      content: counter(page) " / " counter(pages);
+      font-size: 9pt;
+      color: #777777;
+    }
   }
 
   /* Remove page-level padding that duplicates @page margins */

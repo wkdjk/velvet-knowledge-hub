@@ -1081,7 +1081,9 @@ def _aggregate_nz_by_destination(nz_rows: list[dict]) -> dict[str, dict[str, flo
     for row in nz_rows:
         if str(row.get("unit", "")) != "NZD":
             continue
-        date_str = str(row.get("date", ""))
+        # R-4: normalise date so "2022-2" → "2022-02" before aggregation,
+        # preventing unpadded x-axis labels in the stacked area chart.
+        date_str = _normalise_date_str(str(row.get("date", "")))
         if not date_str:
             continue
         try:
