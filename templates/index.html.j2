@@ -917,7 +917,8 @@
           {% for article in publishable %}
             <li class="article-entry">
               <div class="article-body">
-                <a class="article-title" href="{{ article.url | default('#') }}" target="_blank" rel="noopener noreferrer">{{ article.title_ko | default("") }}</a>
+                {# C-6a: live KVN_Articles sheet column swap — 'title' col holds the URL; 'url' col holds the Korean title text (confirmed C-5h). Use article.title for href, article.url for display text. #}
+                <a class="article-title" href="{{ article.title | default('#') }}" target="_blank" rel="noopener noreferrer">{{ article.url | default("") }}</a>
                 <p class="article-summary">{{ article.english_summary | default("") }}</p>
               </div>
               <div class="article-meta">

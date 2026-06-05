@@ -51,11 +51,15 @@ _IMPORT_INTELLIGENCE_CSV_HEADERS = [
 IMPORT_INTELLIGENCE_CSV = DOWNLOADS_DIR / "import_intelligence.csv"
 
 # Column order for the news_pulse CSV export.
-# Matches KVN_Articles tab schema (from classify_articles.py).
+# Column order for the news_pulse CSV export.
+# C-6a: updated to match the *actual* live KVN_Articles tab column names
+# (confirmed C-5h: 'title' col = article URL, 'url' col = Korean title text,
+# 'source' col = source name). Previous assumed-schema names (title_ko,
+# description, source_name, source_type, keyword_matched) are absent from the
+# live tab and produced empty CSV columns. Replaced with live tab column names.
 _NEWS_PULSE_CSV_HEADERS = [
-    "content_hash", "url", "title_ko", "description", "published_date",
-    "source_name", "source_type", "keyword_matched",
-    "category", "english_summary", "ai_processed_at", "include_on_site",
+    "article_id", "title", "url", "content_hash", "published_date",
+    "source", "category", "english_summary", "ai_processed_at", "include_on_site",
 ]
 
 SCOPES = [
@@ -1377,9 +1381,21 @@ def _write_trade_flows_csv(sections: dict) -> None:
 
     Creates docs/downloads/ if it does not exist.
     No-ops silently if trade_flows section has no data.
+
+    F-05 / C-6a: normalise date strings to ISO YYYY-MM format before writing.
+    Source sheets store some months without zero-padding (e.g. "2026-3").
+    The downloadable CSV must be fully ISO-compliant for external readers.
     """
     trade_data = sections.get("trade_flows", {}).get("data", [])
     DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Normalise dates before writing — copy each row to avoid mutating in-memory data.
+    rows_out = []
+    for row in trade_data:
+        out = dict(row)
+        if out.get("date"):
+            out["date"] = _normalise_date_str(str(out["date"]))
+        rows_out.append(out)
 
     with TRADE_FLOWS_CSV.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(
@@ -1388,9 +1404,9 @@ def _write_trade_flows_csv(sections: dict) -> None:
             extrasaction="ignore",
         )
         writer.writeheader()
-        writer.writerows(trade_data)
+        writer.writerows(rows_out)
 
-    print(f"  trade_flows.csv: {len(trade_data)} rows → {TRADE_FLOWS_CSV}")
+    print(f"  trade_flows.csv: {len(rows_out)} rows → {TRADE_FLOWS_CSV}")
 
 
 def _write_import_intelligence_csv(sections: dict) -> None:
@@ -1440,12 +1456,10 @@ def _write_news_pulse_csv(sections: dict) -> None:
     """
     all_news = sections.get("news_pulse", {}).get("data", [])
 
-    # Filter to include_on_site truthy — Sheets writes "TRUE" / "FALSE" strings
-    # (see classify_articles.py line: include_val = "TRUE" if ... else "FALSE").
-    publishable = [
-        row for row in all_news
-        if str(row.get("include_on_site", "")).strip().upper() in ("TRUE", "1", "YES")
-    ]
+    # Filter to include_on_site truthy — use _is_truthy() to match build.py KPI
+    # and template predicate (L-COUNT-LIST: all three must use the same test).
+    # C-6a: _is_truthy() handles bool/int/str forms from Sheets coercion.
+    publishable = [row for row in all_news if _is_truthy(row.get("include_on_site", ""))]
 
     DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
