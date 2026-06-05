@@ -651,7 +651,183 @@ footer .caption:last-child {
   cursor: pointer;
 }
 
-/* ── 5c. TRADE FLOWS C-3e COMPONENTS ─────────────────────── */
+/* ── 5c. IMPORT INTELLIGENCE C-4e COMPONENTS ─────────────── */
+
+/* D-2: Price placeholder — compact pending-state card (not a full chart frame) */
+.price-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-left: 3px solid var(--border);  /* grey — NOT gold; dashed = pending */
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+  margin-bottom: 0;
+  margin-top: 20px;
+}
+
+.price-placeholder::before {
+  content: "\25CB";   /* hollow circle — pending state icon, pure CSS */
+  font-size: 1rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* D-3: Table scroll wrapper — horizontal scroll on mobile */
+.table-scroll-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
+  margin-top: 12px;
+}
+
+/* Scroll hint — right-side fade (visible only when content overflows) */
+.table-scroll-wrapper::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 32px;
+  height: 100%;
+  background: linear-gradient(to right, transparent, var(--surface));
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.table-scroll-wrapper.is-overflowing::after {
+  opacity: 1;
+}
+
+/* D-3: Import records table — column widths and typography */
+.import-records-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+}
+
+.import-records-table caption {
+  text-align: left;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  caption-side: top;
+  padding-bottom: 6px;
+}
+
+.import-records-table thead th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 6px 8px;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+  text-align: left;
+}
+
+.import-records-table tbody td {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border);
+  line-height: 1.4;
+}
+
+/* Date column — 90 px, no wrap */
+.import-records-table td:nth-child(1),
+.import-records-table th:nth-child(1) {
+  width: 90px;
+  white-space: nowrap;
+}
+
+/* Product origin column — 70 px */
+.import-records-table td:nth-child(2),
+.import-records-table th:nth-child(2) {
+  width: 70px;
+}
+
+/* Export country column — 90 px */
+.import-records-table td:nth-child(3),
+.import-records-table th:nth-child(3) {
+  width: 90px;
+}
+
+/* Exporter column — 160 px */
+.import-records-table td:nth-child(4),
+.import-records-table th:nth-child(4) {
+  width: 160px;
+}
+
+/* Importer column — 160 px */
+.import-records-table td:nth-child(5),
+.import-records-table th:nth-child(5) {
+  width: 160px;
+}
+
+/* Product name column — auto (absorbs remaining width) */
+
+/* Type column — 70 px */
+.import-records-table td:nth-child(7),
+.import-records-table th:nth-child(7) {
+  width: 70px;
+}
+
+/* Row hover — surface-deep; no gold highlight (D-10) */
+.import-records-table tbody tr:hover td {
+  background: var(--surface-deep);
+}
+
+/* D-4: Table controls row — show-more button + download CSV */
+.table-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+}
+
+/* D-4: Show-more text link — gold accent for interactive affordance */
+.show-more-btn {
+  display: inline-block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--accent);           /* #A78230 — gold for interactive text */
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.show-more-btn:hover {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+/* D-6: Chart scope note — above MFDS chart canvas */
+.chart-scope-note {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-bottom: 10px;
+  font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+}
+
+/* D-9/D-11: Table footnote — same weight as .source-footnote */
+.table-footnote {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin-top: 12px;
+}
+
+/* ── 5d. TRADE FLOWS C-3e COMPONENTS ─────────────────────── */
 
 /* YoY KPI chip */
 .trade-flows-kpi-chip {
@@ -951,6 +1127,33 @@ details.discrepancy-accordion[open] .discrepancy-accordion__chevron {
   /* C-3e: Accordion — expand body for print (DINZ board receives PDF) */
   .discrepancy-accordion__body {
     display: block !important;
+  }
+
+  /* C-4e: Price placeholder — keep visible in print */
+  .price-placeholder {
+    border: 1px solid #999;
+    border-left: 3px solid #999;
+  }
+
+  /* C-4e: Table scroll wrapper — remove overflow in print */
+  .table-scroll-wrapper {
+    overflow: visible;
+  }
+
+  /* C-4e: Scroll hint fade — suppress in print */
+  .table-scroll-wrapper::after {
+    display: none;
+  }
+
+  /* C-4e: Show-more button — hide in print; all rows shown via display:table-row */
+  .show-more-btn {
+    display: none;
+  }
+
+  /* C-4e: Import records table — no page break within a row; show all rows */
+  .import-records-table tbody tr {
+    page-break-inside: avoid;
+    display: table-row !important;
   }
 
   .discrepancy-accordion__trigger .discrepancy-accordion__chevron {

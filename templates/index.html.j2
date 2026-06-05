@@ -12,7 +12,7 @@
 <header>
   <div class="page-wrapper">
     <h1>Velvet Knowledge Hub</h1>
-    <p class="tagline">Korea deer velvet market intelligence — NZ exporters and DINZ</p>
+    <p class="tagline">Korea deer velvet market intelligence for the New Zealand deer industry</p>
     <p class="last-built caption">Last built: {{ meta.last_built_utc | default(build_date) | default("—") }}</p>
   </div>
 </header>
@@ -22,44 +22,36 @@
 <div class="page-wrapper">
   <div class="kpi-strip">
 
-    {# KPI 1: Latest NZ export volume — from VTW_Trade_Monthly, series=nz_export #}
+    {# KPI 1: NZ exports rolling 12-month in tonnes — A-1 #}
     <div class="kpi-card">
-      <p class="kpi-label">NZ EXPORT VOLUME</p>
-      {% if kpi is defined and kpi.nz_export_volume %}
-        <p class="kpi-value">{{ kpi.nz_export_volume.value }}</p>
-        <p class="delta-indicator {{ kpi.nz_export_volume.delta_class }}">
-          {{ kpi.nz_export_volume.delta_symbol }} {{ kpi.nz_export_volume.delta_pct }} vs prior month
-        </p>
-      {% elif kpi is defined and kpi.nz_export_latest is defined and kpi.nz_export_latest != "—" %}
+      <p class="kpi-label">NZ EXPORTS (ROLLING 12-MONTH)</p>
+      {% if kpi is defined and kpi.nz_export_latest is defined and kpi.nz_export_latest != "—" %}
         <p class="kpi-value">{{ kpi.nz_export_latest }}</p>
         {% if kpi.nz_export_delta is defined and kpi.nz_export_delta != "—" %}
           <p class="delta-indicator">{{ kpi.nz_export_delta }}</p>
         {% endif %}
+        <p class="delta-indicator delta-neutral">tonnes dried-equivalent — Stats NZ</p>
       {% else %}
         <p class="kpi-value text-muted">—</p>
       {% endif %}
     </div>
 
-    {# KPI 2: News articles past 30 days — from KVN_Articles #}
+    {# KPI 2: News articles past 30 days — A-2: sub-label removed #}
     <div class="kpi-card">
       <p class="kpi-label">NEWS ARTICLES (30 DAYS)</p>
-      {% if kpi is defined and kpi.news_count_30d is defined and kpi.news_count_30d is not none %}
-        <p class="kpi-value">{{ kpi.news_count_30d }}</p>
-        <p class="delta-indicator delta-neutral">articles classified</p>
-      {% elif kpi is defined and kpi.articles_30d is defined and kpi.articles_30d != "—" %}
+      {% if kpi is defined and kpi.articles_30d is defined and kpi.articles_30d != "—" %}
         <p class="kpi-value">{{ kpi.articles_30d }}</p>
-        <p class="delta-indicator delta-neutral">articles classified</p>
       {% else %}
         <p class="kpi-value text-muted">—</p>
       {% endif %}
     </div>
 
-    {# KPI 3: Latest MFDS import record date — from VFI_Import_Records #}
+    {# KPI 3: Food imports last 30 days — A-3 (replaces mfds_latest_date) #}
     <div class="kpi-card">
-      <p class="kpi-label">LATEST IMPORT RECORD / 최신 수입 기록</p>
-      {% if kpi is defined and kpi.mfds_latest_date is defined and kpi.mfds_latest_date != "—" %}
-        <p class="kpi-value data">{{ kpi.mfds_latest_date }}</p>
-        <p class="delta-indicator delta-neutral">most recent import record</p>
+      <p class="kpi-label">FOOD IMPORTS (LAST 30 DAYS)</p>
+      {% if kpi is defined and kpi.food_imports_30d is defined and kpi.food_imports_30d != "—" %}
+        <p class="kpi-value">{{ kpi.food_imports_30d }}</p>
+        <p class="delta-indicator delta-neutral">notifications — food channel (MFDS)</p>
       {% else %}
         <p class="kpi-value text-muted">—</p>
       {% endif %}
@@ -166,12 +158,12 @@
 
       {% if tf_qia_by_origin and tf_qia_by_origin | length > 0 %}
         <div class="chart-panel">
-          <h3>South Korean velvet imports by origin — QIA quarantine records (KG)</h3>
+          <h3>South Korean velvet imports by origin — QIA quarantine records (kg)</h3>
           <div class="chart-canvas-wrapper" style="height:300px;">
             <canvas id="chart-qia-origin"
               aria-label="South Korean deer velvet imports by country of origin, grouped bar chart" role="img"></canvas>
           </div>
-          <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Volumes shown as raw import KG as recorded at quarantine inspection. No dried-equivalent conversion applied.</p>
+          <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Volumes shown as raw import kg as recorded at quarantine inspection. No dried-equivalent conversion applied.</p>
         </div>
       {% else %}
         <div class="placeholder-card">
@@ -620,113 +612,249 @@
   </script>
   {% endif %}
 
-  {# ── B-7 price chart — separate IIFE, always available ───────────── #}
+  {# ── MFDS annual statistics chart — rendered when VFI_Price_Annual has data #}
+  {# A-4/D-7: series label = "Korean herbal medicine channel (MFDS annual statistics)" #}
+  {# D-10: bar colour = rgba(26,82,118,0.75) (dark blue, not gold)                     #}
   <script>
   (function () {
     var priceSeriesData = {{ price_annual_series | tojson }};
     if (!priceSeriesData || !priceSeriesData.length) return;
     var canvas = document.getElementById('b7PriceChart');
     if (!canvas) return;
+
+    /* A-4: Override series label per CDR Decision 5. */
+    /* If priceSeriesData has entries, relabel the first (primary) series. */
+    if (priceSeriesData.length > 0) {
+      priceSeriesData[0].label = 'Korean herbal medicine channel (MFDS annual statistics)';
+      priceSeriesData[0].borderColor = '#1A5276';
+      priceSeriesData[0].backgroundColor = 'rgba(26, 82, 118, 0.75)';
+    }
+
+    /* Build year labels from the first series data points. */
+    var yearLabels = (priceSeriesData[0].data || []).map(function (pt) {
+      return String(pt.x);
+    });
+
+    /* Convert {x, y} data to flat arrays aligned to yearLabels. */
+    var datasets = priceSeriesData.map(function (ds) {
+      var lookup = {};
+      (ds.data || []).forEach(function (pt) { lookup[String(pt.x)] = pt.y; });
+      return Object.assign({}, ds, {
+        data: yearLabels.map(function (yr) { return lookup[yr] || 0; })
+      });
+    });
+
     new Chart(canvas.getContext('2d'), {
-      type: 'line',
-      data: { datasets: priceSeriesData },
+      type: 'bar',
+      data: { labels: yearLabels, datasets: datasets },
       options: {
         responsive: true,
-        maintainAspectRatio: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            align: 'start',
+            labels: { boxWidth: 12, padding: 14 }
+          },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                return 'Korean herbal medicine channel — USD ' + ctx.parsed.y.toLocaleString() + ' thousands';
+              }
+            }
+          }
+        },
         scales: {
           x: {
             type: 'category',
             title: { display: true, text: 'Year' },
-            grid: { color: '#EFEFEF' }
+            ticks: { maxTicksLimit: 11 },
+            grid: { color: 'rgba(204,204,204,0.4)' }
           },
           y: {
-            title: { display: true, text: 'Price (KRW/kg)' },
+            beginAtZero: true,
+            title: { display: true, text: 'USD thousands' },
             ticks: { callback: function (v) { return v.toLocaleString(); } },
-            grid: { color: '#EFEFEF' }
+            grid: { color: 'rgba(204,204,204,0.4)' }
           }
-        },
-        plugins: {
-          legend: { display: true, position: 'bottom', labels: { boxWidth: 14, padding: 16 } }
         }
       }
     });
   }());
   </script>
 
-  {# ── SECTION: IMPORT INTELLIGENCE ─────────────────────────────────── #}
-  {# B-7: price chart + records table. Each component degrades independently. #}
+  {# ── SECTION: IMPORT INTELLIGENCE — C-4e redesign ─────────────────── #}
+  {# F-17: all Korean text removed. F-16: 3-row default + "Show last 30 days". #}
+  {# F-18: new column order with exporter. B-9/B-14: accordion added.         #}
   {% set import_intelligence = sections.import_intelligence if sections is defined and sections.import_intelligence is defined else {} %}
   <section id="import-intelligence">
 
     <div class="section-header">
       <div class="section-header-left">
-        <h2>Import intelligence / 수입 현황</h2>
-        <span class="last-updated">Last updated / 최종 업데이트: {{ import_intelligence.last_updated | default("—") }}</span>
+        <h2>Import intelligence</h2>
+        <span class="last-updated">Last updated: {{ import_intelligence.last_updated | default("—") }}</span>
       </div>
       {% if import_records_has_data or price_annual_has_data %}
-        <a class="download-btn" href="downloads/import_intelligence.csv">Download CSV / CSV 다운로드</a>
+        <a class="download-btn" href="downloads/import_intelligence.csv">Download CSV</a>
       {% endif %}
     </div>
 
-    <p class="source-footnote">Korea's deer velvet import records and annual price benchmarks from the MFDS import database — sourced for DINZ market intelligence use.</p>
+    <p class="source-footnote">Korea deer velvet import data drawn from two MFDS (Ministry of Food and Drug Safety, Korea) sources: annual herbal medicine channel statistics and food ingredient import notifications. See table footnote for full attribution.</p>
 
-    {# ── Price chart sub-section (independent degradation) ─────────────── #}
+    {# ── MFDS annual statistics chart / price placeholder ──────────────── #}
+    {# D-2: compact placeholder card when no data. D-6: scope note above canvas. #}
     {% if price_annual_has_data %}
       <div class="chart-panel" id="b7-price-chart">
-        <h3 class="chart-title">Annual import price by country of origin / 원산지별 연도별 수입 단가</h3>
+        <h3>Annual import value — Korean herbal medicine channel (MFDS statistics)</h3>
+        <p class="chart-scope-note">Herbal medicine channel only — does not include food ingredient imports shown in the table below.</p>
         {% if price_annual_subtitle %}
           <p class="chart-subtitle">Latest ranked price: KRW {{ price_annual_subtitle.price_krw }} ({{ price_annual_subtitle.year }})</p>
         {% endif %}
-        <div class="chart-container">
-          <canvas id="b7PriceChart" aria-label="Annual import price by country of origin, 2004 to 2024"></canvas>
+        <div class="chart-canvas-wrapper" style="height:280px;">
+          <canvas id="b7PriceChart" aria-label="Annual import value, Korean herbal medicine channel, MFDS statistics 2004 to 2024"></canvas>
         </div>
-        <p class="source-footnote">Source: MFDS 수입식품 영양성분 통계집, Table 6-3-8 (Korea Ministry of Food and Drug Safety annual import statistical report). Price rankings cover 2004–2024; country series reflect declared CIF value per kg.</p>
+        <p class="chart-annotation">Source: MFDS (Ministry of Food and Drug Safety, Korea) annual statistics yearbook, Table 6-3-8. Korean herbal medicine channel only. Covers 2004–2024. Does not include food ingredient imports.</p>
       </div>
     {% else %}
-      <div class="placeholder-card">
-        <p class="placeholder-title">No price data available</p>
-        <p class="placeholder-body">No price data available. Data will appear here once the MFDS annual price tab is populated.</p>
+      <div class="price-placeholder">Annual price data will appear here once available.</div>
+    {% endif %}
+
+    {# ── Import records table (independent degradation) ─────────────────── #}
+    {% if import_records_has_data %}
+      <h3 style="margin-top:32px;">Import records</h3>
+      <p class="source-footnote">MFDS-registered deer velvet food-channel import notifications.</p>
+
+      <div class="table-scroll-wrapper" id="import-table-wrapper">
+        <table class="import-records-table" id="import-records-table">
+          <caption>Korea deer velvet food import notifications</caption>
+          <thead>
+            <tr>
+              <th scope="col">Date</th>
+              <th scope="col">Product origin</th>
+              <th scope="col">Export country</th>
+              <th scope="col">Exporter</th>
+              <th scope="col">Importer</th>
+              <th scope="col">Product name</th>
+              <th scope="col">Type</th>
+            </tr>
+          </thead>
+          <tbody id="import-records-tbody">
+            {% for row in import_records_display %}
+              <tr class="import-row{% if row._in_last_30d %} row-30d{% endif %}"
+                  data-date="{{ row._display_date }}"
+                  style="{% if not loop.first and loop.index > 3 %}display:none{% endif %}">
+                <td class="data">{{ row._display_date }}</td>
+                <td>{{ row._display_origin }}</td>
+                <td>{{ row._display_export_country }}</td>
+                <td>{{ row._display_exporter }}</td>
+                <td>{{ row._display_importer }}</td>
+                <td>{{ row._display_product }}</td>
+                <td>{{ row._display_type }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-controls">
+        <button class="show-more-btn" id="show-more-btn" type="button"
+                onclick="toggleImportRows(this)">Show last 30 days</button>
+        <a class="download-btn" href="downloads/import_intelligence.csv">Download CSV</a>
+      </div>
+
+      <p class="table-footnote">Source: Korea Ministry of Food and Drug Safety import notification database. Importer names translated from Korean using curated lookup; exporter names appear as recorded in MFDS source data.</p>
+
+    {% else %}
+      <div class="placeholder-card" style="margin-top:32px;">
+        <p class="placeholder-title">No import records available</p>
+        <p class="placeholder-body">Data will appear here once the MFDS import records tab is populated.</p>
       </div>
     {% endif %}
 
-    {# ── Records table sub-section (independent degradation) ───────────── #}
-    {% if import_records_has_data %}
-      <h3>Import records / 수입 기록</h3>
-      <p class="source-footnote">MFDS-registered deer velvet import notifications / MFDS 등록 녹용 수입 신고 내역</p>
-      <p class="table-record-count">Showing {{ import_records_display | length }} most recent of {{ import_records_total }} records. / 상위 {{ import_records_display | length }}건 표시 (전체 {{ import_records_total }}건 중)</p>
-      <table class="data-table">
-        <caption>Import records / 수입 기록</caption>
-        <thead>
-          <tr>
-            <th scope="col">Notification date / 신고일</th>
-            <th scope="col">Importer / 수입업체</th>
-            <th scope="col">Product name / 품명</th>
-            <th scope="col">Product type / 품목유형</th>
-            <th scope="col">Country of origin / 원산지</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in import_records_display %}
-            <tr>
-              <td class="data">{{ row.date | default("") }}</td>
-              <td>{{ row._display_importer | default("—") }}</td>
-              <td>{{ row._display_product | default("—") }}</td>
-              <td>{{ row.product_type_en | default("—") }}</td>
-              <td>{{ row.country_origin_en | default("—") }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      <p class="source-footnote">Source: MFDS 수입식품 정보마루 (Korea Ministry of Food and Drug Safety import notification database). Records reflect official import notifications filed with MFDS. Data as of last build date.</p>
-      <a class="table-download-inline" href="downloads/import_intelligence.csv">Download full dataset / 전체 데이터 다운로드</a>
-    {% else %}
-      <div class="placeholder-card">
-        <p class="placeholder-title">No import records available</p>
-        <p class="placeholder-body">No import records available. Data will appear here once the MFDS import records tab is populated.</p>
+    {# ── F-14 accordion — channel scope explanation ───────────────────── #}
+    <details class="discrepancy-accordion" style="margin-top:20px;">
+      <summary class="discrepancy-accordion__trigger" aria-label="Why do different sources show different import volumes?">
+        <span>ⓘ Why do different sources show different import volumes?</span>
+        <span class="discrepancy-accordion__chevron" aria-hidden="true">&#9654;</span>
+      </summary>
+      <div class="discrepancy-accordion__body">
+        <h4>Why the chart and table show different figures</h4>
+        <p>Two separate Korean government data sources appear in this section. They cover different import channels — the numbers are not directly comparable, and neither is wrong.</p>
+        <p><strong>The chart</strong> (MFDS annual statistics) records deer velvet imported into Korea as a <em>herbal medicine or pharmaceutical ingredient</em>. This is a distinct regulatory channel governed by Korea's pharmaceutical authority. Figures show total annual value in USD, 2004–2024.</p>
+        <p><strong>The records table</strong> (MFDS food import notifications) records deer velvet imported as a <em>food ingredient</em>. These are individual shipment notifications filed under Korea's food safety system, 2016–2026.</p>
+        <p><strong>Two further points to note:</strong></p>
+        <ul style="padding-left:20px;margin-top:6px;">
+          <li style="margin-bottom:6px;">A third channel exists — sliced velvet imported as a food supplement under a separate product classification — which neither source covers. Total Korean deer velvet imports are therefore higher than either source shows alone.</li>
+          <li>NZ supplied 66% of Korea's herbal medicine channel imports by value in 2024 (USD 18.5 million of USD 28.0 million total).</li>
+        </ul>
       </div>
-    {% endif %}
+    </details>
 
   </section>
+
+  {# ── Import records JS — show/hide rows (client-side, no rebuild) ──── #}
+  <script>
+  (function () {
+    var CUTOFF = '{{ cutoff_30d }}';
+
+    function toggleImportRows(btn) {
+      var tbody = document.getElementById('import-records-tbody');
+      if (!tbody) return;
+      var rows = tbody.querySelectorAll('tr.import-row');
+      var expanded = btn.getAttribute('data-expanded') === 'true';
+
+      if (!expanded) {
+        /* Expand: show rows within last 30 days */
+        var shown = 0;
+        rows.forEach(function (row) {
+          var rowDate = row.getAttribute('data-date') || '';
+          if (rowDate >= CUTOFF) {
+            row.style.display = '';
+            shown++;
+          }
+        });
+        /* If no rows matched, show first 10 as fallback */
+        if (shown === 0) {
+          var fallback = 0;
+          rows.forEach(function (row) {
+            if (fallback < 10) { row.style.display = ''; fallback++; }
+          });
+        }
+        btn.textContent = 'Show fewer';
+        btn.setAttribute('data-expanded', 'true');
+        /* Scroll hint */
+        checkOverflow();
+      } else {
+        /* Collapse: show only first 3 rows */
+        rows.forEach(function (row, idx) {
+          row.style.display = idx < 3 ? '' : 'none';
+        });
+        btn.textContent = 'Show last 30 days';
+        btn.setAttribute('data-expanded', 'false');
+      }
+    }
+
+    /* Expose for inline onclick */
+    window.toggleImportRows = toggleImportRows;
+
+    /* Scroll hint: add .is-overflowing if table wider than wrapper */
+    function checkOverflow() {
+      var wrapper = document.getElementById('import-table-wrapper');
+      if (!wrapper) return;
+      var table = wrapper.querySelector('table');
+      if (!table) return;
+      if (table.scrollWidth > wrapper.clientWidth) {
+        wrapper.classList.add('is-overflowing');
+      } else {
+        wrapper.classList.remove('is-overflowing');
+      }
+    }
+
+    window.addEventListener('resize', checkOverflow);
+    checkOverflow();
+  }());
+  </script>
 
   {# ── SECTION: MARKET PRESENCE (enabled: false — hardcoded placeholder) #}
   {# No download button. No last-updated label. Static "coming next phase" card. #}

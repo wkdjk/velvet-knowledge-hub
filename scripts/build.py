@@ -411,10 +411,12 @@ def compute_kpis(sections: dict) -> dict:
     Compute KPI values from assembled section data.
 
     Returns kpi dict:
-      nz_export_latest  — latest value from nz_export data rows
+      nz_export_latest  — rolling 12-month sum of dried-equivalent KG, in tonnes
+                          (A-1: NZ EXPORTS ROLLING 12-MONTH)
       nz_export_delta   — "▲ X%" or "▼ X%" vs prior month, or "—"
       articles_30d      — count of KVN_Articles rows within last 30 days
-      mfds_latest_date  — max date from VFI_Import_Records rows
+      food_imports_30d  — count of VFI_Import_Records rows in last 30 days
+                          (A-3: replaces mfds_latest_date)
 
     Any value that cannot be computed returns "—".
     """
@@ -422,35 +424,39 @@ def compute_kpis(sections: dict) -> dict:
         "nz_export_latest": "—",
         "nz_export_delta": "—",
         "articles_30d": "—",
-        "mfds_latest_date": "—",
+        "food_imports_30d": "—",
     }
 
-    # --- KPI 1 & 2: NZ export (trade_flows section, series=nz_export) -------
-    # Aggregate KG totals by date (same logic as prepare_chart_data) so the KPI
-    # reflects the monthly total across all countries, not a single raw row.
+    # --- KPI 1: NZ export rolling 12-month in tonnes (dried-equivalent) ------
+    # A-1: compute rolling 12-month sum across all NZ export rows, convert to
+    # tonnes (÷1000, 1 decimal place). Uses _compute_dried_eq_kg and
+    # _compute_rolling_12m which are defined in the chart data helpers below.
     trade_data = sections.get("trade_flows", {}).get("data", [])
     nz_export_rows = [r for r in trade_data if r.get("series") == "nz_export"]
 
     if nz_export_rows:
         try:
-            nz_kg_by_date = _aggregate_series_by_date(nz_export_rows, "KG")
-            if nz_kg_by_date:
-                sorted_dates = sorted(nz_kg_by_date.keys(), reverse=True)
+            nz_dried_eq = _compute_dried_eq_kg(nz_export_rows, "KG")
+            if nz_dried_eq:
+                nz_rolling = _compute_rolling_12m(nz_dried_eq)
+                sorted_dates = sorted(nz_rolling.keys(), reverse=True)
                 latest_date = sorted_dates[0]
-                latest_kg = nz_kg_by_date[latest_date]
-                kpi["nz_export_latest"] = f"{int(latest_kg):,}"
+                latest_rolling_kg = nz_rolling[latest_date]
+                latest_tonnes = round(latest_rolling_kg / 1000, 1)
+                kpi["nz_export_latest"] = f"{latest_tonnes:,.1f}"
 
+                # Delta: compare latest rolling total vs prior month rolling total.
                 if len(sorted_dates) >= 2:
                     prior_date = sorted_dates[1]
-                    prior_kg = nz_kg_by_date[prior_date]
-                    if prior_kg != 0:
-                        delta_pct = (latest_kg - prior_kg) / prior_kg * 100
+                    prior_rolling_kg = nz_rolling[prior_date]
+                    if prior_rolling_kg != 0:
+                        delta_pct = (latest_rolling_kg - prior_rolling_kg) / prior_rolling_kg * 100
                         symbol = "▲" if delta_pct >= 0 else "▼"
                         kpi["nz_export_delta"] = f"{symbol} {abs(delta_pct):.1f}%"
         except (ValueError, TypeError, ZeroDivisionError):
             pass
 
-    # --- KPI 3: Articles past 30 days ----------------------------------------
+    # --- KPI 2: Articles past 30 days ----------------------------------------
     news_data = sections.get("news_pulse", {}).get("data", [])
     if news_data:
         cutoff = date.today() - timedelta(days=30)
@@ -468,16 +474,23 @@ def compute_kpis(sections: dict) -> dict:
                 continue
         kpi["articles_30d"] = str(count)
 
-    # --- KPI 4: Latest MFDS import date ---------------------------------------
+    # --- KPI 3: Food imports last 30 days (A-3) --------------------------------
+    # Count VFI_Import_Records rows with notification date >= today - 30 days.
     import_data = sections.get("import_intelligence", {}).get("data", [])
     if import_data:
-        date_values = [
-            str(r.get("date", ""))
-            for r in import_data
-            if r.get("date") and str(r.get("date", "")).strip()
-        ]
-        if date_values:
-            kpi["mfds_latest_date"] = max(date_values)
+        cutoff = date.today() - timedelta(days=30)
+        count = 0
+        for row in import_data:
+            raw_date = str(row.get("date", "")).strip()
+            if not raw_date:
+                continue
+            try:
+                row_date = datetime.strptime(raw_date[:10], "%Y-%m-%d").date()
+                if row_date >= cutoff:
+                    count += 1
+            except ValueError:
+                continue
+        kpi["food_imports_30d"] = str(count)
 
     return kpi
 
@@ -505,7 +518,9 @@ def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date
     ii = sections.get("import_intelligence", {})
     all_import_records = ii.get("import_records_rows", [])
 
-    # Sort descending by date, then slice to top 30 for display.
+    # Sort descending by date.
+    # B-9: default display is 3 rows; "Show last 30 days" button expands via JS.
+    # We pass ALL sorted records to the template and let JS control visibility.
     try:
         sorted_records = sorted(
             all_import_records,
@@ -515,15 +530,33 @@ def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date
     except Exception:
         sorted_records = all_import_records
 
+    # Determine 30-day cutoff for the JS expand function.
+    cutoff_30d = (date.today() - timedelta(days=30)).isoformat()
+
     import_records_display = []
-    for row in sorted_records[:30]:
+    for row in sorted_records:
         display_row = dict(row)
+        # B-10: new column mapping.
+        # Date: from 'date' field.
+        # Origin: country_origin_en.
+        # Export country: country_export_en.
+        # Exporter: exporter_en (already English in source sheet — all 576 rows populated).
+        # Importer: importer_en.
+        # Product name: product_en or product_name fallback.
+        # Type: product_type_en.
+        display_row["_display_date"] = str(row.get("date", ""))
+        display_row["_display_origin"] = row.get("country_origin_en") or "—"
+        display_row["_display_export_country"] = row.get("country_export_en") or "—"
+        display_row["_display_exporter"] = row.get("exporter_en") or "—"
         display_row["_display_importer"] = (
-            row.get("importer") or row.get("importer_ko") or "—"
+            row.get("importer_en") or row.get("importer") or row.get("importer_ko") or "—"
         )
         display_row["_display_product"] = (
             row.get("product_en") or row.get("product_name") or "—"
         )
+        display_row["_display_type"] = row.get("product_type_en") or "—"
+        # Flag rows within the last 30 days for JS expand control.
+        display_row["_in_last_30d"] = display_row["_display_date"] >= cutoff_30d
         import_records_display.append(display_row)
 
     import_records_total = len(all_import_records)
@@ -559,13 +592,16 @@ def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date
         tf_destination_area=chart_data.get("tf_destination_area", {}),
         tf_destination_pie=chart_data.get("tf_destination_pie", {}),
         tf_qia_by_origin=chart_data.get("tf_qia_by_origin", []),
-        # B-7 import intelligence context.
+        # C-4e import intelligence context.
+        # import_records_display: ALL sorted rows (JS controls 3-row / 30-day view).
         import_records_display=import_records_display,
         import_records_total=import_records_total,
         import_records_has_data=import_records_has_data,
         price_annual_has_data=price_annual_has_data,
         price_annual_series=chart_data.get("b7_price_series", []),
         price_annual_subtitle=b7_price_subtitle,
+        # cutoff_30d: ISO date string for JS row-visibility logic.
+        cutoff_30d=cutoff_30d,
     )
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -1462,8 +1498,8 @@ def main() -> None:
 
     nz = kpi.get("nz_export_latest", "—")
     art = kpi.get("articles_30d", "—")
-    mfds = kpi.get("mfds_latest_date", "—")
-    print(f"  kpis: nz_export={nz} | articles_30d={art} | mfds_latest={mfds}")
+    food_30d = kpi.get("food_imports_30d", "—")
+    print(f"  kpis: nz_export_rolling12m_tonnes={nz} | articles_30d={art} | food_imports_30d={food_30d}")
     tf = sections.get("trade_flows", {})
     kstat_0507 = len(tf.get("kstat_0507", []))
     kstat_0510 = len(tf.get("kstat_0510", []))
