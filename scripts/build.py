@@ -286,7 +286,12 @@ def assemble_sections(config: dict, tab_data: dict) -> dict:
             combined_data.extend(rows)
 
         # Derive last_updated from the most recent date-like value in combined_data.
+        # BR-1: _extract_last_updated already calls _normalise_date_str internally,
+        # but we apply it again here as a belt-and-suspenders guarantee so that the
+        # template always receives a zero-padded YYYY-MM string (never "YYYY-M").
         last_updated = _extract_last_updated(combined_data)
+        if last_updated is not None:
+            last_updated = _normalise_date_str(last_updated)
 
         section_dict: dict = {
             "enabled": True,

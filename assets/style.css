@@ -1132,7 +1132,14 @@ details.discrepancy-accordion[open] .discrepancy-accordion__chevron {
     border-left: 3px solid #888;
   }
 
-  /* C-3e: Accordion — expand body for print (DINZ board receives PDF) */
+  /* C-3e / PS-1: Accordion — expand body for print (DINZ board receives PDF).
+     The .discrepancy-accordion__body rule alone is insufficient when the native
+     <details> element is in the closed state at Playwright render time.
+     Force the <details> element and all its non-summary children to display as
+     block so the body text renders regardless of the element's open attribute. */
+  details { display: block; }
+  details summary { display: block; }
+  details > *:not(summary) { display: block; }
   .discrepancy-accordion__body {
     display: block !important;
   }

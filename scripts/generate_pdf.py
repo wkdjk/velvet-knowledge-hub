@@ -163,6 +163,12 @@ def generate_pdf(source_url: str, output_path: Path, build_date: str) -> int:
         dash_page.goto(source_url, wait_until="networkidle", timeout=60_000)
         # Extra settle time for Chart.js canvas renders (important for print).
         dash_page.wait_for_timeout(2_000)
+        # PS-1: Force all <details> elements open before PDF capture.
+        # CSS display:block on the body div is insufficient when the native
+        # <details> element is in the closed state — the browser hides non-summary
+        # children regardless of CSS. Setting .open = true via JS ensures the DOM
+        # state matches what the print CSS expects.
+        dash_page.evaluate("document.querySelectorAll('details').forEach(el => el.open = true)")
         dashboard_pdf_bytes = dash_page.pdf(
             format="A4",
             print_background=True,
