@@ -36,11 +36,12 @@
       {% endif %}
     </div>
 
-    {# KPI 2: News articles past 30 days — A-2: sub-label removed #}
+    {# KPI 2: News articles past 90 days — C-5e: renamed articles_30d → articles_90d, window 30d → 90d, sub-label added #}
     <div class="kpi-card">
-      <p class="kpi-label">NEWS ARTICLES (30 DAYS)</p>
-      {% if kpi is defined and kpi.articles_30d is defined and kpi.articles_30d != "—" %}
-        <p class="kpi-value">{{ kpi.articles_30d }}</p>
+      <p class="kpi-label">NEWS ARTICLES (LAST 90 DAYS)</p>
+      {% if kpi is defined and kpi.articles_90d is defined and kpi.articles_90d != "—" %}
+        <p class="kpi-value">{{ kpi.articles_90d }}</p>
+        <p class="delta-indicator delta-neutral">relevant articles — Naver + Google News</p>
       {% else %}
         <p class="kpi-value text-muted">—</p>
       {% endif %}
@@ -880,7 +881,8 @@
   {#   content_hash | url | title_ko | description | published_date |          #}
   {#   source_name | source_type | keyword_matched | category |                #}
   {#   english_summary | ai_processed_at | include_on_site                     #}
-  {# Only rows where include_on_site is "TRUE" appear in the article list.     #}
+  {# Only rows where include_on_site is "TRUE" AND published_date >= cutoff_90d #}
+  {# appear in the article list (C-5e: 90-day window applied at render time).  #}
   {% set news_pulse = sections.news_pulse if sections is defined and sections.news_pulse is defined else {} %}
   <section id="news-pulse">
 
@@ -894,18 +896,24 @@
       {% endif %}
     </div>
 
+    {# D-17 / T-27: framing line above article list — scope context before content #}
+    <p class="source-footnote">Korea deer velvet news — Naver and Google News, classified and summarised by AI. Showing relevant articles from the last 90 days.</p>
+
     {% if news_pulse.enabled and news_pulse.has_data %}
 
-      {# Filter to include_on_site == "TRUE" (string written by classify_articles.py) #}
+      {# C-5e D-14: filter to include_on_site == "TRUE" AND published_date >= cutoff_90d #}
+      {# cutoff_90d is injected by build.py as an ISO date string (YYYY-MM-DD).          #}
       {% set publishable = [] %}
       {% for row in news_pulse.data %}
-        {% if row.include_on_site | string | upper in ("TRUE", "1", "YES") %}
+        {% if row.include_on_site | string | upper in ("TRUE", "1", "YES") and row.published_date | string >= cutoff_90d %}
           {% set _ = publishable.append(row) %}
         {% endif %}
       {% endfor %}
 
       {% if publishable %}
-        <ul class="article-list" aria-label="Korea deer velvet news articles">
+        {# D-18: count + period label above the article list #}
+        <p class="article-list-header">{{ publishable | length }} relevant article{{ 's' if publishable | length != 1 else '' }} — last 90 days</p>
+        <ul class="article-list" aria-label="Korea deer velvet relevant articles — last 90 days">
           {% for article in publishable %}
             <li class="article-entry">
               <div class="article-body">
@@ -922,22 +930,24 @@
           {% endfor %}
         </ul>
       {% else %}
-        {# All rows exist but none are include_on_site — placeholder #}
+        {# D-15 State A: data exists but 90-day count = 0 — quiet period, pipeline healthy #}
         <div class="placeholder-card">
-          <p class="placeholder-title">News collection is in progress</p>
-          <p class="placeholder-body">Articles will appear after the next weekly update.</p>
+          <p class="placeholder-title">No relevant articles in the last 90 days.</p>
+          <p class="placeholder-body">Korea deer velvet news is monitored three times per week via Naver and Google News.</p>
         </div>
       {% endif %}
 
-      <p class="source-footnote">Source: Naver News API — Korean-language deer velvet news, classified and summarised by AI (Claude Haiku).</p>
+      {# D-13 / T-35: attribution footnote — both Google News and Naver named #}
+      <p class="source-footnote">Sources: Naver News API · Google News — Korean-language deer velvet news, classified and summarised by AI (Claude Haiku).</p>
 
     {% else %}
-      {# Section enabled but no data yet — graceful degradation (L-12) #}
+      {# D-15 State B: section not enabled or no data rows at all — graceful degradation (L-12) #}
       <div class="placeholder-card">
-        <p class="placeholder-title">News collection is in progress</p>
-        <p class="placeholder-body">Articles will appear after the next weekly update.</p>
+        <p class="placeholder-title">News collection is in progress.</p>
+        <p class="placeholder-body">Articles will appear after the next scheduled update.</p>
       </div>
-      <p class="source-footnote">Source: Naver News API — Korean-language deer velvet news, classified and summarised by AI (Claude Haiku).</p>
+      {# D-13 / T-35: attribution footnote — both branches #}
+      <p class="source-footnote">Sources: Naver News API · Google News — Korean-language deer velvet news, classified and summarised by AI (Claude Haiku).</p>
     {% endif %}
 
   </section>

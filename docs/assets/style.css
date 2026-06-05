@@ -458,6 +458,14 @@ footer .caption:last-child {
    Mobile (≤768 px): stacked column (see responsive block below).
    ──────────────────────────────────────────────────────────── */
 
+/* C-5e D-18: article count + period label above the article list */
+.article-list-header {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+}
+
 /* Article list — replaces legacy .news-list for the new bilingual layout */
 .article-list {
   list-style: none;
@@ -1224,6 +1232,11 @@ details.discrepancy-accordion[open] .discrepancy-accordion__chevron {
   /* B-10 article list: each entry is an atomic unit */
   .article-entry {
     page-break-inside: avoid;
+  }
+
+  /* C-5e D-18: article list header — keep visible in print */
+  .article-list-header {
+    color: var(--text-muted);
   }
 
   /* Footer stays at natural document flow position */

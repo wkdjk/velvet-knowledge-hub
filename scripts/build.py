@@ -414,7 +414,7 @@ def compute_kpis(sections: dict) -> dict:
       nz_export_latest  — rolling 12-month sum of dried-equivalent KG, in tonnes
                           (A-1: NZ EXPORTS ROLLING 12-MONTH)
       nz_export_delta   — "▲ X%" or "▼ X%" vs prior month, or "—"
-      articles_30d      — count of KVN_Articles rows within last 30 days
+      articles_90d      — count of KVN_Articles rows within last 90 days (C-5e: was 30d)
       food_imports_30d  — count of VFI_Import_Records rows in last 30 days
                           (A-3: replaces mfds_latest_date)
 
@@ -423,7 +423,7 @@ def compute_kpis(sections: dict) -> dict:
     kpi: dict = {
         "nz_export_latest": "—",
         "nz_export_delta": "—",
-        "articles_30d": "—",
+        "articles_90d": "—",
         "food_imports_30d": "—",
     }
 
@@ -456,10 +456,10 @@ def compute_kpis(sections: dict) -> dict:
         except (ValueError, TypeError, ZeroDivisionError):
             pass
 
-    # --- KPI 2: Articles past 30 days ----------------------------------------
+    # --- KPI 2: Articles past 90 days (C-5e: changed from 30 to 90) -----------
     news_data = sections.get("news_pulse", {}).get("data", [])
     if news_data:
-        cutoff = date.today() - timedelta(days=30)
+        cutoff = date.today() - timedelta(days=90)
         count = 0
         for row in news_data:
             raw_date = row.get("published_date") or row.get("date", "")
@@ -472,7 +472,7 @@ def compute_kpis(sections: dict) -> dict:
                     count += 1
             except ValueError:
                 continue
-        kpi["articles_30d"] = str(count)
+        kpi["articles_90d"] = str(count)
 
     # --- KPI 3: Food imports last 30 days (A-3) --------------------------------
     # Count VFI_Import_Records rows with notification date >= today - 30 days.
@@ -532,6 +532,8 @@ def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date
 
     # Determine 30-day cutoff for the JS expand function.
     cutoff_30d = (date.today() - timedelta(days=30)).isoformat()
+    # C-5e: 90-day cutoff for news pulse article list filter and KPI count.
+    cutoff_90d = (date.today() - timedelta(days=90)).isoformat()
 
     import_records_display = []
     for row in sorted_records:
@@ -602,6 +604,8 @@ def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date
         price_annual_subtitle=b7_price_subtitle,
         # cutoff_30d: ISO date string for JS row-visibility logic.
         cutoff_30d=cutoff_30d,
+        # C-5e: cutoff_90d for news pulse article list 90-day filter.
+        cutoff_90d=cutoff_90d,
     )
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -1497,9 +1501,9 @@ def main() -> None:
             print(f"    {section_id:<30}: enabled, {rows} rows")
 
     nz = kpi.get("nz_export_latest", "—")
-    art = kpi.get("articles_30d", "—")
+    art = kpi.get("articles_90d", "—")
     food_30d = kpi.get("food_imports_30d", "—")
-    print(f"  kpis: nz_export_rolling12m_tonnes={nz} | articles_30d={art} | food_imports_30d={food_30d}")
+    print(f"  kpis: nz_export_rolling12m_tonnes={nz} | articles_90d={art} | food_imports_30d={food_30d}")
     tf = sections.get("trade_flows", {})
     kstat_0507 = len(tf.get("kstat_0507", []))
     kstat_0510 = len(tf.get("kstat_0510", []))
