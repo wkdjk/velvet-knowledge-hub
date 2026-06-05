@@ -65,16 +65,24 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 # Haiku model ID as specified in the brief.
 _HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
-# KVN_Articles column indices (0-based, from collect_naver.py schema).
-# Header row is: content_hash(0) | url(1) | title_ko(2) | description(3) |
-#   published_date(4) | source_name(5) | source_type(6) | keyword_matched(7) |
-#   category(8) | english_summary(9) | ai_processed_at(10) | include_on_site(11)
-_COL_TITLE_KO = 2
-_COL_DESCRIPTION = 3
-_COL_CATEGORY = 8
-_COL_ENGLISH_SUMMARY = 9
-_COL_AI_PROCESSED_AT = 10
-_COL_INCLUDE_ON_SITE = 11
+# KVN_Articles column indices (0-based, from actual live sheet schema).
+# C-5g fix: original constants assumed collect_naver.py schema (12 columns)
+# but the live sheet has 11 columns in a different order.
+# Verified 2026-06-05 by reading ws.row_values(1) directly from the sheet.
+#
+# Actual header row (0-based):
+#   article_id(0) | title(1) | url(2) | content_hash(3) | published_date(4) |
+#   source(5) | category(6) | english_summary(7) | ai_processed_at(8) |
+#   include_on_site(9) | crawled_at(10)
+#
+# Columns used to read input for classification:
+_COL_TITLE_KO = 1       # 'title' column (B)
+_COL_DESCRIPTION = None  # no separate description column; use title only
+# Columns written by the classifier (0-based, A=0):
+_COL_CATEGORY = 6        # 'category' (G)
+_COL_ENGLISH_SUMMARY = 7  # 'english_summary' (H)
+_COL_AI_PROCESSED_AT = 8  # 'ai_processed_at' (I)
+_COL_INCLUDE_ON_SITE = 9  # 'include_on_site' (J)
 
 # Valid category values — classifier must return one of these.
 _VALID_CATEGORIES = frozenset([
@@ -372,9 +380,24 @@ def main() -> None:
     # --- Filter to unprocessed rows (ai_processed_at is empty) ----------------
     # Row number in Sheets: header = row 1, first data row = row 2.
     # Index in all_rows list: 0-based. Sheet row = list_index + 2.
+    #
+    # C-5g fix: live sheet column is 'ai_processed_at' (col I). Due to the
+    # prior column mismatch, this column currently holds category values
+    # (e.g. "기타") for all rows. After the C-5g re-classification run,
+    # it will hold ISO timestamps. A row is treated as unprocessed when
+    # ai_processed_at is empty OR is a category value (not a timestamp).
+    # Detection: a valid timestamp starts with a 4-digit year, e.g. "2026-".
+    def _is_unprocessed(row: dict) -> bool:
+        val = str(row.get("ai_processed_at", "")).strip()
+        if not val:
+            return True
+        # If it looks like a timestamp (YYYY-...) it was written by this script.
+        import re as _re
+        return not bool(_re.match(r"^\d{4}-", val))
+
     unprocessed: list[tuple[int, dict]] = []
     for idx, row in enumerate(all_rows):
-        if not str(row.get("ai_processed_at", "")).strip():
+        if _is_unprocessed(row):
             sheet_row_number = idx + 2  # header is row 1
             unprocessed.append((sheet_row_number, row))
 
@@ -398,7 +421,10 @@ def main() -> None:
     errors = 0
 
     for i, (sheet_row_num, row) in enumerate(unprocessed):
-        title_ko = str(row.get("title_ko", "")).strip()
+        # C-5g fix: live sheet uses 'title' (not 'title_ko') and has no
+        # 'description' column. Use 'title' as the primary input.
+        # Fall back to 'title_ko' for forward-compatibility if schema changes.
+        title_ko = str(row.get("title") or row.get("title_ko", "")).strip()
         description = str(row.get("description", "")).strip()
 
         classification = classify_article(ai_client, title_ko, description)

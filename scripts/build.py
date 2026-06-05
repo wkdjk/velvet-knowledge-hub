@@ -406,6 +406,28 @@ def _extract_last_updated(rows: list[dict]) -> str | None:
 # Step 5 — KPI computation
 # ---------------------------------------------------------------------------
 
+def _is_truthy(val) -> bool:
+    """
+    Return True if val represents a truthy include_on_site flag.
+
+    Handles all forms Google Sheets / gspread may return:
+      - Python bool True
+      - String "TRUE", "true", "True", "1", "YES", "yes"
+      - Integer 1
+
+    C-5g fix: L-9 / L-INCLUDE-FLAG-VALIDATION — Sheets type-coercion can
+    return booleans, integers, or strings depending on cell format.
+    A robust normalisation here means the comparison never silently fails.
+    """
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, int):
+        return val == 1
+    if isinstance(val, str):
+        return val.strip().upper() in ("TRUE", "1", "YES")
+    return False
+
+
 def compute_kpis(sections: dict) -> dict:
     """
     Compute KPI values from assembled section data.
@@ -457,11 +479,16 @@ def compute_kpis(sections: dict) -> dict:
             pass
 
     # --- KPI 2: Articles past 90 days (C-5e: changed from 30 to 90) -----------
+    # C-5g fix: articles_90d must use the SAME predicate as the article list —
+    # include_on_site truthy AND published_date >= cutoff. L-COUNT-LIST.
     news_data = sections.get("news_pulse", {}).get("data", [])
     if news_data:
         cutoff = date.today() - timedelta(days=90)
         count = 0
         for row in news_data:
+            # C-5g: require include_on_site truthy (same as template filter).
+            if not _is_truthy(row.get("include_on_site", "")):
+                continue
             raw_date = row.get("published_date") or row.get("date", "")
             if not raw_date:
                 continue
