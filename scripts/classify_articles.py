@@ -421,11 +421,15 @@ def main() -> None:
     errors = 0
 
     for i, (sheet_row_num, row) in enumerate(unprocessed):
-        # C-5g fix: live sheet uses 'title' (not 'title_ko') and has no
-        # 'description' column. Use 'title' as the primary input.
-        # Fall back to 'title_ko' for forward-compatibility if schema changes.
-        title_ko = str(row.get("title") or row.get("title_ko", "")).strip()
-        description = str(row.get("description", "")).strip()
+        # C-5h fix: live KVN_Articles sheet has data written to wrong columns by
+        # the original collector. The header names do not match the stored values:
+        #   'title' column (col B) → holds the article URL (http://...)
+        #   'url' column (col C)   → holds the Korean article title text
+        #   'content_hash' (col D) → holds the article description/content snippet
+        # Verified 2026-06-05 by direct row inspection (all 5,586 rows confirmed).
+        # Read 'url' for the Korean title and 'content_hash' for description.
+        title_ko = str(row.get("url") or row.get("title_ko", "")).strip()
+        description = str(row.get("content_hash", "")).strip()
 
         classification = classify_article(ai_client, title_ko, description)
 
@@ -461,9 +465,13 @@ def main() -> None:
         )
         sys.exit(0)
 
-    # --- Write results back to Sheets in-place (L-4: one batch_update call) ---
+    # --- Write results back to Sheets in-place (chunked batch_update) ----------
     # Build a list of cell update dicts for gspread batch_update.
     # Each dict: {"range": "I3", "values": [["value"]]}
+    # C-5h: split into chunks of 200 rows (800 cell dicts each) with 1.1s pause
+    # to avoid hitting Sheets write quota (300 write requests/min per project).
+    _WRITE_CHUNK_ROWS = 200
+
     cell_updates: list[dict] = []
 
     for sheet_row_num, cls in results:
@@ -486,8 +494,18 @@ def main() -> None:
             "values": [[include_val]],
         })
 
-    # Execute all cell updates in a single batch_update call (L-4).
-    ws.batch_update(cell_updates, value_input_option="USER_ENTERED")
+    # Write in chunks to avoid Sheets API quota limits.
+    cells_per_row = 4  # category + english_summary + ai_processed_at + include_on_site
+    chunk_size = _WRITE_CHUNK_ROWS * cells_per_row
+    total_chunks = (len(cell_updates) + chunk_size - 1) // chunk_size
+
+    for chunk_idx in range(total_chunks):
+        chunk = cell_updates[chunk_idx * chunk_size: (chunk_idx + 1) * chunk_size]
+        ws.batch_update(chunk, value_input_option="USER_ENTERED")
+        print(f"  wrote chunk {chunk_idx + 1}/{total_chunks} ({len(chunk) // cells_per_row} rows)...")
+        if chunk_idx < total_chunks - 1:
+            time.sleep(1.1)
+
     written_to_sheets = articles_processed
 
     print()
