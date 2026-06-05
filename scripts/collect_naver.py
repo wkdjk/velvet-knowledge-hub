@@ -60,6 +60,10 @@ _HTML_ENTITIES = {
 }
 
 # Schema for the KVN_Articles tab — column order must match the Sheets header row.
+# OI-3: added source_domain — publisher domain extracted from originallink
+# (e.g. "yna.co.kr", "hankyung.com"). Populated for all new rows; existing
+# rows are not backfilled. Do NOT backfill — the 5,586 existing rows keep
+# empty source_domain by design.
 KVN_ARTICLES_HEADER = [
     "content_hash",
     "url",
@@ -69,6 +73,7 @@ KVN_ARTICLES_HEADER = [
     "source_name",
     "source_type",
     "keyword_matched",
+    "source_domain",
     "category",
     "english_summary",
     "ai_processed_at",
@@ -290,7 +295,14 @@ def search_naver(keyword: str, client_id: str, client_secret: str) -> list[dict]
 
     articles = []
     for item in resp.json().get("items", []):
-        url = item.get("originallink") or item.get("link", "")
+        # OI-3: use originallink (publisher URL) as preferred URL source.
+        # Naver API always returns originallink for news items.
+        # _source_name_from_url() extracts the domain (strips www.) from it,
+        # giving the publisher domain (e.g. "yna.co.kr"), not the search platform.
+        original_url = item.get("originallink", "")
+        link_url = item.get("link", "")
+        url = original_url or link_url
+        source_domain = _source_name_from_url(original_url) if original_url else ""
         title_ko = _clean(item.get("title", ""))
         articles.append({
             "url": url,
@@ -298,6 +310,7 @@ def search_naver(keyword: str, client_id: str, client_secret: str) -> list[dict]
             "description": _clean(item.get("description", "")),
             "published_date": _parse_date(item.get("pubDate", "")),
             "source_name": _source_name_from_url(url),
+            "source_domain": source_domain,
             "content_hash": _content_hash(url, title_ko),
             "keyword_matched": keyword,
         })
@@ -382,6 +395,10 @@ def rows_to_write(articles: list[dict]) -> list[list]:
     """
     Convert article dicts to ordered rows matching KVN_ARTICLES_HEADER.
     AI columns (category, english_summary, ai_processed_at, include_on_site) are blank.
+
+    OI-3: source_domain is populated from originallink domain (e.g. "yna.co.kr").
+    This identifies the publishing media company, not the search platform.
+    Only new rows receive source_domain — existing 5,586 rows are not backfilled.
     """
     output_rows = []
     for a in articles:
@@ -394,6 +411,7 @@ def rows_to_write(articles: list[dict]) -> list[list]:
             a.get("source_name", ""),
             "naver_api",          # source_type — fixed for this script
             a.get("keyword_matched", ""),
+            a.get("source_domain", ""),  # OI-3: publisher domain from originallink
             "",                   # category — filled by B-9
             "",                   # english_summary — filled by B-9
             "",                   # ai_processed_at — filled by B-9

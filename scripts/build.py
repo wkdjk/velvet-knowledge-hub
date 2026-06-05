@@ -441,8 +441,8 @@ def compute_kpis(sections: dict) -> dict:
                           (A-1: NZ EXPORTS ROLLING 12-MONTH)
       nz_export_delta   — "▲ X%" or "▼ X%" vs prior month, or "—"
       articles_90d      — count of KVN_Articles rows within last 90 days (C-5e: was 30d)
-      food_imports_30d  — count of VFI_Import_Records rows in last 30 days
-                          (A-3: replaces mfds_latest_date)
+      food_imports_90d  — count of VFI_Import_Records rows in last 90 days
+                          (OI-1: extended from 30d to align with news pulse 90-day window)
 
     Any value that cannot be computed returns "—".
     """
@@ -450,7 +450,7 @@ def compute_kpis(sections: dict) -> dict:
         "nz_export_latest": "—",
         "nz_export_delta": "—",
         "articles_90d": "—",
-        "food_imports_30d": "—",
+        "food_imports_90d": "—",
     }
 
     # --- KPI 1: NZ export rolling 12-month in tonnes (dried-equivalent) ------
@@ -505,11 +505,13 @@ def compute_kpis(sections: dict) -> dict:
                 continue
         kpi["articles_90d"] = str(count)
 
-    # --- KPI 3: Food imports last 30 days (A-3) --------------------------------
-    # Count VFI_Import_Records rows with notification date >= today - 30 days.
+    # --- KPI 3: Food imports last 90 days (OI-1: window extended 30d → 90d) ----
+    # Count VFI_Import_Records rows with notification date >= today - 90 days.
+    # Aligned with the news pulse 90-day window so all sections share the same
+    # time basis for DINZ readers.
     import_data = sections.get("import_intelligence", {}).get("data", [])
     if import_data:
-        cutoff = date.today() - timedelta(days=30)
+        cutoff = date.today() - timedelta(days=90)
         count = 0
         for row in import_data:
             raw_date = str(row.get("date", "")).strip()
@@ -521,7 +523,7 @@ def compute_kpis(sections: dict) -> dict:
                     count += 1
             except ValueError:
                 continue
-        kpi["food_imports_30d"] = str(count)
+        kpi["food_imports_90d"] = str(count)
 
     return kpi
 
@@ -1456,10 +1458,23 @@ def _write_news_pulse_csv(sections: dict) -> None:
     """
     all_news = sections.get("news_pulse", {}).get("data", [])
 
-    # Filter to include_on_site truthy — use _is_truthy() to match build.py KPI
+    # Filter 1: include_on_site truthy — use _is_truthy() to match build.py KPI
     # and template predicate (L-COUNT-LIST: all three must use the same test).
     # C-6a: _is_truthy() handles bool/int/str forms from Sheets coercion.
-    publishable = [row for row in all_news if _is_truthy(row.get("include_on_site", ""))]
+    # Filter 2 (OI-2): exclude rows where all three content fields are empty.
+    # ~70 legacy articles (2005–2023) have include_on_site=TRUE but no content.
+    # These predate the Naver/Google News pipeline and pollute the CSV download.
+    # Dashboard rendering is unaffected — they fall outside the 90-day window.
+    def _has_content(row: dict) -> bool:
+        return any(
+            str(row.get(col, "")).strip()
+            for col in ("title", "url", "english_summary")
+        )
+
+    publishable = [
+        row for row in all_news
+        if _is_truthy(row.get("include_on_site", "")) and _has_content(row)
+    ]
 
     DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -1543,8 +1558,8 @@ def main() -> None:
 
     nz = kpi.get("nz_export_latest", "—")
     art = kpi.get("articles_90d", "—")
-    food_30d = kpi.get("food_imports_30d", "—")
-    print(f"  kpis: nz_export_rolling12m_tonnes={nz} | articles_90d={art} | food_imports_30d={food_30d}")
+    food_90d = kpi.get("food_imports_90d", "—")
+    print(f"  kpis: nz_export_rolling12m_tonnes={nz} | articles_90d={art} | food_imports_90d={food_90d}")
     tf = sections.get("trade_flows", {})
     kstat_0507 = len(tf.get("kstat_0507", []))
     kstat_0510 = len(tf.get("kstat_0510", []))

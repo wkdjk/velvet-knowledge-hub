@@ -47,11 +47,11 @@
       {% endif %}
     </div>
 
-    {# KPI 3: Food imports last 30 days — A-3 (replaces mfds_latest_date) #}
+    {# KPI 3: Food imports last 90 days — OI-1 (window extended 30d → 90d to align with news pulse) #}
     <div class="kpi-card">
-      <p class="kpi-label">FOOD IMPORTS (LAST 30 DAYS)</p>
-      {% if kpi is defined and kpi.food_imports_30d is defined and kpi.food_imports_30d != "—" %}
-        <p class="kpi-value">{{ kpi.food_imports_30d }}</p>
+      <p class="kpi-label">FOOD IMPORTS (LAST 90 DAYS)</p>
+      {% if kpi is defined and kpi.food_imports_90d is defined and kpi.food_imports_90d != "—" %}
+        <p class="kpi-value">{{ kpi.food_imports_90d }}</p>
         <p class="delta-indicator delta-neutral">notifications — food channel (MFDS)</p>
       {% else %}
         <p class="kpi-value text-muted">—</p>
