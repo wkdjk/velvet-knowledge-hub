@@ -139,13 +139,25 @@
       <h3 class="section-subheading">Korea imports by origin</h3>
 
       {% if tf_qia_by_origin and tf_qia_by_origin | length > 0 %}
-        <div class="chart-panel">
-          <h3>South Korean velvet imports by origin — QIA quarantine records (kg)</h3>
-          <div class="chart-canvas-wrapper" style="height:300px;">
-            <canvas id="chart-qia-origin"
-              aria-label="South Korean deer velvet imports by country of origin, grouped bar chart" role="img"></canvas>
+        {# P2-H: Monthly time-series view (stacked line) — all available months #}
+        {% if tf_qia_monthly_by_origin and tf_qia_monthly_by_origin.labels | length > 0 %}
+          <div class="chart-panel">
+            <h3>South Korean velvet imports by origin — monthly (kg)</h3>
+            <div class="chart-canvas-wrapper" style="height:280px;">
+              <canvas id="chart-qia-origin-monthly"
+                aria-label="South Korean deer velvet imports by country of origin, monthly time-series" role="img"></canvas>
+            </div>
+            <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Monthly raw import kg at quarantine inspection. No dried-equivalent conversion applied.</p>
           </div>
-          <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Volumes shown as raw import kg as recorded at quarantine inspection. No dried-equivalent conversion applied.</p>
+        {% endif %}
+        {# Annual aggregated view — latest 2 full years #}
+        <div class="chart-panel" style="margin-top:16px;">
+          <h3>South Korean velvet imports by origin — annual (kg)</h3>
+          <div class="chart-canvas-wrapper" style="height:260px;">
+            <canvas id="chart-qia-origin"
+              aria-label="South Korean deer velvet imports by country of origin, annual grouped bar chart" role="img"></canvas>
+          </div>
+          <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Annual totals for the two most recent complete years. Raw import kg at quarantine inspection. No dried-equivalent conversion applied.</p>
         </div>
       {% else %}
         <div class="placeholder-card">
@@ -459,7 +471,76 @@
       /* C2 (pie chart) removed per Commander feedback F-12. */
     }());
 
-    /* ── Panel D — QIA imports by origin ────────────────────────────── */
+    /* ── Panel D1 (P2-H) — QIA monthly origin view ─────────────────── */
+    (function buildQiaMonthlyChart() {
+      var ctxMonthly = document.getElementById('chart-qia-origin-monthly');
+      if (!ctxMonthly) return;
+
+      var QIA_MONTHLY = {{ tf_qia_monthly_by_origin | tojson }};
+      if (!QIA_MONTHLY || !QIA_MONTHLY.labels || !QIA_MONTHLY.labels.length) return;
+
+      var QIA_COLOURS_M = {
+        'New Zealand':     '#1A5276',
+        'China':           '#A78230',
+        'Russia':          '#888888',
+        'Hong Kong (SAR)': '#7D6608',
+        'Kazakhstan':      '#E8A87C',
+        'Australia':       '#2C3E50',
+        'Other':           '#BDBDBD'
+      };
+
+      var monthlyDsets = QIA_MONTHLY.countries.map(function (country) {
+        return {
+          label: country,
+          data: QIA_MONTHLY.series[country] || [],
+          borderColor: QIA_COLOURS_M[country] || '#BDBDBD',
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          fill: false,
+          pointRadius: 2,
+          tension: 0.1
+        };
+      });
+
+      new Chart(ctxMonthly.getContext('2d'), {
+        type: 'line',
+        data: { labels: QIA_MONTHLY.labels, datasets: monthlyDsets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              position: 'top',
+              align: 'start',
+              labels: { boxWidth: 12, padding: 14 }
+            },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  return ctx.dataset.label + ': ' + Math.round(ctx.parsed.y).toLocaleString() + ' kg';
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: 'category',
+              ticks: { maxTicksLimit: 10, maxRotation: 45 },
+              grid: { color: 'rgba(204,204,204,0.4)' }
+            },
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Import weight (kg)' },
+              ticks: { callback: function (v) { return v.toLocaleString(); } },
+              grid: { color: 'rgba(204,204,204,0.4)' }
+            }
+          }
+        }
+      });
+    }());
+
+    /* ── Panel D2 — QIA imports by origin (annual) ───────────────────── */
     /* Graceful skip if QIA data is empty (placeholder card shown in HTML) */
     (function buildQiaChart() {
       var ctxQia = document.getElementById('chart-qia-origin');

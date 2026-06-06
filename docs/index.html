@@ -133,13 +133,25 @@
       <h3 class="section-subheading">Korea imports by origin</h3>
 
       
-        <div class="chart-panel">
-          <h3>South Korean velvet imports by origin — QIA quarantine records (kg)</h3>
-          <div class="chart-canvas-wrapper" style="height:300px;">
-            <canvas id="chart-qia-origin"
-              aria-label="South Korean deer velvet imports by country of origin, grouped bar chart" role="img"></canvas>
+        
+        
+          <div class="chart-panel">
+            <h3>South Korean velvet imports by origin — monthly (kg)</h3>
+            <div class="chart-canvas-wrapper" style="height:280px;">
+              <canvas id="chart-qia-origin-monthly"
+                aria-label="South Korean deer velvet imports by country of origin, monthly time-series" role="img"></canvas>
+            </div>
+            <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Monthly raw import kg at quarantine inspection. No dried-equivalent conversion applied.</p>
           </div>
-          <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Volumes shown as raw import kg as recorded at quarantine inspection. No dried-equivalent conversion applied.</p>
+        
+        
+        <div class="chart-panel" style="margin-top:16px;">
+          <h3>South Korean velvet imports by origin — annual (kg)</h3>
+          <div class="chart-canvas-wrapper" style="height:260px;">
+            <canvas id="chart-qia-origin"
+              aria-label="South Korean deer velvet imports by country of origin, annual grouped bar chart" role="img"></canvas>
+          </div>
+          <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Annual totals for the two most recent complete years. Raw import kg at quarantine inspection. No dried-equivalent conversion applied.</p>
         </div>
       
 
@@ -442,7 +454,76 @@
       /* C2 (pie chart) removed per Commander feedback F-12. */
     }());
 
-    /* ── Panel D — QIA imports by origin ────────────────────────────── */
+    /* ── Panel D1 (P2-H) — QIA monthly origin view ─────────────────── */
+    (function buildQiaMonthlyChart() {
+      var ctxMonthly = document.getElementById('chart-qia-origin-monthly');
+      if (!ctxMonthly) return;
+
+      var QIA_MONTHLY = {"labels": ["2019-01", "2019-02", "2019-03", "2019-04", "2019-05", "2019-06", "2019-07", "2019-08", "2019-09", "2019-10", "2019-11", "2019-12", "2020-01", "2020-02", "2020-03", "2020-04", "2020-05", "2020-06", "2020-07", "2020-08", "2020-09", "2020-10", "2020-11", "2020-12", "2021-01", "2021-02", "2021-03", "2021-04", "2021-05", "2021-06", "2021-07", "2021-08", "2021-09", "2021-10", "2021-11", "2021-12", "2022-01", "2022-02", "2022-03", "2022-04", "2022-05", "2022-06", "2022-07", "2022-08", "2022-09", "2022-10", "2022-11", "2022-12", "2023-01", "2023-02", "2023-03", "2023-04", "2023-05", "2023-06", "2023-07", "2023-08", "2023-09", "2023-10", "2023-11", "2023-12", "2024-01", "2024-02", "2024-03", "2024-04", "2024-05", "2024-06", "2024-07", "2024-08", "2024-09", "2024-10", "2024-11", "2024-12", "2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04"], "countries": ["New Zealand", "China", "Russia", "Hong Kong (SAR)", "Kazakhstan", "Other", "Australia"], "series": {"New Zealand": [2819.49, 4578.0, 6774.43, 10581.2, 3878.93, 3760.46, 10933.5, 15527.51, 5155.03, 2155.6, 8600.0, 21331.6, 6920.1, 22119.98, 11943.0, 12086.05, 11434.41, 12166.46, 13163.67, 7988.41, 0.0, 0.0, 3750.7, 13530.54, 25685.17, 7578.38, 4667.63, 18108.74, 10057.59, 10957.8, 5500.0, 0.0, 0.0, 7378.5, 4660.0, 16000.0, 33397.5, 4561.89, 0.0, 0.0, 15373.09, 7586.5, 17195.15, 7162.14, 4378.49, 5005.26, 6750.0, 13720.0, 0.0, 3446.81, 34589.76, 25128.29, 15878.07, 9840.34, 20873.95, 7814.96, 4278.02, 6663.1, 3235.37, 5821.1, 13141.1, 16185.39, 20073.38, 0.0, 14065.27, 2723.0, 530.0, 0.0, 0.0, 1000.0, 5439.7, 15065.94, 18026.04, 6141.68, 31412.08, 12629.22, 0.0, 0.0, 5000.0, 937.73, 4573.3, 3203.9, 500.0, 9066.78, 2.2, 1.1, 926.0, 775.3], "China": [0.0, 0.0, 0.0, 3178.3, 13226.0, 1860.0, 13463.1, 2680.0, 4573.57, 4956.0, 2826.6, 700.0, 7620.0, 3823.0, 3970.0, 7688.0, 3829.0, 8451.62, 6165.0, 5536.7, 5250.0, 7279.0, 6025.0, 12017.99, 7215.0, 2346.36, 0.0, 0.0, 0.0, 0.0, 2050.0, 10141.9, 6330.0, 5008.89, 8377.42, 8839.25, 5600.0, 4548.6, 1080.26, 9020.0, 6053.18, 3210.0, 13500.0, 6096.0, 4780.0, 14334.3, 11862.5, 9467.0, 0.0, 4148.0, 4289.0, 9121.0, 5400.0, 6690.0, 15790.1, 480.0, 2763.0, 8900.0, 5361.0, 5990.7, 8400.0, 8200.0, 5500.0, 9400.0, 8451.25, 9551.0, 7982.57, 3000.0, 1400.0, 3500.0, 20255.0, 4150.0, 3500.0, 7095.0, 5210.0, 5760.0, 4660.0, 4700.0, 6160.0, 14311.0, 15460.0, 6044.0, 4023.0, 14820.0, 0.0, 5161.2, 1160.0, 12696.0], "Russia": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 17911.41, 9844.03, 9851.65, 2262.8, 608.1, 336.0, 0.0, 1775.71, 2114.3, 1158.0, 300.1, 1693.9, 18701.98, 16630.86, 8459.7, 479.0, 2179.75, 981.0, 313.0, 1068.0, 0.0, 0.0, 0.0, 0.0, 24864.6, 17976.79, 5466.05, 1171.44, 0.0, 0.0, 0.0, 344.0, 170.0, 0.0, 1264.0, 2007.0, 21482.23, 11937.34, 4678.09, 2200.41, 334.3, 967.2, 3603.25, 0.0, 0.0, 0.0, 830.79, 1352.0, 2500.25, 6488.69, 10831.7, 0.0, 1390.21, 1177.84, 4854.43, 8625.02, 1128.8, 0.0, 0.0, 576.0, 2500.57, 2164.38, 10687.67, 3350.68, 5214.75, 9555.62, 0.0, 1702.0, 2010.0, 0.0, 0.0, 0.0, 2796.53, 4139.42, 3106.57, 1350.0, 3755.6, 8222.0, 5620.2], "Hong Kong (SAR)": [353.0, 3528.6, 400.0, 2026.0, 1074.4, 300.0, 2862.0, 1030.0, 621.0, 1405.0, 3826.0, 400.0, 2996.2, 400.0, 860.0, 2085.0, 360.0, 0.0, 410.0, 400.0, 689.5, 1340.0, 750.0, 3410.0, 0.0, 400.0, 2800.0, 400.0, 0.0, 0.0, 0.0, 0.0, 0.0, 9097.0, 1638.88, 2700.0, 0.0, 3400.0, 12223.1, 2430.0, 1131.5, 400.0, 3050.0, 400.0, 400.0, 0.0, 0.0, 400.0, 682.0, 878.0, 0.0, 2800.0, 2960.0, 900.0, 296.0, 0.0, 0.0, 0.0, 4080.0, 0.0, 86.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3000.0, 0.0, 1260.0, 0.0, 0.0, 0.0, 1598.6, 0.0, 400.0, 400.0, 0.0, 0.0, 0.0, 0.0, 500.0, 400.0, 0.0, 400.0, 0.0, 0.0, 0.0, 400.0], "Kazakhstan": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 140.0, 396.0, 165.0, 667.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 732.7, 762.75, 0.0, 191.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1288.0, 140.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 570.7, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 488.0, 0.0, 262.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 413.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 125.0, 0.0, 933.0, 0.0, 0.0, 0.0, 0.0], "Other": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3, 0.0, 0.5, 0.1], "Australia": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.1]}};
+      if (!QIA_MONTHLY || !QIA_MONTHLY.labels || !QIA_MONTHLY.labels.length) return;
+
+      var QIA_COLOURS_M = {
+        'New Zealand':     '#1A5276',
+        'China':           '#A78230',
+        'Russia':          '#888888',
+        'Hong Kong (SAR)': '#7D6608',
+        'Kazakhstan':      '#E8A87C',
+        'Australia':       '#2C3E50',
+        'Other':           '#BDBDBD'
+      };
+
+      var monthlyDsets = QIA_MONTHLY.countries.map(function (country) {
+        return {
+          label: country,
+          data: QIA_MONTHLY.series[country] || [],
+          borderColor: QIA_COLOURS_M[country] || '#BDBDBD',
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          fill: false,
+          pointRadius: 2,
+          tension: 0.1
+        };
+      });
+
+      new Chart(ctxMonthly.getContext('2d'), {
+        type: 'line',
+        data: { labels: QIA_MONTHLY.labels, datasets: monthlyDsets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              position: 'top',
+              align: 'start',
+              labels: { boxWidth: 12, padding: 14 }
+            },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  return ctx.dataset.label + ': ' + Math.round(ctx.parsed.y).toLocaleString() + ' kg';
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: 'category',
+              ticks: { maxTicksLimit: 10, maxRotation: 45 },
+              grid: { color: 'rgba(204,204,204,0.4)' }
+            },
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'Import weight (kg)' },
+              ticks: { callback: function (v) { return v.toLocaleString(); } },
+              grid: { color: 'rgba(204,204,204,0.4)' }
+            }
+          }
+        }
+      });
+    }());
+
+    /* ── Panel D2 — QIA imports by origin (annual) ───────────────────── */
     /* Graceful skip if QIA data is empty (placeholder card shown in HTML) */
     (function buildQiaChart() {
       var ctxQia = document.getElementById('chart-qia-origin');

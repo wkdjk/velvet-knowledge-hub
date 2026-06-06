@@ -678,6 +678,8 @@ def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date
         tf_destination_area=chart_data.get("tf_destination_area", {}),
         tf_destination_pie=chart_data.get("tf_destination_pie", {}),
         tf_qia_by_origin=chart_data.get("tf_qia_by_origin", []),
+        # P2-H: QIA monthly origin view.
+        tf_qia_monthly_by_origin=chart_data.get("tf_qia_monthly_by_origin", {"labels": [], "countries": [], "series": {}}),
         # C-4e import intelligence context.
         # import_records_display: ALL sorted rows (JS controls 3-row / 30-day view).
         import_records_display=import_records_display,
@@ -1193,6 +1195,63 @@ def _latest_full_year_kg_by_destination(nz_rows: list[dict]) -> dict:
     return kg_by_dest
 
 
+def _qia_monthly_by_country(qia_rows: list[dict]) -> dict:
+    """
+    P2-H: Aggregate QIA quarantine rows by month and country for a monthly
+    time-series view.
+
+    Returns {
+      "labels": [YYYY-MM, ...],             # sorted, all unique months
+      "countries": [country_en, ...],       # sorted by total kg desc
+      "series": {country_en: [kg, ...]},    # parallel to labels
+    }
+
+    Country names normalised via _normalise_qia_country(). Countries outside
+    QIA_COLOURS mapped to "Other".
+    Returns {"labels": [], "countries": [], "series": {}} if no data.
+    """
+    from collections import defaultdict
+
+    kg_rows = [r for r in qia_rows if str(r.get("unit", "")) == "KG"]
+    if not kg_rows:
+        return {"labels": [], "countries": [], "series": {}}
+
+    # Aggregate by (month_str, country_en).
+    by_month_country: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for row in kg_rows:
+        date_str = str(row.get("date", ""))
+        if not date_str or len(date_str) < 7:
+            continue
+        month_str = date_str[:7]  # YYYY-MM
+        raw_country = str(row.get("country", ""))
+        country_en = _normalise_qia_country(raw_country)
+        if country_en not in QIA_COLOURS:
+            country_en = "Other"
+        try:
+            val = float(row.get("value", 0) or 0)
+        except (ValueError, TypeError):
+            continue
+        by_month_country[month_str][country_en] += val
+
+    if not by_month_country:
+        return {"labels": [], "countries": [], "series": {}}
+
+    labels = sorted(by_month_country.keys())
+
+    # Determine country order by total kg descending.
+    totals: dict[str, float] = defaultdict(float)
+    for month_data in by_month_country.values():
+        for c, kg in month_data.items():
+            totals[c] += kg
+    countries = sorted(totals.keys(), key=lambda c: totals[c], reverse=True)
+
+    series: dict[str, list[float]] = {}
+    for c in countries:
+        series[c] = [round(by_month_country[m].get(c, 0.0), 2) for m in labels]
+
+    return {"labels": labels, "countries": countries, "series": series}
+
+
 def _qia_annual_by_country(qia_rows: list[dict], n_years: int = 2) -> list[dict]:
     """
     Find the n most recent calendar years where at least 10 months of KG data
@@ -1439,6 +1498,9 @@ def prepare_chart_data(sections: dict, tab_data: dict | None = None) -> dict:
     # Panel D — grouped bar: QIA annual KG by origin, latest 2 complete years.
     tf_qia_by_origin = _qia_annual_by_country(qia_rows, n_years=2)
 
+    # Panel D2 (P2-H) — monthly time-series: QIA KG by origin, all available months.
+    tf_qia_monthly_by_origin = _qia_monthly_by_country(qia_rows)
+
     # ── B-7 price chart data ──────────────────────────────────────────────────
     ii = sections.get("import_intelligence", {})
     price_rows = ii.get("price_annual_rows", [])
@@ -1482,6 +1544,9 @@ def prepare_chart_data(sections: dict, tab_data: dict | None = None) -> dict:
 
         # ── P1-G: MFDS annual import-value series (from VTW_Trade_Monthly) ──
         "mfds_annual_series": mfds_annual_series,
+
+        # ── P2-H: QIA monthly origin view ────────────────────────────────────
+        "tf_qia_monthly_by_origin": tf_qia_monthly_by_origin,
     }
 
 
