@@ -719,6 +719,17 @@
 
     <p class="source-footnote">Two MFDS (Ministry of Food and Drug Safety, Korea) databases: annual herbal medicine channel value (2004–2024) and food ingredient import notifications (2016–present).</p>
 
+    {# ── OI-1: NZ 66% market share callout card — static, verified figure (MFDS 2024) #}
+    {# Figures are fixed constants. Update only when IntelQ confirms new MFDS annual data. #}
+    <div class="nz-share-callout">
+      <span class="nz-share-callout__value">~66%</span>
+      <span class="nz-share-callout__body">
+        <span class="nz-share-callout__label">NZ market share — Korea velvet imports (herbal medicine channel)</span>
+        <span class="nz-share-callout__source">MFDS annual statistics, 2024 — USD 18.5 M of USD 28.0 M total (value basis)</span>
+        <span class="nz-share-callout__caveat">Value basis only. NZ share by weight may differ. Herbal medicine channel (pharmaceutical classification); does not include food-channel imports.</span>
+      </span>
+    </div>
+
     {# ── MFDS annual import-value chart (P1-G: data from VTW_Trade_Monthly mfds_annual) #}
     {# Falls back to compact placeholder if series is empty.                             #}
     {% if mfds_annual_series and mfds_annual_series.has_data %}
@@ -881,16 +892,16 @@
   }());
   </script>
 
-  {# ── SECTION: MARKET PRESENCE (P1-J: replaced with "Under development") #}
+  {# ── SECTION: MARKET PRESENCE (OI-3: title + stub copy updated C-7) #}
   <section id="market-presence">
 
     <div class="section-header">
       <div class="section-header-left">
-        <h2>Market presence</h2>
+        <h2>Supplement food products list</h2>
       </div>
     </div>
 
-    <p>Under development.</p>
+    <p>This section will list Korean velvet supplement and food products by company, drawing on the official product registry and trade press. Data collection is under way.</p>
 
   </section>
 
