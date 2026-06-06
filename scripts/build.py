@@ -1390,12 +1390,15 @@ def _build_mfds_annual_series(all_trade_rows: list[dict]) -> list[dict]:
     if not mfds_rows:
         return {"chart_points": [], "table_rows": [], "has_data": False}
 
-    # Aggregate by date (year string), summing values.
+    # Aggregate by year (4-digit string).
+    # Dates stored as 'YYYY-MM' (e.g. '2004-01') — extract first 4 characters
+    # so x-axis labels show clean '2004', '2005', ... not '2004-01' etc.
     by_year: dict[str, float] = {}
     for row in mfds_rows:
-        year_str = str(row.get("date", "")).strip()
-        if not year_str:
+        raw_date = str(row.get("date", "")).strip()
+        if not raw_date or len(raw_date) < 4:
             continue
+        year_str = raw_date[:4]  # '2004-01' → '2004'
         try:
             val = float(row.get("value", 0) or 0)
         except (ValueError, TypeError):

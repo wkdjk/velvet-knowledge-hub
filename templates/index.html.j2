@@ -186,7 +186,7 @@
       </details>
 
     {% else %}
-      <p class="source-footnote">Source: Stats NZ · QIA · KSTAT API</p>
+      <p class="source-footnote">Source: Stats NZ · QIA · Korea Customs (KCS)</p>
       <div class="placeholder-card">
         <p class="placeholder-title">Trade flows data not yet available</p>
         <p class="placeholder-body">Data will appear here after the next scheduled build.</p>
@@ -719,16 +719,8 @@
 
     <p class="source-footnote">Two MFDS (Ministry of Food and Drug Safety, Korea) databases: annual herbal medicine channel value (2004–2024) and food ingredient import notifications (2016–present).</p>
 
-    {# ── OI-1: NZ 66% market share callout card — static, verified figure (MFDS 2024) #}
-    {# Figures are fixed constants. Update only when IntelQ confirms new MFDS annual data. #}
-    <div class="nz-share-callout">
-      <span class="nz-share-callout__value">~66%</span>
-      <span class="nz-share-callout__body">
-        <span class="nz-share-callout__label">NZ market share — Korea velvet imports (herbal medicine channel)</span>
-        <span class="nz-share-callout__source">MFDS annual statistics, 2024 — USD 18.5 M of USD 28.0 M total (value basis)</span>
-        <span class="nz-share-callout__caveat">Value basis only. NZ share by weight may differ. Herbal medicine channel (pharmaceutical classification); does not include food-channel imports.</span>
-      </span>
-    </div>
+    {# C-6g 2-A: OI-1 nz-share-callout removed per Commander walkthrough (C-6g). #}
+    {# DesignQ spec OI1_nz_share_placement_spec.md retained in Domain_Knowledge. #}
 
     {# ── MFDS annual import-value chart (P1-G: data from VTW_Trade_Monthly mfds_annual) #}
     {# Falls back to compact placeholder if series is empty.                             #}
@@ -897,7 +889,7 @@
 
     <div class="section-header">
       <div class="section-header-left">
-        <h2>Supplement food products list</h2>
+        <h2>Velvet product examples — Korea</h2>
       </div>
     </div>
 
@@ -986,7 +978,7 @@
     <p class="caption">Data sources:
       <a href="https://www.stats.govt.nz" target="_blank" rel="noopener noreferrer">Stats NZ</a> ·
       <a href="https://www.qia.go.kr" target="_blank" rel="noopener noreferrer">QIA (Animal and Plant Quarantine Agency, Korea)</a> ·
-      <a href="https://unipass.customs.go.kr" target="_blank" rel="noopener noreferrer">KSTAT (Korea Customs Service)</a> ·
+      <a href="https://unipass.customs.go.kr" target="_blank" rel="noopener noreferrer">Korea Customs (KCS)</a> ·
       <a href="https://www.mfds.go.kr" target="_blank" rel="noopener noreferrer">MFDS (Ministry of Food and Drug Safety, Korea)</a>
     </p>
   </div>
