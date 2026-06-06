@@ -23,37 +23,38 @@
 <div class="page-wrapper">
   <div class="kpi-strip">
 
-    {# KPI 1: NZ exports rolling 12-month in tonnes — A-1 #}
+    {# KPI 1: NZ exports rolling 12-month in tonnes — A-1. P2-D will switch to QIA Korea imports. #}
     <div class="kpi-card">
       <p class="kpi-label">NZ EXPORTS (ROLLING 12-MONTH)</p>
       {% if kpi is defined and kpi.nz_export_latest is defined and kpi.nz_export_latest != "—" %}
-        <p class="kpi-value">{{ kpi.nz_export_latest }}</p>
+        <p class="kpi-value">{{ kpi.nz_export_latest }} <span class="kpi-unit">tonnes</span></p>
         {% if kpi.nz_export_delta is defined and kpi.nz_export_delta != "—" %}
           <p class="delta-indicator">{{ kpi.nz_export_delta }}</p>
         {% endif %}
-        <p class="delta-indicator delta-neutral">tonnes dried-equivalent — Stats NZ</p>
+        <p class="delta-indicator delta-neutral">dried-equivalent — Stats NZ</p>
       {% else %}
         <p class="kpi-value text-muted">—</p>
       {% endif %}
     </div>
 
-    {# KPI 2: News articles past 90 days — C-5e: renamed articles_30d → articles_90d, window 30d → 90d, sub-label added #}
+    {# KPI 2: News articles past 90 days. P2-E: footer describes Korean media articles. #}
     <div class="kpi-card">
       <p class="kpi-label">NEWS ARTICLES (LAST 90 DAYS)</p>
       {% if kpi is defined and kpi.articles_90d is defined and kpi.articles_90d != "—" %}
-        <p class="kpi-value">{{ kpi.articles_90d }}</p>
-        <p class="delta-indicator delta-neutral">relevant articles — Korean media</p>
+        <p class="kpi-value">{{ kpi.articles_90d }} <span class="kpi-unit">articles</span></p>
+        <p class="delta-indicator delta-neutral">Korean media articles matching velvet keyword, last 90 days</p>
       {% else %}
         <p class="kpi-value text-muted">—</p>
       {% endif %}
     </div>
 
-    {# KPI 3: Food imports last 90 days — OI-1 (window extended 30d → 90d to align with news pulse) #}
+    {# KPI 3: Food imports last 90 days. P2-F: MFDS food safety declarations (food channel only). #}
+    {# Commander decision: English term for 건 = "declarations" (2026-06-06).                      #}
     <div class="kpi-card">
       <p class="kpi-label">FOOD IMPORTS (LAST 90 DAYS)</p>
       {% if kpi is defined and kpi.food_imports_90d is defined and kpi.food_imports_90d != "—" %}
-        <p class="kpi-value">{{ kpi.food_imports_90d }}</p>
-        <p class="delta-indicator delta-neutral">notifications — food channel (MFDS)</p>
+        <p class="kpi-value">{{ kpi.food_imports_90d }} <span class="kpi-unit">declarations</span></p>
+        <p class="delta-indicator delta-neutral">MFDS food safety import declarations for velvet (food channel only, not pharmaceutical)</p>
       {% else %}
         <p class="kpi-value text-muted">—</p>
       {% endif %}
@@ -850,22 +851,16 @@
   }());
   </script>
 
-  {# ── SECTION: MARKET PRESENCE (enabled: false — hardcoded placeholder) #}
-  {# No download button. No last-updated label. Static "coming next phase" card. #}
+  {# ── SECTION: MARKET PRESENCE (P1-J: replaced with "Under development") #}
   <section id="market-presence">
 
     <div class="section-header">
       <div class="section-header-left">
         <h2>Market presence</h2>
-        <span class="last-updated last-updated--deferred">Coming next phase</span>
       </div>
-      {# No download button — no data in Phase 1 #}
     </div>
 
-    <div class="placeholder-card">
-      <p class="placeholder-title">Market presence — coming in the next phase</p>
-      <p class="placeholder-body">Product registry data from Korean retail and food-service channels will appear here. This section will show brand presence, product formats, and retail distribution across the Korea market.</p>
-    </div>
+    <p>Under development.</p>
 
   </section>
 
@@ -905,17 +900,16 @@
         <p class="article-list-header">{{ publishable | length }} relevant article{{ 's' if publishable | length != 1 else '' }} — last 90 days</p>
         <ul class="article-list" aria-label="Korea deer velvet relevant articles — last 90 days">
           {% for article in publishable %}
+            {# P1-K: English titles only. Column swap (C-6a): 'title' = URL, 'url' = Korean title.     #}
+            {# Display english_summary as the link text (only English content available per live schema). #}
+            {# Category labels: Korean (업계소식 etc.) — shown as-is; see cross_project_lessons for      #}
+            {# a future translator. The English summary serves as the primary title.                     #}
             <li class="article-entry">
               <div class="article-body">
-                {# C-6a: live KVN_Articles sheet column swap — 'title' col holds the URL; 'url' col holds the Korean title text (confirmed C-5h). Use article.title for href, article.url for display text. #}
-                <a class="article-title" href="{{ article.title | default('#') }}" target="_blank" rel="noopener noreferrer">{{ article.url | default("") }}</a>
-                <p class="article-summary">{{ article.english_summary | default("") }}</p>
+                <a class="article-title" href="{{ article.title | default('#') }}" target="_blank" rel="noopener noreferrer">{{ article.english_summary | default("[No English title available]") }}</a>
               </div>
               <div class="article-meta">
                 <span class="article-meta-date">{{ article.published_date | default("") }}</span>
-                {% if article.category %}
-                  <span class="article-meta-category">{{ article.category }}</span>
-                {% endif %}
               </div>
             </li>
           {% endfor %}
