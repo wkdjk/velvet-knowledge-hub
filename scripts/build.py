@@ -468,7 +468,10 @@ def compute_kpis(sections: dict) -> dict:
     # tonnes (÷1000, 1 decimal place). Uses _compute_dried_eq_kg and
     # _compute_rolling_12m which are defined in the chart data helpers below.
     trade_data = sections.get("trade_flows", {}).get("data", [])
-    nz_export_rows = [r for r in trade_data if r.get("series") == "nz_export"]
+    # GAP-5 back-fill: resolve empty product_type before dried-eq computation.
+    nz_export_rows = _backfill_product_type(
+        [r for r in trade_data if r.get("series") == "nz_export"]
+    )
 
     if nz_export_rows:
         try:
@@ -495,7 +498,10 @@ def compute_kpis(sections: dict) -> dict:
     # --- KPI 1b: QIA Korea imports rolling 12-month (P2-D: for Box 1 redesign) ---
     # Compute rolling 12-month sum of QIA korea_quarantine KG rows.
     # Show date range as e.g. "Apr 2025 – Mar 2026" derived from data.
-    qia_rows_kpi = [r for r in trade_data if r.get("series") == "korea_quarantine"]
+    # GAP-5 back-fill: resolve empty product_type before dried-eq computation.
+    qia_rows_kpi = _backfill_product_type(
+        [r for r in trade_data if r.get("series") == "korea_quarantine"]
+    )
     if qia_rows_kpi:
         try:
             qia_dried_eq_kpi = _compute_dried_eq_kg(qia_rows_kpi, "KG")
@@ -836,20 +842,74 @@ def _build_b7_price_subtitle(price_rows: list[dict]) -> dict | None:
         return None
 
 
+def _infer_qia_product_type(notes: str) -> str:
+    """
+    Infer product_type for a korea_quarantine row from its notes field.
+
+    Annual XLSX rows carry "| product: 녹용" or "| product: 생녹용" in notes.
+    Monthly HTML-XLS rows carry only the source filename — default to "dried".
+
+    GAP-5 back-fill: applied at build time for rows ingested before the C-3e
+    schema fix, which lacked product_type. No re-ingest required.
+
+    Mapping:
+      notes contains "생녹용" → "frozen"  (fresh/living velvet; 0.33 applies)
+      notes contains "녹용"   → "dried"   (dried velvet; no conversion)
+      otherwise               → "dried"   (safe default for monthly aggregate rows)
+    """
+    if "생녹용" in notes:
+        return "frozen"
+    if "녹용" in notes:
+        return "dried"
+    return "dried"
+
+
+def _backfill_product_type(rows: list[dict]) -> list[dict]:
+    """
+    Return a copy of rows with product_type back-filled for any row that lacks it.
+
+    For korea_quarantine rows: infer from the notes field via _infer_qia_product_type().
+    For all other series: fall back to "other" (no conversion; safe degradation).
+
+    GAP-5 fix (2026-06-06): eliminates build.py warnings for existing rows
+    ingested before ingest_qia.py was updated to emit product_type.
+    Original row dicts are not mutated — a shallow copy is returned.
+    """
+    result: list[dict] = []
+    for row in rows:
+        pt = str(row.get("product_type", "")).strip()
+        if pt:
+            result.append(row)
+        else:
+            patched = dict(row)
+            series = str(row.get("series", ""))
+            if series == "korea_quarantine":
+                patched["product_type"] = _infer_qia_product_type(
+                    str(row.get("notes", ""))
+                )
+            else:
+                patched["product_type"] = "other"
+            result.append(patched)
+    return result
+
+
 def _compute_dried_eq_kg(rows: list[dict], unit_filter: str = "KG") -> dict[str, float]:
     """
     Aggregate rows by date, applying the 0.33 dried-equivalent conversion.
 
     For each row:
       - product_type == "frozen": value × 0.33
-      - product_type == "dried" or "": value × 1.0
-      - product_type == "other" or absent: value × 1.0 (with warning logged once)
+      - product_type == "dried":  value × 1.0
+      - product_type == "other":  value × 1.0 (no conversion)
+      - product_type empty:       back-filled via _backfill_product_type() before
+                                  this function is called — should not occur at
+                                  runtime after the GAP-5 fix.
 
     Returns {date_str: dried_eq_kg} sorted ascending.
-    GAP-5 note: rows ingested before C-3e will have empty product_type.
-    These are treated as "other" (no conversion) with a single warning log.
+    GAP-5 fix: _backfill_product_type() is called by prepare_chart_data() and
+    compute_kpis() before any call to _compute_dried_eq_kg(), so empty
+    product_type rows are resolved before reaching this function.
     """
-    warned_empty = False
     totals: dict[str, float] = {}
     for row in rows:
         if str(row.get("unit", "")) != unit_filter:
@@ -865,16 +925,8 @@ def _compute_dried_eq_kg(rows: list[dict], unit_filter: str = "KG") -> dict[str,
         pt = str(row.get("product_type", "")).strip().lower()
         if pt == "frozen":
             converted = raw_val * 0.33
-        elif pt in ("dried", "other"):
-            converted = raw_val
         else:
-            # Empty product_type — pre-C-3e row; treat as "other".
-            if not warned_empty:
-                print(
-                    "  WARNING: rows with empty product_type found — treating as 'other' "
-                    "(no 0.33 conversion). Re-ingest after GAP-5 fix for accurate dried-eq KG."
-                )
-                warned_empty = True
+            # "dried", "other", or any remaining empty value → no conversion.
             converted = raw_val
 
         totals[date_str] = totals.get(date_str, 0.0) + converted
@@ -1390,9 +1442,16 @@ def prepare_chart_data(sections: dict, tab_data: dict | None = None) -> dict:
     tf = sections.get("trade_flows", {})
     all_data = tf.get("data", [])
 
-    nz_rows = [r for r in all_data if r.get("series") == "nz_export"]
-    qia_rows = [r for r in all_data if r.get("series") == "korea_quarantine"]
-    kstat_all_rows = [r for r in all_data if r.get("series") == "kstat_api"]
+    nz_rows_raw = [r for r in all_data if r.get("series") == "nz_export"]
+    qia_rows_raw = [r for r in all_data if r.get("series") == "korea_quarantine"]
+    kstat_all_rows_raw = [r for r in all_data if r.get("series") == "kstat_api"]
+
+    # GAP-5 back-fill: resolve empty product_type for rows ingested before C-3e/C-6.
+    # This is a read-time patch — the Sheets layer is not modified.
+    nz_rows = _backfill_product_type(nz_rows_raw)
+    qia_rows = _backfill_product_type(qia_rows_raw)
+    kstat_all_rows = _backfill_product_type(kstat_all_rows_raw)
+
     # Legacy split kept for backward compat.
     kstat_0507_rows = tf.get("kstat_0507", [])
     kstat_0510_rows = tf.get("kstat_0510", [])

@@ -34,6 +34,13 @@
 # L-9:  hs_code stored as TEXT dot notation ("0507.90") — not cast to int.
 # L-10: Dedup key is (date, series, hs_code, unit, country) — five fields.
 # L-13: Columns detected by header name scan, never by fixed index.
+# GAP-5 fix (2026-06-06): product_type and hs_code_10digit columns added.
+#   Annual XLSX: product_type derived from Korean product name:
+#     녹용  → product_type="dried",  hs_code_10digit="0507901190"
+#     생녹용 → product_type="frozen", hs_code_10digit="0507901110"
+#   Monthly HTML-XLS: product_type="dried" (conservative default — aggregate rows).
+#   Existing rows with empty product_type are back-filled at build.py read time
+#   using the same mapping via the notes field.
 #
 # Security: no credentials or secrets in this file. All secrets from .env only.
 
@@ -93,6 +100,23 @@ _SKIP_PREFIXES = ("국가계", "품명계", "총 계", "총계", "합 계", "합
 
 # L-4: batch write sleep between gspread calls.
 _BATCH_SLEEP = 1.1
+
+# GAP-5 fix: product_type and hs_code_10digit derived from Korean product name.
+#
+# QIA reports two soft-velvet product types:
+#   녹용  — dried velvet (건조 처리 완료)  → product_type="dried",  0507901190
+#   생녹용 — fresh/living velvet (미건조) → product_type="frozen", 0507901110
+#
+# Monthly HTML-XLS files (2026) do not split by product; all rows receive
+# product_type="dried" as the conservative default (QIA aggregate totals are
+# predominantly dried by weight). hs_code_10digit is left as the generic
+# 6-digit heading code in that case.
+#
+# Mapping: Korean product name → (hs_code_10digit, product_type)
+_QIA_PRODUCT_TYPE_MAP: dict[str, tuple[str, str]] = {
+    "녹용":  ("0507901190", "dried"),    # dried velvet
+    "생녹용": ("0507901110", "frozen"),   # fresh/living velvet (pre-conversion)
+}
 
 
 # ---------------------------------------------------------------------------
@@ -295,6 +319,11 @@ def parse_qia_annual_xlsx(filepath: Path) -> list[dict]:
 
         notes = f"source: {filepath.name} | product: {current_product}"
 
+        # GAP-5: derive product_type and hs_code_10digit from the Korean product name.
+        hs_10digit, product_type = _QIA_PRODUCT_TYPE_MAP.get(
+            current_product, ("0507901190", "dried")
+        )
+
         for col_idx, ym in month_columns:
             # 건수 is at col_idx; 수량 is at col_idx + 1.
             count_raw = row[col_idx] if col_idx < len(row) else None
@@ -308,27 +337,33 @@ def parse_qia_annual_xlsx(filepath: Path) -> list[dict]:
                 continue
 
             # Shipments row.
+            # GAP-5: hs_code_10digit and product_type added.
             output.append({
-                "date":     ym,
-                "series":   SERIES_VALUE,
-                "hs_code":  HS_CODE,
-                "hs_label": HS_LABEL,
-                "value":    count_val,
-                "unit":     UNIT_SHIPMENTS,
-                "country":  country_cell,
-                "notes":    notes,
+                "date":            ym,
+                "series":          SERIES_VALUE,
+                "hs_code":         HS_CODE,
+                "hs_label":        HS_LABEL,
+                "value":           count_val,
+                "unit":            UNIT_SHIPMENTS,
+                "country":         country_cell,
+                "notes":           notes,
+                "hs_code_10digit": hs_10digit,
+                "product_type":    product_type,
             })
 
             # KG row.
+            # GAP-5: hs_code_10digit and product_type added.
             output.append({
-                "date":     ym,
-                "series":   SERIES_VALUE,
-                "hs_code":  HS_CODE,
-                "hs_label": HS_LABEL,
-                "value":    weight_val,
-                "unit":     UNIT_KG,
-                "country":  country_cell,
-                "notes":    notes,
+                "date":            ym,
+                "series":          SERIES_VALUE,
+                "hs_code":         HS_CODE,
+                "hs_label":        HS_LABEL,
+                "value":           weight_val,
+                "unit":            UNIT_KG,
+                "country":         country_cell,
+                "notes":           notes,
+                "hs_code_10digit": hs_10digit,
+                "product_type":    product_type,
             })
 
     logger.info(
@@ -536,28 +571,41 @@ def parse_qia_monthly_html_xls(filepath: Path) -> list[dict]:
         if count_val == 0 and weight_val == 0:
             continue
 
+        # GAP-5: monthly HTML-XLS aggregates both 녹용 and 생녹용 without separating
+        # them. Default product_type="dried" — the conservative choice. No 0.33
+        # conversion is applied at build time for these aggregate rows.
+        # hs_code_10digit uses the generic dried sub-code as the best available proxy.
+        monthly_hs_10digit = "0507901190"
+        monthly_product_type = "dried"
+
         # Shipments row.
+        # GAP-5: hs_code_10digit and product_type added.
         output.append({
-            "date":     ym,
-            "series":   SERIES_VALUE,
-            "hs_code":  HS_CODE,
-            "hs_label": HS_LABEL,
-            "value":    count_val,
-            "unit":     UNIT_SHIPMENTS,
-            "country":  current_country,
-            "notes":    notes,
+            "date":            ym,
+            "series":          SERIES_VALUE,
+            "hs_code":         HS_CODE,
+            "hs_label":        HS_LABEL,
+            "value":           count_val,
+            "unit":            UNIT_SHIPMENTS,
+            "country":         current_country,
+            "notes":           notes,
+            "hs_code_10digit": monthly_hs_10digit,
+            "product_type":    monthly_product_type,
         })
 
         # KG row.
+        # GAP-5: hs_code_10digit and product_type added.
         output.append({
-            "date":     ym,
-            "series":   SERIES_VALUE,
-            "hs_code":  HS_CODE,
-            "hs_label": HS_LABEL,
-            "value":    weight_val,
-            "unit":     UNIT_KG,
-            "country":  current_country,
-            "notes":    notes,
+            "date":            ym,
+            "series":          SERIES_VALUE,
+            "hs_code":         HS_CODE,
+            "hs_label":        HS_LABEL,
+            "value":           weight_val,
+            "unit":            UNIT_KG,
+            "country":         current_country,
+            "notes":           notes,
+            "hs_code_10digit": monthly_hs_10digit,
+            "product_type":    monthly_product_type,
         })
 
     logger.info(
