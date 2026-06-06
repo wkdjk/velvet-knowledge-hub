@@ -43,7 +43,7 @@
       <p class="kpi-label">NEWS ARTICLES (LAST 90 DAYS)</p>
       
         <p class="kpi-value">4 <span class="kpi-unit">articles</span></p>
-        <p class="delta-indicator delta-neutral">Korean media articles matching velvet keyword, last 90 days</p>
+        <p class="delta-indicator delta-neutral">relevant articles — Naver + Google News</p>
       
     </div>
 
@@ -90,15 +90,18 @@
     
 
       
+      
       <div class="source-toggle" role="group" aria-label="Show or hide data sources">
-        <div class="source-toggle__pill source-toggle__pill--qia">
+        <label class="toggle-switch">
           <input type="checkbox" id="toggle-qia" name="source" value="qia" checked>
-          <label for="toggle-qia">Korea quarantine (QIA)</label>
-        </div>
-        <div class="source-toggle__pill source-toggle__pill--nz">
+          <span class="toggle-track"><span class="toggle-handle"></span></span>
+          <span class="toggle-label">QIA — Korea quarantine</span>
+        </label>
+        <label class="toggle-switch">
           <input type="checkbox" id="toggle-nz" name="source" value="nz" checked>
-          <label for="toggle-nz">NZ exports (Stats NZ)</label>
-        </div>
+          <span class="toggle-track"><span class="toggle-handle"></span></span>
+          <span class="toggle-label">Stats NZ — NZ exports</span>
+        </label>
       </div>
 
       
@@ -118,13 +121,27 @@
       <h3 class="section-subheading">NZ export destinations</h3>
 
       
+      <div class="source-toggle" role="group" aria-label="Switch destination chart date range">
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-dest-full" checked>
+          <span class="toggle-track"><span class="toggle-handle"></span></span>
+          <span class="toggle-label">All months</span>
+        </label>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-dest-rolling">
+          <span class="toggle-track"><span class="toggle-handle"></span></span>
+          <span class="toggle-label">Rolling 12 months</span>
+        </label>
+      </div>
+
+      
       <div class="chart-panel">
-        <h3>NZ velvet exports by destination — FOB value (NZD)</h3>
+        <h3 id="dest-chart-title">NZ velvet exports by destination — FOB value (NZD)</h3>
         <div class="chart-canvas-wrapper" style="height:280px;">
           <canvas id="chart-destination-area"
             aria-label="NZ deer velvet exports by destination, stacked area chart of NZD FOB value" role="img"></canvas>
         </div>
-        <p class="chart-annotation">Source: Stats NZ. All available months shown. Countries not individually listed are grouped as Other.</p>
+        <p class="chart-annotation" id="dest-chart-annotation">Source: Stats NZ. All available months shown. Countries not individually listed are grouped as Other.</p>
       </div>
 
       
@@ -135,24 +152,40 @@
       
         
         
-          <div class="chart-panel">
+        <div class="source-toggle" role="group" aria-label="Switch between annual and monthly view">
+          <label class="toggle-switch" id="qia-origin-annual-toggle-label">
+            <input type="checkbox" id="toggle-qia-annual" checked>
+            <span class="toggle-track"><span class="toggle-handle"></span></span>
+            <span class="toggle-label">Annual view</span>
+          </label>
+          <label class="toggle-switch" id="qia-origin-monthly-toggle-label">
+            <input type="checkbox" id="toggle-qia-monthly">
+            <span class="toggle-track"><span class="toggle-handle"></span></span>
+            <span class="toggle-label">Monthly view</span>
+          </label>
+        </div>
+
+        
+        <div id="panel-qia-annual" class="chart-panel">
+          <h3>South Korean velvet imports by origin — annual (kg)</h3>
+          <div class="chart-canvas-wrapper" style="height:260px;">
+            <canvas id="chart-qia-origin"
+              aria-label="South Korean deer velvet imports by country of origin, annual stacked bar chart" role="img"></canvas>
+          </div>
+          <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Annual totals for all available complete years. Raw import kg at quarantine inspection. No dried-equivalent conversion applied.</p>
+        </div>
+
+        
+        
+          <div id="panel-qia-monthly" class="chart-panel" style="display:none;">
             <h3>South Korean velvet imports by origin — monthly (kg)</h3>
             <div class="chart-canvas-wrapper" style="height:280px;">
               <canvas id="chart-qia-origin-monthly"
-                aria-label="South Korean deer velvet imports by country of origin, monthly time-series" role="img"></canvas>
+                aria-label="South Korean deer velvet imports by country of origin, monthly stacked bar chart" role="img"></canvas>
             </div>
             <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Monthly raw import kg at quarantine inspection. No dried-equivalent conversion applied.</p>
           </div>
         
-        
-        <div class="chart-panel" style="margin-top:16px;">
-          <h3>South Korean velvet imports by origin — annual (kg)</h3>
-          <div class="chart-canvas-wrapper" style="height:260px;">
-            <canvas id="chart-qia-origin"
-              aria-label="South Korean deer velvet imports by country of origin, annual grouped bar chart" role="img"></canvas>
-          </div>
-          <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Annual totals for the two most recent complete years. Raw import kg at quarantine inspection. No dried-equivalent conversion applied.</p>
-        </div>
       
 
       
@@ -454,7 +487,7 @@
       /* C2 (pie chart) removed per Commander feedback F-12. */
     }());
 
-    /* ── Panel D1 (P2-H) — QIA monthly origin view ─────────────────── */
+    /* ── Panel D1 (C-6g G4-A) — QIA monthly origin — stacked bar ───── */
     (function buildQiaMonthlyChart() {
       var ctxMonthly = document.getElementById('chart-qia-origin-monthly');
       if (!ctxMonthly) return;
@@ -472,21 +505,19 @@
         'Other':           '#BDBDBD'
       };
 
+      /* C-6g G4-A: stacked bar chart instead of multi-line */
       var monthlyDsets = QIA_MONTHLY.countries.map(function (country) {
         return {
           label: country,
           data: QIA_MONTHLY.series[country] || [],
+          backgroundColor: QIA_COLOURS_M[country] || '#BDBDBD',
           borderColor: QIA_COLOURS_M[country] || '#BDBDBD',
-          backgroundColor: 'transparent',
-          borderWidth: 1.5,
-          fill: false,
-          pointRadius: 2,
-          tension: 0.1
+          borderWidth: 1
         };
       });
 
       new Chart(ctxMonthly.getContext('2d'), {
-        type: 'line',
+        type: 'bar',
         data: { labels: QIA_MONTHLY.labels, datasets: monthlyDsets },
         options: {
           responsive: true,
@@ -509,11 +540,13 @@
           scales: {
             x: {
               type: 'category',
+              stacked: true,
               ticks: { maxTicksLimit: 10, maxRotation: 45 },
               grid: { color: 'rgba(204,204,204,0.4)' }
             },
             y: {
               beginAtZero: true,
+              stacked: true,
               title: { display: true, text: 'Import weight (kg)' },
               ticks: { callback: function (v) { return v.toLocaleString(); } },
               grid: { color: 'rgba(204,204,204,0.4)' }
@@ -529,7 +562,7 @@
       var ctxQia = document.getElementById('chart-qia-origin');
       if (!ctxQia) return;
 
-      var QIA_DATA = [{"year": 2024, "countries": {"China": 89789.825, "Hong Kong (SAR)": 4346.0, "Kazakhstan": 413.0, "New Zealand": 93725.96, "Russia": 39859.82}}, {"year": 2025, "countries": {"China": 91743.0, "Hong Kong (SAR)": 3698.6, "Kazakhstan": 1058.0, "New Zealand": 103037.89, "Russia": 36440.51}}];
+      var QIA_DATA = [{"year": 2019, "countries": {"China": 65673.51000000001, "Hong Kong (SAR)": 17826.0, "Kazakhstan": 701.0, "New Zealand": 143133.51, "Russia": 46436.0, "Other": 500.0}}, {"year": 2020, "countries": {"China": 77655.31000000001, "Hong Kong (SAR)": 13700.7, "Kazakhstan": 2353.45, "New Zealand": 115103.31599999999, "Russia": 54041.45}}, {"year": 2021, "countries": {"China": 72485.825, "Hong Kong (SAR)": 22371.675, "Kazakhstan": 1428.0, "New Zealand": 115998.06999999999, "Russia": 55980.19}}, {"year": 2022, "countries": {"China": 89551.833, "Hong Kong (SAR)": 23834.6, "Kazakhstan": 2096.8, "New Zealand": 156034.98, "Russia": 43889.09999999999}}, {"year": 2023, "countries": {"China": 74242.8, "Hong Kong (SAR)": 12596.0, "Kazakhstan": 1094.8, "New Zealand": 164120.48, "Russia": 29108.59}}, {"year": 2024, "countries": {"China": 89789.825, "Hong Kong (SAR)": 4346.0, "Kazakhstan": 413.0, "New Zealand": 93725.96, "Russia": 39859.82}}, {"year": 2025, "countries": {"China": 91743.0, "Hong Kong (SAR)": 3698.6, "Kazakhstan": 1058.0, "New Zealand": 103037.89, "Russia": 36440.51}}];
       if (!QIA_DATA || !QIA_DATA.length) return;
 
       var QIA_COLOURS = {
@@ -591,6 +624,7 @@
           scales: {
             x: {
               type: 'category',
+              stacked: true,
               grid: { color: 'rgba(204,204,204,0.4)' }
             },
             y: {
@@ -605,7 +639,8 @@
       });
     }());
 
-    /* ── Source toggle handler (P2-A: 2 sources — QIA and NZ only) ──── */
+    /* ── Source toggle handler — scoped to volume chart toggles only ─── */
+    /* C-6g G3: handler uses specific IDs to avoid capturing origin/dest toggles. */
     function getChecked() {
       return {
         qia: document.getElementById('toggle-qia') ? document.getElementById('toggle-qia').checked : true,
@@ -613,13 +648,88 @@
       };
     }
 
-    document.querySelectorAll('.source-toggle input[type="checkbox"]').forEach(function (cb) {
-      cb.addEventListener('change', function () {
+    ['toggle-qia', 'toggle-nz'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('change', function () {
         var sel = getChecked();
         volChart.data.datasets = buildVolDatasets(sel.qia, sel.nz);
         volChart.update();
       });
     });
+
+    /* ── QIA origin view toggle (G3): Annual / Monthly panel swap ────── */
+    (function initOriginViewToggle() {
+      var annualCb  = document.getElementById('toggle-qia-annual');
+      var monthlyCb = document.getElementById('toggle-qia-monthly');
+      var annualPanel  = document.getElementById('panel-qia-annual');
+      var monthlyPanel = document.getElementById('panel-qia-monthly');
+      if (!annualCb || !monthlyCb) return;
+
+      function applyOriginView() {
+        if (annualPanel)  annualPanel.style.display  = annualCb.checked  ? '' : 'none';
+        if (monthlyPanel) monthlyPanel.style.display = monthlyCb.checked ? '' : 'none';
+      }
+
+      annualCb.addEventListener('change',  applyOriginView);
+      monthlyCb.addEventListener('change', applyOriginView);
+    }());
+
+    /* ── NZ destination view toggle (G4-C): All months / Rolling 12 m ── */
+    (function initDestViewToggle() {
+      var fullCb    = document.getElementById('toggle-dest-full');
+      var rollCb    = document.getElementById('toggle-dest-rolling');
+      if (!fullCb || !rollCb) return;
+
+      /* DEST_AREA_DATA is in scope — declared at the enclosing function level. */
+      /* Chart.js v4: Chart.getChart(canvas element or id string). */
+      var destCanvas = document.getElementById('chart-destination-area');
+      var destChart  = destCanvas ? Chart.getChart(destCanvas) : null;
+
+      function applyDestFilter() {
+        if (!destChart) return;
+        var showRolling = rollCb.checked;
+        /* Build a reduced label set: last 12 months if rolling, all months otherwise. */
+        var allLabels = Object.keys(
+          (function () {
+            var s = {};
+            var DEST_ORDER = ['China', 'Korea', 'Hong Kong', 'Other'];
+            DEST_ORDER.forEach(function (c) {
+              (DEST_AREA_DATA[c] || []).forEach(function (pt) { s[pt.x] = true; });
+            });
+            return s;
+          })()
+        ).sort();
+
+        var filteredLabels = showRolling ? allLabels.slice(-12) : allLabels;
+        var titleEl    = document.getElementById('dest-chart-title');
+        var annotEl    = document.getElementById('dest-chart-annotation');
+
+        if (titleEl) {
+          titleEl.textContent = showRolling
+            ? 'NZ velvet exports by destination — rolling 12 months (NZD FOB)'
+            : 'NZ velvet exports by destination — FOB value (NZD)';
+        }
+        if (annotEl) {
+          annotEl.textContent = showRolling
+            ? 'Source: Stats NZ. Most recent 12 months shown. Countries not individually listed are grouped as Other.'
+            : 'Source: Stats NZ. All available months shown. Countries not individually listed are grouped as Other.';
+        }
+
+        destChart.data.labels = filteredLabels;
+        destChart.data.datasets.forEach(function (ds) {
+          var DEST_ORDER = ['China', 'Korea', 'Hong Kong', 'Other'];
+          var country = ds.label;
+          var lookup = {};
+          (DEST_AREA_DATA[country] || []).forEach(function (pt) { lookup[pt.x] = pt.y; });
+          ds.data = filteredLabels.map(function (d) { return lookup[d] || 0; });
+        });
+        destChart.update();
+      }
+
+      fullCb.addEventListener('change',  applyDestFilter);
+      rollCb.addEventListener('change',  applyDestFilter);
+    }());
 
   }());
   </script>
@@ -629,7 +739,7 @@
   
   <script>
   (function () {
-    var mfdsData = [{"x": "2004-01", "y": 18751.0}, {"x": "2005-01", "y": 17531.0}, {"x": "2006-01", "y": 17806.0}, {"x": "2007-01", "y": 21476.0}, {"x": "2008-01", "y": 14962.0}, {"x": "2009-01", "y": 14146.0}, {"x": "2010-1", "y": 16786.0}, {"x": "2011-1", "y": 17516.0}, {"x": "2012-1", "y": 18044.0}, {"x": "2013-1", "y": 19835.0}, {"x": "2014-1", "y": 26377.0}, {"x": "2015-1", "y": 31094.0}, {"x": "2016-01", "y": 29001.0}, {"x": "2017-01", "y": 28944.0}, {"x": "2018-01", "y": 30078.0}, {"x": "2019-01", "y": 32244.0}, {"x": "2020-01", "y": 31184.0}, {"x": "2021-01", "y": 34242.0}, {"x": "2022-1", "y": 39364.0}, {"x": "2023-1", "y": 24178.0}, {"x": "2024-01", "y": 28026.0}];
+    var mfdsData = [{"x": "2004", "y": 18751.0}, {"x": "2005", "y": 17531.0}, {"x": "2006", "y": 17806.0}, {"x": "2007", "y": 21476.0}, {"x": "2008", "y": 14962.0}, {"x": "2009", "y": 14146.0}, {"x": "2010", "y": 16786.0}, {"x": "2011", "y": 17516.0}, {"x": "2012", "y": 18044.0}, {"x": "2013", "y": 19835.0}, {"x": "2014", "y": 26377.0}, {"x": "2015", "y": 31094.0}, {"x": "2016", "y": 29001.0}, {"x": "2017", "y": 28944.0}, {"x": "2018", "y": 30078.0}, {"x": "2019", "y": 32244.0}, {"x": "2020", "y": 31184.0}, {"x": "2021", "y": 34242.0}, {"x": "2022", "y": 39364.0}, {"x": "2023", "y": 24178.0}, {"x": "2024", "y": 28026.0}];
     if (!mfdsData || !mfdsData.length) return;
     var canvas = document.getElementById('b7PriceChart');
     if (!canvas) return;
@@ -704,14 +814,6 @@
 
     
     
-    <div class="nz-share-callout">
-      <span class="nz-share-callout__value">~66%</span>
-      <span class="nz-share-callout__body">
-        <span class="nz-share-callout__label">NZ market share — Korea velvet imports (herbal medicine channel)</span>
-        <span class="nz-share-callout__source">MFDS annual statistics, 2024 — USD 18.5 M of USD 28.0 M total (value basis)</span>
-        <span class="nz-share-callout__caveat">Value basis only. NZ share by weight may differ. Herbal medicine channel (pharmaceutical classification); does not include food-channel imports.</span>
-      </span>
-    </div>
 
     
     
@@ -735,21 +837,21 @@
               <thead><tr><th scope="col">Year</th><th scope="col">USD thousands</th></tr></thead>
               <tbody>
                 
-                  <tr><td class="data">2017-01</td><td class="data">28,944.0</td></tr>
+                  <tr><td class="data">2017</td><td class="data">28,944.0</td></tr>
                 
-                  <tr><td class="data">2018-01</td><td class="data">30,078.0</td></tr>
+                  <tr><td class="data">2018</td><td class="data">30,078.0</td></tr>
                 
-                  <tr><td class="data">2019-01</td><td class="data">32,244.0</td></tr>
+                  <tr><td class="data">2019</td><td class="data">32,244.0</td></tr>
                 
-                  <tr><td class="data">2020-01</td><td class="data">31,184.0</td></tr>
+                  <tr><td class="data">2020</td><td class="data">31,184.0</td></tr>
                 
-                  <tr><td class="data">2021-01</td><td class="data">34,242.0</td></tr>
+                  <tr><td class="data">2021</td><td class="data">34,242.0</td></tr>
                 
-                  <tr><td class="data">2022-1</td><td class="data">39,364.0</td></tr>
+                  <tr><td class="data">2022</td><td class="data">39,364.0</td></tr>
                 
-                  <tr><td class="data">2023-1</td><td class="data">24,178.0</td></tr>
+                  <tr><td class="data">2023</td><td class="data">24,178.0</td></tr>
                 
-                  <tr><td class="data">2024-01</td><td class="data">28,026.0</td></tr>
+                  <tr><td class="data">2024</td><td class="data">28,026.0</td></tr>
                 
               </tbody>
             </table>
@@ -7212,7 +7314,7 @@
 
     <div class="section-header">
       <div class="section-header-left">
-        <h2>Supplement food products list</h2>
+        <h2>Velvet product examples — Korea</h2>
       </div>
     </div>
 
@@ -21162,6 +21264,690 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
 
       
         
@@ -21171,52 +21957,72 @@
             
             
             
-            
             <li class="article-entry">
               <div class="article-body">
-                <a class="article-title" href="http://www.lawissue.co.kr/view.php?ud=20260521190353785204ead0791_12" target="_blank" rel="noopener noreferrer">Chong Kun Dang reports increased purchases of its deer velvet-containing products Hwaaelak and RXGIN among consumers in their 20s during the Family Month promotional period. RXGIN Hongcheon Woong product combines red ginseng concentrate with deer velvet extract and other traditional ingredients in a low-calorie formulation.</a>
+                <a class="article-title"
+                   href="http://www.lawissue.co.kr/view.php?ud=20260521190353785204ead0791_12"
+                   target="_blank" rel="noopener noreferrer">정관장 "화애락·RXGIN, 가정의 달 기간 20대 구매 증가했다"</a>
+                <p class="article-summary">Chong Kun Dang reports increased purchases of its deer velvet-containing products Hwaaelak and RXGIN among consumers in their 20s during the Family Month promotional period. RXGIN Hongcheon Woong product combines red ginseng concentrate with deer velvet extract and other traditional ingredients in a low-calorie formulation.</p>
               </div>
               <div class="article-meta">
                 <span class="article-meta-date">2026-05-21</span>
+                
+                  <span class="article-meta-category">업계소식</span>
+                
               </div>
             </li>
           
             
             
             
-            
             <li class="article-entry">
               <div class="article-body">
-                <a class="article-title" href="https://www.newsis.com/view/NISX20260316_0003549731" target="_blank" rel="noopener noreferrer">Cheongju City Council raises concerns about gaps in deer disease prevention systems and limited local government authority to conduct inspections and proactive responses. The article highlights risks of zoonotic diseases like tuberculosis and hepatitis E from consuming untested deer velvet and blood products.</a>
+                <a class="article-title"
+                   href="https://www.newsis.com/view/NISX20260316_0003549731"
+                   target="_blank" rel="noopener noreferrer">청주시의회 "사슴 방역체계 구멍…지자체 권한도 적어"</a>
+                <p class="article-summary">Cheongju City Council raises concerns about gaps in deer disease prevention systems and limited local government authority to conduct inspections and proactive responses. The article highlights risks of zoonotic diseases like tuberculosis and hepatitis E from consuming untested deer velvet and blood products.</p>
               </div>
               <div class="article-meta">
                 <span class="article-meta-date">2026-03-16</span>
+                
+                  <span class="article-meta-category">규제정책</span>
+                
               </div>
             </li>
           
             
             
             
-            
             <li class="article-entry">
               <div class="article-body">
-                <a class="article-title" href="https://www.gokorea.kr/news/articleView.html?idxno=863785" target="_blank" rel="noopener noreferrer">New Zealand Deer Industry Association (DINZ) partners with Yuhan Health Life to promote 'Henkibe,' a velvet product recognized by Korea's Food and Drug Administration, leveraging NZ's advanced traceability systems and animal welfare standards.</a>
+                <a class="article-title"
+                   href="https://www.gokorea.kr/news/articleView.html?idxno=863785"
+                   target="_blank" rel="noopener noreferrer">뉴질랜드사슴협회·유한건강생활, 식약처 인정 녹용 '헨키브'로 파트너...</a>
+                <p class="article-summary">New Zealand Deer Industry Association (DINZ) partners with Yuhan Health Life to promote 'Henkibe,' a velvet product recognized by Korea's Food and Drug Administration, leveraging NZ's advanced traceability systems and animal welfare standards.</p>
               </div>
               <div class="article-meta">
                 <span class="article-meta-date">2026-04-16</span>
+                
+                  <span class="article-meta-category">수입유통</span>
+                
               </div>
             </li>
           
             
             
             
-            
             <li class="article-entry">
               <div class="article-body">
-                <a class="article-title" href="https://news.kbs.co.kr/news/pc/view/view.do?ncd=8575993&ref=A" target="_blank" rel="noopener noreferrer">Sika deer, originally imported to Korea in the 1950s for velvet antler production, have become invasive wild animals threatening ecosystems and public safety, and were officially designated as harmful wildlife at the end of last year.</a>
+                <a class="article-title"
+                   href="https://news.kbs.co.kr/news/pc/view/view.do?ncd=8575993&ref=A"
+                   target="_blank" rel="noopener noreferrer">‘밤비’ 같던 꽃사슴…“이젠 유해동물”</a>
+                <p class="article-summary">Sika deer, originally imported to Korea in the 1950s for velvet antler production, have become invasive wild animals threatening ecosystems and public safety, and were officially designated as harmful wildlife at the end of last year.</p>
               </div>
               <div class="article-meta">
                 <span class="article-meta-date">2026-06-02</span>
+                
+                  <span class="article-meta-category">규제정책</span>
+                
               </div>
             </li>
           
@@ -21235,7 +22041,7 @@
     <p class="caption">Data sources:
       <a href="https://www.stats.govt.nz" target="_blank" rel="noopener noreferrer">Stats NZ</a> ·
       <a href="https://www.qia.go.kr" target="_blank" rel="noopener noreferrer">QIA (Animal and Plant Quarantine Agency, Korea)</a> ·
-      <a href="https://unipass.customs.go.kr" target="_blank" rel="noopener noreferrer">KSTAT (Korea Customs Service)</a> ·
+      <a href="https://unipass.customs.go.kr" target="_blank" rel="noopener noreferrer">Korea Customs (KCS)</a> ·
       <a href="https://www.mfds.go.kr" target="_blank" rel="noopener noreferrer">MFDS (Ministry of Food and Drug Safety, Korea)</a>
     </p>
   </div>
