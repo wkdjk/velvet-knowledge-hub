@@ -45,7 +45,7 @@
       <p class="kpi-label">NEWS ARTICLES (LAST 90 DAYS)</p>
       {% if kpi is defined and kpi.articles_90d is defined and kpi.articles_90d != "—" %}
         <p class="kpi-value">{{ kpi.articles_90d }} <span class="kpi-unit">articles</span></p>
-        <p class="delta-indicator delta-neutral">Korean media articles matching velvet keyword, last 90 days</p>
+        <p class="delta-indicator delta-neutral">relevant articles — Naver + Google News</p>
       {% else %}
         <p class="kpi-value text-muted">—</p>
       {% endif %}
@@ -941,16 +941,21 @@
         <p class="article-list-header">{{ publishable | length }} relevant article{{ 's' if publishable | length != 1 else '' }} — last 90 days</p>
         <ul class="article-list" aria-label="Korea deer velvet relevant articles — last 90 days">
           {% for article in publishable %}
-            {# P1-K: English titles only. Column swap (C-6a): 'title' = URL, 'url' = Korean title.     #}
-            {# Display english_summary as the link text (only English content available per live schema). #}
-            {# Category labels: Korean (업계소식 etc.) — shown as-is; see cross_project_lessons for      #}
-            {# a future translator. The English summary serves as the primary title.                     #}
+            {# C-6g 1-A: Restored two-element card per DesignQ spec OI_newspulse_font_designq_spec.md. #}
+            {# Column-swap schema (C-6a): 'title' = URL (href), 'url' = Korean title (anchor text).    #}
+            {# english_summary restored as <p class="article-summary"> body below the title.           #}
             <li class="article-entry">
               <div class="article-body">
-                <a class="article-title" href="{{ article.title | default('#') }}" target="_blank" rel="noopener noreferrer">{{ article.english_summary | default("[No English title available]") }}</a>
+                <a class="article-title"
+                   href="{{ article.title | default('#') }}"
+                   target="_blank" rel="noopener noreferrer">{{ article.url | default("[Title unavailable]") }}</a>
+                <p class="article-summary">{{ article.english_summary | default("") }}</p>
               </div>
               <div class="article-meta">
                 <span class="article-meta-date">{{ article.published_date | default("") }}</span>
+                {% if article.category %}
+                  <span class="article-meta-category">{{ article.category }}</span>
+                {% endif %}
               </div>
             </li>
           {% endfor %}

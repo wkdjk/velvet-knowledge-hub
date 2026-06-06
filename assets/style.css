@@ -96,7 +96,7 @@ h3 {
 
 p {
   font-size: 1rem;
-  line-height: 1.65;
+  /* line-height: inherited from body (1.65) — no duplicate needed */
   font-weight: 400;
 }
 
@@ -324,6 +324,15 @@ footer .caption:last-child {
   font-weight: 600;
 }
 
+/* C-6g 1-B: KPI prose sub-labels use .delta-neutral as a class but must NOT
+   inherit monospace from .delta-indicator — they are readable prose, not data
+   deltas. Stack B (system sans) override keeps the font consistent with body. */
+.delta-indicator.delta-neutral {
+  font-family: system-ui, -apple-system, Arial, sans-serif;
+  font-variant-numeric: normal;
+  font-weight: 400;
+}
+
 /* Last-updated label */
 .last-updated {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
@@ -416,7 +425,7 @@ footer .caption:last-child {
 }
 
 .placeholder-card .placeholder-title {
-  font-family: "Georgia", "Times New Roman", "Liberation Serif", serif;
+  font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--text-muted);
@@ -601,6 +610,7 @@ footer .caption:last-child {
 }
 
 /* C-3e: chart panel h3 headings */
+/* Intentionally smaller than section h2 — chart headings should not compete */
 .chart-panel h3 {
   font-size: 1.0rem;
   font-weight: 600;
