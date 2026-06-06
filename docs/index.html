@@ -60,7 +60,7 @@
 
 <nav class="page-wrapper">
   <ul class="nav-list">
-    <li><a href="#trade-flows">Trade flows</a></li>
+    <li><a href="#trade-flows">Volume flows</a></li>
     <li><a href="#import-intelligence">Import intelligence</a></li>
     <li><a href="#market-presence">Market presence</a></li>
     <li><a href="#news-pulse">News pulse</a></li>
@@ -77,45 +77,31 @@
 
     <div class="section-header">
       <div class="section-header-left">
-        <h2>Trade flows</h2>
+        <h2>Volume flows</h2>
         <span class="last-updated">Last updated: 2026-04</span>
       </div>
     </div>
 
-    <p class="source-footnote">Sources: Stats NZ (NZ exports) · QIA (Korea quarantine) · KSTAT (Korea customs)</p>
+    <p class="source-footnote">Sources: QIA (Korea quarantine) · Stats NZ (NZ exports)</p>
 
     
 
       
-      
-      <div class="trade-flows-kpi-chip" aria-label="Rolling year NZ exports year-on-year comparison">
-        <span class="chip-label">Rolling year (Oct–Sep):</span>
-        <span class="chip-source">NZ exports to Korea</span>
-        
-          <span class="chip-delta delta-positive">▲ 7.8%</span>
-        
-        <span class="chip-suffix">vs prior season</span>
-      </div>
-
-      
       <div class="source-toggle" role="group" aria-label="Show or hide data sources">
-        <div class="source-toggle__pill source-toggle__pill--nz">
-          <input type="checkbox" id="toggle-nz" name="source" value="nz" checked>
-          <label for="toggle-nz">NZ exports</label>
-        </div>
         <div class="source-toggle__pill source-toggle__pill--qia">
           <input type="checkbox" id="toggle-qia" name="source" value="qia" checked>
           <label for="toggle-qia">Korea quarantine (QIA)</label>
         </div>
-        <div class="source-toggle__pill source-toggle__pill--kstat">
-          <input type="checkbox" id="toggle-kstat" name="source" value="kstat" checked>
-          <label for="toggle-kstat">Korea customs (KSTAT)</label>
+        <div class="source-toggle__pill source-toggle__pill--nz">
+          <input type="checkbox" id="toggle-nz" name="source" value="nz" checked>
+          <label for="toggle-nz">NZ exports (Stats NZ)</label>
         </div>
       </div>
 
       
       <div class="chart-panel">
         <h3>Volume — monthly and rolling 12-month (dried-equivalent kg)</h3>
+        <p class="chart-scope-note">Rolling 12-month smooths seasonal peaks — NZ velvet ships primarily Dec–Mar.</p>
         <div class="chart-canvas-wrapper" style="height:320px;">
           <canvas id="chart-volume"
             aria-label="Monthly and rolling 12-month trade volume in dried-equivalent kg" role="img"></canvas>
@@ -126,9 +112,7 @@
       
 
       
-      
-      
-      <h3 class="section-subheading">Export destination breakdown</h3>
+      <h3 class="section-subheading">NZ export destinations</h3>
 
       
       <div class="chart-panel">
@@ -143,8 +127,7 @@
       
 
       
-      
-      <h3 class="section-subheading">Korean market — imports by origin</h3>
+      <h3 class="section-subheading">Korea imports by origin</h3>
 
       
         <div class="chart-panel">
@@ -159,23 +142,20 @@
 
       
       <details class="discrepancy-accordion">
-        <summary class="discrepancy-accordion__trigger" aria-label="Why do the three sources show different volumes?">
-          <span>ⓘ Why do the three sources show different volumes?</span>
+        <summary class="discrepancy-accordion__trigger" aria-label="Why do the two sources show different volumes?">
+          <span>ⓘ Why do the two sources show different volumes?</span>
           <span class="discrepancy-accordion__chevron" aria-hidden="true">&#9654;</span>
         </summary>
         <div class="discrepancy-accordion__body">
-          <h4>Why the three sources show different volumes</h4>
-          <p>NZ exports (Stats NZ) records shipments at the point of export from New Zealand.<br>
-          Korea quarantine (QIA) records physical arrivals at Korean ports, inspected upon landing.<br>
-          Korea customs (KSTAT) records formal customs declarations filed upon import clearance.</p>
-          <p>Four factors cause the figures to differ:</p>
+          <h4>Why the two sources show different volumes</h4>
+          <p>NZ exports (Stats NZ) records shipments at the point of export from New Zealand. Korea quarantine (QIA) records physical arrivals at Korean ports, inspected upon landing.</p>
+          <p>Three factors cause the figures to differ:</p>
           <ol>
-            <li><strong>Timing.</strong> Sea freight from New Zealand to Korea takes approximately two to three weeks. An NZ shipment recorded in October may appear in the QIA and KSTAT data in November.</li>
-            <li><strong>Transit and re-export.</strong> New Zealand also exports velvet to China, Hong Kong, and Taiwan. Some of that product is subsequently re-exported to Korea and appears in QIA and KSTAT data without a matching NZ-to-Korea export record.</li>
-            <li><strong>Classification codes.</strong> New Zealand Customs and Korea Customs use structurally different sub-classification schemes under HS heading 0507. The two countries' sub-codes do not map directly to one another, so NZ and Korean figures cannot be reliably reconciled at the sub-code level. QIA quarantine data, which captures physical arrivals at Korean ports, serves as the bridge between the two systems.</li>
-            <li><strong>Fresh/frozen versus dried weight.</strong> Korea quarantine (QIA) records fresh/frozen and dried velvet volumes separately. The standard 0.33 dried-equivalent conversion (0.33 kg dried = 1 kg fresh/frozen) is applied to QIA's fresh/frozen component to normalise volumes. Korea customs (KSTAT) records a combined kg total without a fresh/dried split, so it is used as-is without conversion.</li>
+            <li><strong>Timing.</strong> Sea freight from New Zealand to Korea takes approximately two to three weeks. An NZ shipment recorded in October may appear in QIA data in November.</li>
+            <li><strong>Transit and re-export.</strong> New Zealand also exports velvet to China, Hong Kong, and Taiwan. Some of that product is subsequently re-exported to Korea and appears in QIA data without a matching NZ-to-Korea export record.</li>
+            <li><strong>Classification codes.</strong> NZ Customs and Korea Customs use structurally different sub-classification schemes under HS heading 0507. The two countries' sub-codes do not map directly to one another, so NZ and Korean figures cannot be reliably reconciled at the sub-code level.</li>
           </ol>
-          <p class="closing-note">These differences are not data errors. They reflect the different measurement points and classification systems of three independent agencies.</p>
+          <p class="closing-note">These differences are not data errors. They reflect the different measurement points and classification systems of two independent agencies.</p>
         </div>
       </details>
 
@@ -190,10 +170,9 @@
   (function () {
     'use strict';
 
-    /* ── Source colours (match CSS tokens) ──────────────────────────── */
+    /* ── Source colours (P2-A: KSTAT removed from display) ─────────── */
     var C_NZ    = '#1A5276';
     var C_QIA   = '#7D6608';
-    var C_KSTAT = '#6E2F0A';
 
     /* ── Embedded datasets (injected by build.py) ────────────────────── */
     var NZ    = {"monthly_kg": [{"x": "2024-04", "y": 12582.0}, {"x": "2024-05", "y": 9581.0}, {"x": "2024-06", "y": 5586.0}, {"x": "2024-07", "y": 6976.0}, {"x": "2024-08", "y": 3007.0}, {"x": "2024-09", "y": 1204.0}, {"x": "2024-10", "y": 2496.0}, {"x": "2024-11", "y": 13403.0}, {"x": "2024-12", "y": 178335.0}, {"x": "2025-01", "y": 35505.0}, {"x": "2025-02", "y": 233928.0}, {"x": "2025-03", "y": 206772.0}, {"x": "2025-04", "y": 0.0}, {"x": "2025-05", "y": 0.0}, {"x": "2025-06", "y": 12.0}, {"x": "2025-07", "y": 5380.0}, {"x": "2025-08", "y": 4492.0}, {"x": "2025-09", "y": 11996.0}, {"x": "2025-10", "y": 8682.0}, {"x": "2025-11", "y": 30529.0}, {"x": "2025-12", "y": 139653.0}, {"x": "2026-01", "y": 157404.0}, {"x": "2026-02", "y": 135212.0}, {"x": "2026-03", "y": 196284.0}], "monthly_dried_eq_kg": [{"x": "2024-04", "y": 6487.68}, {"x": "2024-05", "y": 6416.59}, {"x": "2024-06", "y": 1877.55}, {"x": "2024-07", "y": 6326.1}, {"x": "2024-08", "y": 995.66}, {"x": "2024-09", "y": 1204.0}, {"x": "2024-10", "y": 2496.0}, {"x": "2024-11", "y": 9758.2}, {"x": "2024-12", "y": 72341.67}, {"x": "2025-01", "y": 11740.1}, {"x": "2025-02", "y": 81289.27}, {"x": "2025-03", "y": 69830.7}, {"x": "2025-04", "y": 0.0}, {"x": "2025-05", "y": 0.0}, {"x": "2025-06", "y": 12.0}, {"x": "2025-07", "y": 5380.0}, {"x": "2025-08", "y": 4492.0}, {"x": "2025-09", "y": 9849.32}, {"x": "2025-10", "y": 7596.6}, {"x": "2025-11", "y": 16595.01}, {"x": "2025-12", "y": 56030.97}, {"x": "2026-01", "y": 51943.32}, {"x": "2026-02", "y": 49811.12}, {"x": "2026-03", "y": 71295.5}], "rolling_12m_dried_eq_kg": [{"x": "2024-04", "y": 389370.59}, {"x": "2024-05", "y": 251625.43}, {"x": "2024-06", "y": 252159.05}, {"x": "2024-07", "y": 250141.4}, {"x": "2024-08", "y": 251137.06}, {"x": "2024-09", "y": 241332.85}, {"x": "2024-10", "y": 240140.85}, {"x": "2024-11", "y": 249899.05}, {"x": "2024-12", "y": 280523.83}, {"x": "2025-01", "y": 110379.17}, {"x": "2025-02", "y": 185342.34}, {"x": "2025-03", "y": 254177.38}, {"x": "2025-04", "y": 0.0}, {"x": "2025-05", "y": 0.0}, {"x": "2025-06", "y": 252985.38}, {"x": "2025-07", "y": 258035.38}, {"x": "2025-08", "y": 260031.38}, {"x": "2025-09", "y": 260122.5}, {"x": "2025-10", "y": 195377.43}, {"x": "2025-11", "y": 208155.0}, {"x": "2025-12", "y": 262815.97}, {"x": "2026-01", "y": 281485.25}, {"x": "2026-02", "y": 331284.37}, {"x": "2026-03", "y": 397199.87}], "unit_price": [{"x": "2024-04", "y": 223.63}, {"x": "2024-05", "y": 209.26}, {"x": "2024-06", "y": 143.7}, {"x": "2024-07", "y": 285.33}, {"x": "2024-08", "y": 299.42}, {"x": "2024-09", "y": 57.85}, {"x": "2024-10", "y": 229.67}, {"x": "2024-11", "y": 119.1}, {"x": "2024-12", "y": 190.06}, {"x": "2025-01", "y": 260.59}, {"x": "2025-02", "y": 241.75}, {"x": "2025-03", "y": 256.03}, {"x": "2025-04", "y": 0.0}, {"x": "2025-05", "y": 0.0}, {"x": "2025-06", "y": 1028.17}, {"x": "2025-07", "y": 42.61}, {"x": "2025-08", "y": 170.45}, {"x": "2025-09", "y": 187.16}, {"x": "2025-10", "y": 47.17}, {"x": "2025-11", "y": 106.09}, {"x": "2025-12", "y": 156.21}, {"x": "2026-01", "y": 200.25}, {"x": "2026-02", "y": 180.87}, {"x": "2026-03", "y": 214.11}], "yoy_pct": {"2024-04": 50.5, "2024-05": -16.3, "2024-06": -14.8, "2024-07": -9.4, "2024-08": 4.5, "2024-09": 10.8, "2024-1": -3.4, "2024-10": -4.2, "2024-11": -17.1, "2024-12": -37.0, "2024-4": -56.3, "2024-5": -66.2, "2024-6": -63.2, "2024-7": -65.2, "2025-01": -64.2, "2025-02": -51.6, "2025-03": -41.9, "2025-06": 0.3, "2025-07": 3.2, "2025-08": 3.5, "2025-09": 7.8, "2025-10": -18.6, "2025-11": -16.7, "2025-12": -6.3, "2025-3": null, "2025-4": 90.2, "2025-5": 206.2, "2025-6": 180.0, "2026-01": 155.0, "2026-02": 78.7, "2026-03": 56.3, "2026-3": 49.3}, "labels": ["2024-04", "2024-05", "2024-06", "2024-07", "2024-08", "2024-09", "2024-10", "2024-11", "2024-12", "2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03"]};
@@ -252,39 +231,15 @@
     var ctxVol = document.getElementById('chart-volume');
     if (!ctxVol) return;
 
-    /* Build all labels (x-axis) from NZ source — widest date range. */
-    var volLabels = (NZ.monthly_dried_eq_kg || []).map(function (p) { return p.x; });
+    /* Build x-axis labels from QIA (primary source) merged with NZ for full coverage. */
+    var _labelSet = {};
+    (QIA.monthly_dried_eq_kg || []).forEach(function (p) { _labelSet[p.x] = true; });
+    (NZ.monthly_dried_eq_kg  || []).forEach(function (p) { _labelSet[p.x] = true; });
+    var volLabels = Object.keys(_labelSet).sort();
 
-    function buildVolDatasets(showNz, showQia, showKstat) {
+    /* P2-A: KSTAT removed from display (data kept in Sheets). Two sources: QIA first, NZ second. */
+    function buildVolDatasets(showQia, showNz) {
       var ds = [];
-      if (showNz) {
-        ds.push({
-          type: 'bar',
-          label: 'NZ exports — monthly kg',
-          data: xyFrom(NZ.monthly_dried_eq_kg),
-          backgroundColor: 'rgba(26, 82, 118, 0.75)',
-          borderColor: C_NZ,
-          borderWidth: 1,
-          barPercentage: 0.8,
-          categoryPercentage: 0.9,
-          yAxisID: 'y',
-          order: 2
-        });
-        ds.push({
-          type: 'line',
-          label: 'NZ exports — rolling 12-month',
-          data: xyFrom(NZ.rolling_12m_dried_eq_kg),
-          borderColor: C_NZ,
-          backgroundColor: 'transparent',
-          borderWidth: 2,
-          borderDash: [],
-          pointStyle: 'circle',
-          pointRadius: 3,
-          tension: 0.3,
-          yAxisID: 'y',
-          order: 1
-        });
-      }
       if (showQia) {
         ds.push({
           type: 'bar',
@@ -313,13 +268,13 @@
           order: 1
         });
       }
-      if (showKstat) {
+      if (showNz) {
         ds.push({
           type: 'bar',
-          label: 'Korea customs (KSTAT) — monthly kg',
-          data: xyFrom(KSTAT.monthly_dried_eq_kg),
-          backgroundColor: 'rgba(110, 47, 10, 0.75)',
-          borderColor: C_KSTAT,
+          label: 'NZ exports (Stats NZ) — monthly kg',
+          data: xyFrom(NZ.monthly_dried_eq_kg),
+          backgroundColor: 'rgba(26, 82, 118, 0.75)',
+          borderColor: C_NZ,
           borderWidth: 1,
           barPercentage: 0.8,
           categoryPercentage: 0.9,
@@ -328,13 +283,13 @@
         });
         ds.push({
           type: 'line',
-          label: 'Korea customs (KSTAT) — rolling 12-month',
-          data: xyFrom(KSTAT.rolling_12m_dried_eq_kg),
-          borderColor: C_KSTAT,
+          label: 'NZ exports (Stats NZ) — rolling 12-month',
+          data: xyFrom(NZ.rolling_12m_dried_eq_kg),
+          borderColor: C_NZ,
           backgroundColor: 'transparent',
           borderWidth: 2,
-          borderDash: [2, 4],
-          pointStyle: 'triangle',
+          borderDash: [],
+          pointStyle: 'circle',
           pointRadius: 3,
           tension: 0.3,
           yAxisID: 'y',
@@ -349,7 +304,7 @@
       plugins: [harvestPlugin],
       data: {
         labels: volLabels,
-        datasets: buildVolDatasets(true, true, true)
+        datasets: buildVolDatasets(true, true)
       },
       options: {
         responsive: true,
@@ -566,24 +521,19 @@
       });
     }());
 
-    /* ── Source toggle handler ───────────────────────────────────────── */
+    /* ── Source toggle handler (P2-A: 2 sources — QIA and NZ only) ──── */
     function getChecked() {
       return {
-        nz:    document.getElementById('toggle-nz')    ? document.getElementById('toggle-nz').checked    : true,
-        qia:   document.getElementById('toggle-qia')   ? document.getElementById('toggle-qia').checked   : true,
-        kstat: document.getElementById('toggle-kstat') ? document.getElementById('toggle-kstat').checked : true
+        qia: document.getElementById('toggle-qia') ? document.getElementById('toggle-qia').checked : true,
+        nz:  document.getElementById('toggle-nz')  ? document.getElementById('toggle-nz').checked  : true
       };
     }
 
     document.querySelectorAll('.source-toggle input[type="checkbox"]').forEach(function (cb) {
       cb.addEventListener('change', function () {
         var sel = getChecked();
-
-        /* Rebuild Panel A datasets */
-        volChart.data.datasets = buildVolDatasets(sel.nz, sel.qia, sel.kstat);
+        volChart.data.datasets = buildVolDatasets(sel.qia, sel.nz);
         volChart.update();
-
-        /* Panel B (unit price) removed per F-06 — no price chart to update. */
       });
     });
 
