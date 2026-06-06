@@ -595,8 +595,8 @@ def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date
             row.get("product_en") or row.get("product_name") or "—"
         )
         display_row["_display_type"] = row.get("product_type_en") or "—"
-        # Flag rows within the last 30 days for JS expand control.
-        display_row["_in_last_30d"] = display_row["_display_date"] >= cutoff_30d
+        # Flag rows within the last 90 days for JS expand control (P1-H: 30d → 90d).
+        display_row["_in_last_90d"] = display_row["_display_date"] >= cutoff_90d
         import_records_display.append(display_row)
 
     import_records_total = len(all_import_records)
@@ -621,6 +621,8 @@ def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date
         sections=sections,
         chart_data=chart_data,
         config=config,
+        # P1-G: MFDS annual import-value series (fixes wrong-tab placeholder).
+        mfds_annual_series=chart_data.get("mfds_annual_series", {"has_data": False, "chart_points": [], "table_rows": []}),
         # C-3e trade flows — new structured source objects.
         tf_nz_export=chart_data.get("nz_export", {}),
         tf_korea_qia=chart_data.get("korea_qia", {}),
@@ -1207,7 +1209,56 @@ def _qia_annual_by_country(qia_rows: list[dict], n_years: int = 2) -> list[dict]
     return result
 
 
-def prepare_chart_data(sections: dict) -> dict:
+def _build_mfds_annual_series(all_trade_rows: list[dict]) -> list[dict]:
+    """
+    P1-G: Build the MFDS annual import-value chart dataset from VTW_Trade_Monthly.
+
+    Filters rows where series == 'mfds_annual' and unit == 'USD_thousands'.
+    Returns list of {x: year_str, y: value_usd_thousands} sorted ascending,
+    ready for Chart.js use.
+
+    Also returns an accompanying compact table list [{year, value_usd_thousands}].
+
+    The function returns a dict:
+      {
+        "chart_points": [{x, y}, ...],    # Chart.js xy pairs
+        "table_rows":   [{year, usd_k}],  # compact table rows
+        "has_data": bool,
+      }
+    """
+    mfds_rows = [
+        r for r in all_trade_rows
+        if str(r.get("series", "")).strip() == "mfds_annual"
+        and str(r.get("unit", "")).strip() == "USD_thousands"
+    ]
+
+    if not mfds_rows:
+        return {"chart_points": [], "table_rows": [], "has_data": False}
+
+    # Aggregate by date (year string), summing values.
+    by_year: dict[str, float] = {}
+    for row in mfds_rows:
+        year_str = str(row.get("date", "")).strip()
+        if not year_str:
+            continue
+        try:
+            val = float(row.get("value", 0) or 0)
+        except (ValueError, TypeError):
+            continue
+        by_year[year_str] = by_year.get(year_str, 0.0) + val
+
+    sorted_years = sorted(by_year.keys())
+    chart_points = [{"x": yr, "y": round(by_year[yr], 1)} for yr in sorted_years]
+    table_rows = [{"year": yr, "usd_k": round(by_year[yr], 1)} for yr in sorted_years]
+
+    return {
+        "chart_points": chart_points,
+        "table_rows": table_rows,
+        "has_data": len(chart_points) > 0,
+    }
+
+
+def prepare_chart_data(sections: dict, tab_data: dict | None = None) -> dict:
     """
     Build pre-aggregated chart datasets for the trade_flows section and
     the B-7 import intelligence price chart.
@@ -1350,6 +1401,14 @@ def prepare_chart_data(sections: dict) -> dict:
     b7_price_series = _build_b7_price_series(price_rows)
     b7_price_subtitle = _build_b7_price_subtitle(price_rows)
 
+    # ── P1-G: MFDS annual import-value series from VTW_Trade_Monthly ──────────
+    # Series name = 'mfds_annual'; unit = 'USD_thousands'; date = 4-digit year.
+    # Exists in VTW_Trade_Monthly (24 rows, 2004–2024) — NOT in VFI_Price_Annual.
+    # Must read unfiltered tab rows: the assemble_sections step filters by series_value
+    # for each source block, so mfds_annual rows are not present in sections["trade_flows"].
+    vtw_monthly_all = (tab_data or {}).get("VTW_Trade_Monthly", []) if tab_data else all_data
+    mfds_annual_series = _build_mfds_annual_series(vtw_monthly_all)
+
     return {
         # ── C-3e: new structured source objects ──────────────────────────────
         "nz_export":          nz_source,
@@ -1376,6 +1435,9 @@ def prepare_chart_data(sections: dict) -> dict:
         "tf_destination_area": tf_destination_area,   # Panel C1: stacked area
         "tf_destination_pie":  tf_destination_pie,    # Panel C2: pie (latest year KG)
         "tf_qia_by_origin":    tf_qia_by_origin,      # Panel D: QIA annual by origin
+
+        # ── P1-G: MFDS annual import-value series (from VTW_Trade_Monthly) ──
+        "mfds_annual_series": mfds_annual_series,
     }
 
 
@@ -1527,7 +1589,8 @@ def main() -> None:
     kpi = compute_kpis(sections)
 
     # --- Step 5b: Prepare chart datasets (pre-aggregated for Jinja2) ----------
-    chart_data = prepare_chart_data(sections)
+    # Pass tab_data so mfds_annual series can be read from the unfiltered tab.
+    chart_data = prepare_chart_data(sections, tab_data=tab_data)
 
     # --- Step 5c: Write trade_flows CSV download ------------------------------
     _write_trade_flows_csv(sections)

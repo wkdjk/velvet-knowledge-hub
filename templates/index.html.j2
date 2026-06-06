@@ -203,7 +203,7 @@
 
   </section>
 
-  {# ── CHART.JS SCRIPT — trade flows + B-7 price (no CDN — bundled M-1) #}
+  {# ── CHART.JS SCRIPT — trade flows + MFDS annual chart (no CDN — bundled M-1) #}
   <script src="assets/chart.min.js"></script>
   {% if trade_flows.enabled and trade_flows.has_data %}
   <script>
@@ -611,41 +611,30 @@
   </script>
   {% endif %}
 
-  {# ── MFDS annual statistics chart — rendered when VFI_Price_Annual has data #}
-  {# A-4/D-7: series label = "Korean herbal medicine channel (MFDS annual statistics)" #}
-  {# D-10: bar colour = rgba(26,82,118,0.75) (dark blue, not gold)                     #}
+  {# ── P1-G: MFDS annual import-value chart — data from VTW_Trade_Monthly mfds_annual #}
+  {% if mfds_annual_series and mfds_annual_series.has_data %}
   <script>
   (function () {
-    var priceSeriesData = {{ price_annual_series | tojson }};
-    if (!priceSeriesData || !priceSeriesData.length) return;
+    var mfdsData = {{ mfds_annual_series.chart_points | tojson }};
+    if (!mfdsData || !mfdsData.length) return;
     var canvas = document.getElementById('b7PriceChart');
     if (!canvas) return;
 
-    /* A-4: Override series label per CDR Decision 5. */
-    /* If priceSeriesData has entries, relabel the first (primary) series. */
-    if (priceSeriesData.length > 0) {
-      priceSeriesData[0].label = 'Korean herbal medicine channel (MFDS annual statistics)';
-      priceSeriesData[0].borderColor = '#1A5276';
-      priceSeriesData[0].backgroundColor = 'rgba(26, 82, 118, 0.75)';
-    }
-
-    /* Build year labels from the first series data points. */
-    var yearLabels = (priceSeriesData[0].data || []).map(function (pt) {
-      return String(pt.x);
-    });
-
-    /* Convert {x, y} data to flat arrays aligned to yearLabels. */
-    var datasets = priceSeriesData.map(function (ds) {
-      var lookup = {};
-      (ds.data || []).forEach(function (pt) { lookup[String(pt.x)] = pt.y; });
-      return Object.assign({}, ds, {
-        data: yearLabels.map(function (yr) { return lookup[yr] || 0; })
-      });
-    });
+    var yearLabels = mfdsData.map(function (pt) { return String(pt.x); });
+    var values = mfdsData.map(function (pt) { return pt.y; });
 
     new Chart(canvas.getContext('2d'), {
       type: 'bar',
-      data: { labels: yearLabels, datasets: datasets },
+      data: {
+        labels: yearLabels,
+        datasets: [{
+          label: 'Korean herbal medicine channel (MFDS annual statistics)',
+          data: values,
+          backgroundColor: 'rgba(26, 82, 118, 0.75)',
+          borderColor: '#1A5276',
+          borderWidth: 1
+        }]
+      },
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -682,6 +671,7 @@
     });
   }());
   </script>
+  {% endif %}
 
   {# ── SECTION: IMPORT INTELLIGENCE — C-4e redesign ─────────────────── #}
   {# F-17: all Korean text removed. F-16: 3-row default + "Show last 30 days". #}
@@ -698,22 +688,37 @@
 
     <p class="source-footnote">Korea deer velvet import data drawn from two MFDS (Ministry of Food and Drug Safety, Korea) sources: annual herbal medicine channel statistics and food ingredient import notifications. See table footnote for full attribution.</p>
 
-    {# ── MFDS annual statistics chart / price placeholder ──────────────── #}
-    {# D-2: compact placeholder card when no data. D-6: scope note above canvas. #}
-    {% if price_annual_has_data %}
+    {# ── MFDS annual import-value chart (P1-G: data from VTW_Trade_Monthly mfds_annual) #}
+    {# Falls back to compact placeholder if series is empty.                             #}
+    {% if mfds_annual_series and mfds_annual_series.has_data %}
       <div class="chart-panel" id="b7-price-chart">
-        <h3>Annual import value — Korean herbal medicine channel (MFDS statistics)</h3>
+        <h3>Annual import value — Korean herbal medicine channel (MFDS, 2004–2024)</h3>
         <p class="chart-scope-note">Herbal medicine channel only — does not include food ingredient imports shown in the table below.</p>
-        {% if price_annual_subtitle %}
-          <p class="chart-subtitle">Latest ranked price: KRW {{ price_annual_subtitle.price_krw }} ({{ price_annual_subtitle.year }})</p>
-        {% endif %}
         <div class="chart-canvas-wrapper" style="height:280px;">
           <canvas id="b7PriceChart" aria-label="Annual import value, Korean herbal medicine channel, MFDS statistics 2004 to 2024"></canvas>
         </div>
-        <p class="chart-annotation">Source: MFDS (Ministry of Food and Drug Safety, Korea) annual statistics yearbook, Table 6-3-8. Korean herbal medicine channel only. Covers 2004–2024. Does not include food ingredient imports.</p>
+        <p class="chart-annotation">Source: MFDS (Ministry of Food and Drug Safety, Korea) annual statistics yearbook, Table 6-3-8. Korean herbal medicine channel only. Covers 2004–2024. Value in USD thousands. Does not include food ingredient imports.</p>
+        {# Compact data table — recent years #}
+        {% set recent_rows = mfds_annual_series.table_rows[-8:] if mfds_annual_series.table_rows | length > 8 else mfds_annual_series.table_rows %}
+        <details class="discrepancy-accordion" style="margin-top:12px;">
+          <summary class="discrepancy-accordion__trigger" aria-label="Recent years import value table">
+            <span>Recent years — import value (USD thousands)</span>
+            <span class="discrepancy-accordion__chevron" aria-hidden="true">&#9654;</span>
+          </summary>
+          <div class="discrepancy-accordion__body">
+            <table class="import-records-table" style="max-width:320px;">
+              <thead><tr><th scope="col">Year</th><th scope="col">USD thousands</th></tr></thead>
+              <tbody>
+                {% for r in recent_rows %}
+                  <tr><td class="data">{{ r.year }}</td><td class="data">{{ "{:,.1f}".format(r.usd_k) }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
       </div>
     {% else %}
-      <div class="price-placeholder">Annual price data will appear here once available.</div>
+      <div class="price-placeholder">Annual import value data will appear here once available.</div>
     {% endif %}
 
     {# ── Import records table (independent degradation) ─────────────────── #}
@@ -731,13 +736,12 @@
               <th scope="col">Export country</th>
               <th scope="col">Exporter</th>
               <th scope="col">Importer</th>
-              <th scope="col">Product name</th>
               <th scope="col">Type</th>
             </tr>
           </thead>
           <tbody id="import-records-tbody">
             {% for row in import_records_display %}
-              <tr class="import-row{% if row._in_last_30d %} row-30d{% endif %}"
+              <tr class="import-row{% if row._in_last_90d %} row-90d{% endif %}"
                   data-date="{{ row._display_date }}"
                   style="{% if not loop.first and loop.index > 3 %}display:none{% endif %}">
                 <td class="data">{{ row._display_date }}</td>
@@ -745,7 +749,6 @@
                 <td>{{ row._display_export_country }}</td>
                 <td>{{ row._display_exporter }}</td>
                 <td>{{ row._display_importer }}</td>
-                <td>{{ row._display_product }}</td>
                 <td>{{ row._display_type }}</td>
               </tr>
             {% endfor %}
@@ -787,7 +790,7 @@
   {# ── Import records JS — show/hide rows (client-side, no rebuild) ──── #}
   <script>
   (function () {
-    var CUTOFF = '{{ cutoff_30d }}';
+    var CUTOFF = '{{ cutoff_90d }}';
 
     function toggleImportRows(btn) {
       var tbody = document.getElementById('import-records-tbody');
@@ -796,7 +799,7 @@
       var expanded = btn.getAttribute('data-expanded') === 'true';
 
       if (!expanded) {
-        /* Expand: show rows within last 30 days */
+        /* Expand: show rows within last 90 days */
         var shown = 0;
         rows.forEach(function (row) {
           var rowDate = row.getAttribute('data-date') || '';
