@@ -14,6 +14,7 @@
     <h1>Velvet Knowledge Hub</h1>
     <p class="tagline">Korea deer velvet market intelligence for the New Zealand deer industry</p>
     <p class="last-built caption">Last built: {{ meta.last_built_utc | default(build_date) | default("—") }}</p>
+    <a class="pdf-download-btn" href="velvet-knowledge-hub.pdf" download>Download PDF</a>
   </div>
 </header>
 
@@ -41,7 +42,7 @@
       <p class="kpi-label">NEWS ARTICLES (LAST 90 DAYS)</p>
       {% if kpi is defined and kpi.articles_90d is defined and kpi.articles_90d != "—" %}
         <p class="kpi-value">{{ kpi.articles_90d }}</p>
-        <p class="delta-indicator delta-neutral">relevant articles — Naver + Google News</p>
+        <p class="delta-indicator delta-neutral">relevant articles — Korean media</p>
       {% else %}
         <p class="kpi-value text-muted">—</p>
       {% endif %}
@@ -84,9 +85,6 @@
         <h2>Trade flows</h2>
         <span class="last-updated">Last updated: {{ trade_flows.last_updated | default("—") }}</span>
       </div>
-      {% if trade_flows.enabled and trade_flows.has_data %}
-        <a class="download-btn" href="downloads/trade_flows.csv">Download CSV</a>
-      {% endif %}
     </div>
 
     <p class="source-footnote">Sources: Stats NZ (NZ exports) · QIA (Korea quarantine) · KSTAT (Korea customs)</p>
@@ -696,9 +694,6 @@
         <h2>Import intelligence</h2>
         <span class="last-updated">Last updated: {{ import_intelligence.last_updated | default("—") }}</span>
       </div>
-      {% if import_records_has_data or price_annual_has_data %}
-        <a class="download-btn" href="downloads/import_intelligence.csv">Download CSV</a>
-      {% endif %}
     </div>
 
     <p class="source-footnote">Korea deer velvet import data drawn from two MFDS (Ministry of Food and Drug Safety, Korea) sources: annual herbal medicine channel statistics and food ingredient import notifications. See table footnote for full attribution.</p>
@@ -760,8 +755,7 @@
 
       <div class="table-controls">
         <button class="show-more-btn" id="show-more-btn" type="button"
-                onclick="toggleImportRows(this)">Show last 30 days</button>
-        <a class="download-btn" href="downloads/import_intelligence.csv">Download CSV</a>
+                onclick="toggleImportRows(this)">Show last 90 days</button>
       </div>
 
       <p class="table-footnote">Source: Korea Ministry of Food and Drug Safety import notification database. Importer names translated from Korean using curated lookup; exporter names appear as recorded in MFDS source data.</p>
@@ -831,7 +825,7 @@
         rows.forEach(function (row, idx) {
           row.style.display = idx < 3 ? '' : 'none';
         });
-        btn.textContent = 'Show last 30 days';
+        btn.textContent = 'Show last 90 days';
         btn.setAttribute('data-expanded', 'false');
       }
     }
@@ -891,13 +885,10 @@
         <h2>News pulse</h2>
         <span class="last-updated">Last updated: {{ news_pulse.last_updated | default("—") }}</span>
       </div>
-      {% if news_pulse.enabled and news_pulse.has_data %}
-        <a class="download-btn" href="downloads/news_pulse.csv">Download CSV</a>
-      {% endif %}
     </div>
 
     {# D-17 / T-27: framing line above article list — scope context before content #}
-    <p class="source-footnote">Korea deer velvet news — Naver and Google News, classified and summarised by AI. Showing relevant articles from the last 90 days.</p>
+    <p class="source-footnote">Korean media articles matching the velvet keyword, classified and summarised by AI. Showing relevant articles from the last 90 days.</p>
 
     {% if news_pulse.enabled and news_pulse.has_data %}
 
@@ -934,12 +925,9 @@
         {# D-15 State A: data exists but 90-day count = 0 — quiet period, pipeline healthy #}
         <div class="placeholder-card">
           <p class="placeholder-title">No relevant articles in the last 90 days.</p>
-          <p class="placeholder-body">Korea deer velvet news is monitored three times per week via Naver and Google News.</p>
+          <p class="placeholder-body">Korea deer velvet news is monitored regularly via Korean media sources.</p>
         </div>
       {% endif %}
-
-      {# D-13 / T-35: attribution footnote — both Google News and Naver named #}
-      <p class="source-footnote">Sources: Naver News API · Google News — Korean-language deer velvet news, classified and summarised by AI (Claude Haiku).</p>
 
     {% else %}
       {# D-15 State B: section not enabled or no data rows at all — graceful degradation (L-12) #}
@@ -947,8 +935,6 @@
         <p class="placeholder-title">News collection is in progress.</p>
         <p class="placeholder-body">Articles will appear after the next scheduled update.</p>
       </div>
-      {# D-13 / T-35: attribution footnote — both branches #}
-      <p class="source-footnote">Sources: Naver News API · Google News — Korean-language deer velvet news, classified and summarised by AI (Claude Haiku).</p>
     {% endif %}
 
   </section>
@@ -958,8 +944,12 @@
 {# ── FOOTER ───────────────────────────────────────────────────────────── #}
 <footer>
   <div class="page-wrapper">
-    <p class="caption">Data sources: Stats NZ · QIA · KSTAT API · MFDS · Naver News API</p>
-    <p class="caption">Built automatically by GitHub Actions. Source code: <a href="https://github.com/wkdjk/velvet-knowledge-hub">wkdjk/velvet-knowledge-hub</a></p>
+    <p class="caption">Data sources:
+      <a href="https://www.stats.govt.nz" target="_blank" rel="noopener noreferrer">Stats NZ</a> ·
+      <a href="https://www.qia.go.kr" target="_blank" rel="noopener noreferrer">QIA (Animal and Plant Quarantine Agency, Korea)</a> ·
+      <a href="https://unipass.customs.go.kr" target="_blank" rel="noopener noreferrer">KSTAT (Korea Customs Service)</a> ·
+      <a href="https://www.mfds.go.kr" target="_blank" rel="noopener noreferrer">MFDS (Ministry of Food and Drug Safety, Korea)</a>
+    </p>
   </div>
 </footer>
 

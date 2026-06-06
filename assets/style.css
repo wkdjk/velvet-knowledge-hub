@@ -150,6 +150,27 @@ header .last-built {
   margin-top: 4px;
 }
 
+/* PDF download button — header-level, prominent */
+.pdf-download-btn {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 8px 20px;
+  background-color: var(--accent);
+  color: var(--text-inverse);
+  font-family: "Trebuchet MS", "Gill Sans MT", Arial, sans-serif;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  letter-spacing: 0.01em;
+  border-radius: 2px;
+}
+
+.pdf-download-btn:hover {
+  background-color: #8a6a26;
+  color: var(--text-inverse);
+  text-decoration: none;
+}
+
 /* Navigation */
 nav.page-wrapper {
   padding-top: 20px;
