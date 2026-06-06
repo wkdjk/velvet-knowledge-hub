@@ -23,15 +23,18 @@
 <div class="page-wrapper">
   <div class="kpi-strip">
 
-    {# KPI 1: NZ exports rolling 12-month in tonnes — A-1. P2-D will switch to QIA Korea imports. #}
+    {# KPI 1: Korea imports rolling 12-month — P2-D / D-3: switched from NZ to QIA source #}
     <div class="kpi-card">
-      <p class="kpi-label">NZ EXPORTS (ROLLING 12-MONTH)</p>
-      {% if kpi is defined and kpi.nz_export_latest is defined and kpi.nz_export_latest != "—" %}
-        <p class="kpi-value">{{ kpi.nz_export_latest }} <span class="kpi-unit">tonnes</span></p>
-        {% if kpi.nz_export_delta is defined and kpi.nz_export_delta != "—" %}
-          <p class="delta-indicator">{{ kpi.nz_export_delta }}</p>
+      <p class="kpi-label">KOREA IMPORTS (ROLLING 12 MONTHS)</p>
+      {% if kpi is defined and kpi.qia_rolling12m_kg is defined and kpi.qia_rolling12m_kg != "—" %}
+        <p class="kpi-value">{{ kpi.qia_rolling12m_kg }} <span class="kpi-unit">kg</span></p>
+        {% if kpi.qia_rolling12m_date_start != "—" %}
+          <p class="delta-indicator delta-neutral">{{ kpi.qia_rolling12m_date_start }} – {{ kpi.qia_rolling12m_date_end }}</p>
         {% endif %}
-        <p class="delta-indicator delta-neutral">dried-equivalent — Stats NZ</p>
+        {% if kpi.qia_yoy_label != "—" %}
+          <p class="delta-indicator">{{ kpi.qia_yoy_label }}</p>
+        {% endif %}
+        <p class="delta-indicator delta-neutral">dried-equivalent — QIA</p>
       {% else %}
         <p class="kpi-value text-muted">—</p>
       {% endif %}
@@ -88,7 +91,7 @@
       </div>
     </div>
 
-    <p class="source-footnote">Sources: QIA (Korea quarantine) · Stats NZ (NZ exports)</p>
+    <p class="source-footnote">Monthly deer velvet volumes, dried-equivalent kg — QIA (Korea quarantine) and Stats NZ (NZ exports), last 24 months.</p>
 
     {% if trade_flows.enabled and trade_flows.has_data %}
 
@@ -633,7 +636,7 @@
       </div>
     </div>
 
-    <p class="source-footnote">Korea deer velvet import data drawn from two MFDS (Ministry of Food and Drug Safety, Korea) sources: annual herbal medicine channel statistics and food ingredient import notifications. See table footnote for full attribution.</p>
+    <p class="source-footnote">Two MFDS (Ministry of Food and Drug Safety, Korea) databases: annual herbal medicine channel value (2004–2024) and food ingredient import notifications (2016–present).</p>
 
     {# ── MFDS annual import-value chart (P1-G: data from VTW_Trade_Monthly mfds_annual) #}
     {# Falls back to compact placeholder if series is empty.                             #}

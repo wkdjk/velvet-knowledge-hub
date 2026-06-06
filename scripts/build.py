@@ -456,6 +456,11 @@ def compute_kpis(sections: dict) -> dict:
         "nz_export_delta": "—",
         "articles_90d": "—",
         "food_imports_90d": "—",
+        # P2-D: QIA rolling-12-month Korea imports (replaces NZ as KPI Box 1).
+        "qia_rolling12m_kg": "—",
+        "qia_rolling12m_date_start": "—",
+        "qia_rolling12m_date_end": "—",
+        "qia_yoy_label": "—",
     }
 
     # --- KPI 1: NZ export rolling 12-month in tonnes (dried-equivalent) ------
@@ -484,6 +489,45 @@ def compute_kpis(sections: dict) -> dict:
                         delta_pct = (latest_rolling_kg - prior_rolling_kg) / prior_rolling_kg * 100
                         symbol = "▲" if delta_pct >= 0 else "▼"
                         kpi["nz_export_delta"] = f"{symbol} {abs(delta_pct):.1f}%"
+        except (ValueError, TypeError, ZeroDivisionError):
+            pass
+
+    # --- KPI 1b: QIA Korea imports rolling 12-month (P2-D: for Box 1 redesign) ---
+    # Compute rolling 12-month sum of QIA korea_quarantine KG rows.
+    # Show date range as e.g. "Apr 2025 – Mar 2026" derived from data.
+    qia_rows_kpi = [r for r in trade_data if r.get("series") == "korea_quarantine"]
+    if qia_rows_kpi:
+        try:
+            qia_dried_eq_kpi = _compute_dried_eq_kg(qia_rows_kpi, "KG")
+            if qia_dried_eq_kpi:
+                qia_rolling_kpi = _compute_rolling_12m(qia_dried_eq_kpi)
+                sorted_qia_dates = sorted(qia_rolling_kpi.keys(), reverse=True)
+                latest_qia_date = sorted_qia_dates[0]
+                latest_qia_kg = qia_rolling_kpi[latest_qia_date]
+                kpi["qia_rolling12m_kg"] = f"{latest_qia_kg:,.0f}"
+
+                # Build date range: 12 months ending at latest_qia_date.
+                end_year, end_month = int(latest_qia_date[:4]), int(latest_qia_date[5:7])
+                start_month = end_month - 11
+                start_year = end_year
+                while start_month <= 0:
+                    start_month += 12
+                    start_year -= 1
+                _MONTH_ABBR = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+                kpi["qia_rolling12m_date_start"] = f"{_MONTH_ABBR[start_month]} {start_year}"
+                kpi["qia_rolling12m_date_end"] = f"{_MONTH_ABBR[end_month]} {end_year}"
+
+                # YoY: compare latest rolling to same month prior year.
+                prior_qia_date = f"{end_year - 1}-{end_month:02d}"
+                prior_qia_rolling = qia_rolling_kpi.get(prior_qia_date)
+                if prior_qia_rolling and prior_qia_rolling != 0:
+                    delta_pct = (latest_qia_kg - prior_qia_rolling) / prior_qia_rolling * 100
+                    symbol = "▲" if delta_pct >= 0 else "▼"
+                    kpi["qia_yoy_label"] = (
+                        f"{symbol} {abs(delta_pct):.1f}% vs "
+                        f"{_MONTH_ABBR[end_month]} {end_year - 1}"
+                    )
         except (ValueError, TypeError, ZeroDivisionError):
             pass
 
@@ -1627,9 +1671,10 @@ def main() -> None:
             print(f"    {section_id:<30}: enabled, {rows} rows")
 
     nz = kpi.get("nz_export_latest", "—")
+    qia_rolling = kpi.get("qia_rolling12m_kg", "—")
     art = kpi.get("articles_90d", "—")
     food_90d = kpi.get("food_imports_90d", "—")
-    print(f"  kpis: nz_export_rolling12m_tonnes={nz} | articles_90d={art} | food_imports_90d={food_90d}")
+    print(f"  kpis: nz_export_rolling12m_tonnes={nz} | qia_rolling12m_kg={qia_rolling} | articles_90d={art} | food_imports_90d={food_90d}")
     tf = sections.get("trade_flows", {})
     kstat_0507 = len(tf.get("kstat_0507", []))
     kstat_0510 = len(tf.get("kstat_0510", []))
