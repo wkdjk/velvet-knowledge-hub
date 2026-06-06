@@ -1304,7 +1304,7 @@ def _qia_monthly_by_country(qia_rows: list[dict]) -> dict:
     return {"labels": labels, "countries": countries, "series": series}
 
 
-def _qia_annual_by_country(qia_rows: list[dict], n_years: int = 2) -> list[dict]:
+def _qia_annual_by_country(qia_rows: list[dict], n_years: int = 99) -> list[dict]:
     """
     Find the n most recent calendar years where at least 10 months of KG data
     exist in the QIA rows, then return annual KG totals by (English) country name.
@@ -1315,7 +1315,8 @@ def _qia_annual_by_country(qia_rows: list[dict], n_years: int = 2) -> list[dict]
     Country names are normalised via _normalise_qia_country() (Korean → English).
     Countries not in QIA_COLOURS keys are placed under "Other".
 
-    C-3h Panel D: grouped bar chart data.
+    C-3h Panel D: stacked bar chart data.
+    C-6g G4-B: default n_years changed to 99 — include all available complete years.
     """
     from collections import defaultdict
 
@@ -1557,8 +1558,9 @@ def prepare_chart_data(sections: dict, tab_data: dict | None = None) -> dict:
     # Panel C2 — pie: KG by destination, latest full year.
     tf_destination_pie = _latest_full_year_kg_by_destination(nz_rows)
 
-    # Panel D — grouped bar: QIA annual KG by origin, latest 2 complete years.
-    tf_qia_by_origin = _qia_annual_by_country(qia_rows, n_years=2)
+    # Panel D — stacked bar: QIA annual KG by origin, all available complete years.
+    # C-6g G4-B: n_years=2 → all available years (eliminates stair-step appearance).
+    tf_qia_by_origin = _qia_annual_by_country(qia_rows, n_years=99)
 
     # Panel D2 (P2-H) — monthly time-series: QIA KG by origin, all available months.
     tf_qia_monthly_by_origin = _qia_monthly_by_country(qia_rows)

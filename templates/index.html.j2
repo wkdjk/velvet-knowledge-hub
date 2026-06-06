@@ -95,16 +95,19 @@
 
     {% if trade_flows.enabled and trade_flows.has_data %}
 
-      {# ── Source toggle — QIA first, Stats NZ second (P2-A/P2-B: KSTAT removed from display; D-2: toggle kept) #}
+      {# C-6g G3: iOS-style toggle switches — QIA first, Stats NZ second #}
+      {# Each source gets its own independent toggle; multiple can be ON simultaneously. #}
       <div class="source-toggle" role="group" aria-label="Show or hide data sources">
-        <div class="source-toggle__pill source-toggle__pill--qia">
+        <label class="toggle-switch">
           <input type="checkbox" id="toggle-qia" name="source" value="qia" checked>
-          <label for="toggle-qia">Korea quarantine (QIA)</label>
-        </div>
-        <div class="source-toggle__pill source-toggle__pill--nz">
+          <span class="toggle-track"><span class="toggle-handle"></span></span>
+          <span class="toggle-label">QIA — Korea quarantine</span>
+        </label>
+        <label class="toggle-switch">
           <input type="checkbox" id="toggle-nz" name="source" value="nz" checked>
-          <label for="toggle-nz">NZ exports (Stats NZ)</label>
-        </div>
+          <span class="toggle-track"><span class="toggle-handle"></span></span>
+          <span class="toggle-label">Stats NZ — NZ exports</span>
+        </label>
       </div>
 
       {# ── Panel A — Volume chart (P2-B: rolling 12-month annotation added) ── #}
@@ -123,14 +126,28 @@
       {# ── Panel C — NZ export destinations (P2-C: merged into Volume flows; no separate section heading) #}
       <h3 class="section-subheading">NZ export destinations</h3>
 
+      {# C-6g G4-C: iOS view toggle — all months / rolling 12 months #}
+      <div class="source-toggle" role="group" aria-label="Switch destination chart date range">
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-dest-full" checked>
+          <span class="toggle-track"><span class="toggle-handle"></span></span>
+          <span class="toggle-label">All months</span>
+        </label>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggle-dest-rolling">
+          <span class="toggle-track"><span class="toggle-handle"></span></span>
+          <span class="toggle-label">Rolling 12 months</span>
+        </label>
+      </div>
+
       {# C1 — Stacked area chart: NZD FOB by destination, all available dates #}
       <div class="chart-panel">
-        <h3>NZ velvet exports by destination — FOB value (NZD)</h3>
+        <h3 id="dest-chart-title">NZ velvet exports by destination — FOB value (NZD)</h3>
         <div class="chart-canvas-wrapper" style="height:280px;">
           <canvas id="chart-destination-area"
             aria-label="NZ deer velvet exports by destination, stacked area chart of NZD FOB value" role="img"></canvas>
         </div>
-        <p class="chart-annotation">Source: Stats NZ. All available months shown. Countries not individually listed are grouped as Other.</p>
+        <p class="chart-annotation" id="dest-chart-annotation">Source: Stats NZ. All available months shown. Countries not individually listed are grouped as Other.</p>
       </div>
 
       {# C2 (pie chart — 2025 volume share) removed per Commander feedback F-12. #}
@@ -139,26 +156,42 @@
       <h3 class="section-subheading">Korea imports by origin</h3>
 
       {% if tf_qia_by_origin and tf_qia_by_origin | length > 0 %}
-        {# P2-H: Monthly time-series view (stacked line) — all available months #}
+        {# C-6g G3/G4-A/G4-B: iOS view toggle — Annual/Monthly stacked bar charts #}
+        {# Annual shows all available complete years; Monthly shows stacked bar by month. #}
+        <div class="source-toggle" role="group" aria-label="Switch between annual and monthly view">
+          <label class="toggle-switch" id="qia-origin-annual-toggle-label">
+            <input type="checkbox" id="toggle-qia-annual" checked>
+            <span class="toggle-track"><span class="toggle-handle"></span></span>
+            <span class="toggle-label">Annual view</span>
+          </label>
+          <label class="toggle-switch" id="qia-origin-monthly-toggle-label">
+            <input type="checkbox" id="toggle-qia-monthly">
+            <span class="toggle-track"><span class="toggle-handle"></span></span>
+            <span class="toggle-label">Monthly view</span>
+          </label>
+        </div>
+
+        {# Annual stacked bar — all available complete years (G4-B) #}
+        <div id="panel-qia-annual" class="chart-panel">
+          <h3>South Korean velvet imports by origin — annual (kg)</h3>
+          <div class="chart-canvas-wrapper" style="height:260px;">
+            <canvas id="chart-qia-origin"
+              aria-label="South Korean deer velvet imports by country of origin, annual stacked bar chart" role="img"></canvas>
+          </div>
+          <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Annual totals for all available complete years. Raw import kg at quarantine inspection. No dried-equivalent conversion applied.</p>
+        </div>
+
+        {# Monthly stacked bar — all available months (G4-A) — initially hidden #}
         {% if tf_qia_monthly_by_origin and tf_qia_monthly_by_origin.labels | length > 0 %}
-          <div class="chart-panel">
+          <div id="panel-qia-monthly" class="chart-panel" style="display:none;">
             <h3>South Korean velvet imports by origin — monthly (kg)</h3>
             <div class="chart-canvas-wrapper" style="height:280px;">
               <canvas id="chart-qia-origin-monthly"
-                aria-label="South Korean deer velvet imports by country of origin, monthly time-series" role="img"></canvas>
+                aria-label="South Korean deer velvet imports by country of origin, monthly stacked bar chart" role="img"></canvas>
             </div>
             <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Monthly raw import kg at quarantine inspection. No dried-equivalent conversion applied.</p>
           </div>
         {% endif %}
-        {# Annual aggregated view — latest 2 full years #}
-        <div class="chart-panel" style="margin-top:16px;">
-          <h3>South Korean velvet imports by origin — annual (kg)</h3>
-          <div class="chart-canvas-wrapper" style="height:260px;">
-            <canvas id="chart-qia-origin"
-              aria-label="South Korean deer velvet imports by country of origin, annual grouped bar chart" role="img"></canvas>
-          </div>
-          <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Annual totals for the two most recent complete years. Raw import kg at quarantine inspection. No dried-equivalent conversion applied.</p>
-        </div>
       {% else %}
         <div class="placeholder-card">
           <p class="placeholder-title">Korean import origin data not yet available</p>
@@ -471,7 +504,7 @@
       /* C2 (pie chart) removed per Commander feedback F-12. */
     }());
 
-    /* ── Panel D1 (P2-H) — QIA monthly origin view ─────────────────── */
+    /* ── Panel D1 (C-6g G4-A) — QIA monthly origin — stacked bar ───── */
     (function buildQiaMonthlyChart() {
       var ctxMonthly = document.getElementById('chart-qia-origin-monthly');
       if (!ctxMonthly) return;
@@ -489,21 +522,19 @@
         'Other':           '#BDBDBD'
       };
 
+      /* C-6g G4-A: stacked bar chart instead of multi-line */
       var monthlyDsets = QIA_MONTHLY.countries.map(function (country) {
         return {
           label: country,
           data: QIA_MONTHLY.series[country] || [],
+          backgroundColor: QIA_COLOURS_M[country] || '#BDBDBD',
           borderColor: QIA_COLOURS_M[country] || '#BDBDBD',
-          backgroundColor: 'transparent',
-          borderWidth: 1.5,
-          fill: false,
-          pointRadius: 2,
-          tension: 0.1
+          borderWidth: 1
         };
       });
 
       new Chart(ctxMonthly.getContext('2d'), {
-        type: 'line',
+        type: 'bar',
         data: { labels: QIA_MONTHLY.labels, datasets: monthlyDsets },
         options: {
           responsive: true,
@@ -526,11 +557,13 @@
           scales: {
             x: {
               type: 'category',
+              stacked: true,
               ticks: { maxTicksLimit: 10, maxRotation: 45 },
               grid: { color: 'rgba(204,204,204,0.4)' }
             },
             y: {
               beginAtZero: true,
+              stacked: true,
               title: { display: true, text: 'Import weight (kg)' },
               ticks: { callback: function (v) { return v.toLocaleString(); } },
               grid: { color: 'rgba(204,204,204,0.4)' }
@@ -608,6 +641,7 @@
           scales: {
             x: {
               type: 'category',
+              stacked: true,
               grid: { color: 'rgba(204,204,204,0.4)' }
             },
             y: {
@@ -622,7 +656,8 @@
       });
     }());
 
-    /* ── Source toggle handler (P2-A: 2 sources — QIA and NZ only) ──── */
+    /* ── Source toggle handler — scoped to volume chart toggles only ─── */
+    /* C-6g G3: handler uses specific IDs to avoid capturing origin/dest toggles. */
     function getChecked() {
       return {
         qia: document.getElementById('toggle-qia') ? document.getElementById('toggle-qia').checked : true,
@@ -630,13 +665,88 @@
       };
     }
 
-    document.querySelectorAll('.source-toggle input[type="checkbox"]').forEach(function (cb) {
-      cb.addEventListener('change', function () {
+    ['toggle-qia', 'toggle-nz'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('change', function () {
         var sel = getChecked();
         volChart.data.datasets = buildVolDatasets(sel.qia, sel.nz);
         volChart.update();
       });
     });
+
+    /* ── QIA origin view toggle (G3): Annual / Monthly panel swap ────── */
+    (function initOriginViewToggle() {
+      var annualCb  = document.getElementById('toggle-qia-annual');
+      var monthlyCb = document.getElementById('toggle-qia-monthly');
+      var annualPanel  = document.getElementById('panel-qia-annual');
+      var monthlyPanel = document.getElementById('panel-qia-monthly');
+      if (!annualCb || !monthlyCb) return;
+
+      function applyOriginView() {
+        if (annualPanel)  annualPanel.style.display  = annualCb.checked  ? '' : 'none';
+        if (monthlyPanel) monthlyPanel.style.display = monthlyCb.checked ? '' : 'none';
+      }
+
+      annualCb.addEventListener('change',  applyOriginView);
+      monthlyCb.addEventListener('change', applyOriginView);
+    }());
+
+    /* ── NZ destination view toggle (G4-C): All months / Rolling 12 m ── */
+    (function initDestViewToggle() {
+      var fullCb    = document.getElementById('toggle-dest-full');
+      var rollCb    = document.getElementById('toggle-dest-rolling');
+      if (!fullCb || !rollCb) return;
+
+      /* DEST_AREA_DATA is in scope — declared at the enclosing function level. */
+      /* Chart.js v4: Chart.getChart(canvas element or id string). */
+      var destCanvas = document.getElementById('chart-destination-area');
+      var destChart  = destCanvas ? Chart.getChart(destCanvas) : null;
+
+      function applyDestFilter() {
+        if (!destChart) return;
+        var showRolling = rollCb.checked;
+        /* Build a reduced label set: last 12 months if rolling, all months otherwise. */
+        var allLabels = Object.keys(
+          (function () {
+            var s = {};
+            var DEST_ORDER = ['China', 'Korea', 'Hong Kong', 'Other'];
+            DEST_ORDER.forEach(function (c) {
+              (DEST_AREA_DATA[c] || []).forEach(function (pt) { s[pt.x] = true; });
+            });
+            return s;
+          })()
+        ).sort();
+
+        var filteredLabels = showRolling ? allLabels.slice(-12) : allLabels;
+        var titleEl    = document.getElementById('dest-chart-title');
+        var annotEl    = document.getElementById('dest-chart-annotation');
+
+        if (titleEl) {
+          titleEl.textContent = showRolling
+            ? 'NZ velvet exports by destination — rolling 12 months (NZD FOB)'
+            : 'NZ velvet exports by destination — FOB value (NZD)';
+        }
+        if (annotEl) {
+          annotEl.textContent = showRolling
+            ? 'Source: Stats NZ. Most recent 12 months shown. Countries not individually listed are grouped as Other.'
+            : 'Source: Stats NZ. All available months shown. Countries not individually listed are grouped as Other.';
+        }
+
+        destChart.data.labels = filteredLabels;
+        destChart.data.datasets.forEach(function (ds) {
+          var DEST_ORDER = ['China', 'Korea', 'Hong Kong', 'Other'];
+          var country = ds.label;
+          var lookup = {};
+          (DEST_AREA_DATA[country] || []).forEach(function (pt) { lookup[pt.x] = pt.y; });
+          ds.data = filteredLabels.map(function (d) { return lookup[d] || 0; });
+        });
+        destChart.update();
+      }
+
+      fullCb.addEventListener('change',  applyDestFilter);
+      rollCb.addEventListener('change',  applyDestFilter);
+    }());
 
   }());
   </script>

@@ -916,74 +916,76 @@ footer .caption:last-child {
   color: var(--text-muted);
 }
 
-/* Source toggle pills */
+/* C-6g G3: iOS-style toggle switches — replace colour-inversion pills */
+/* Replaces .source-toggle__pill pattern. Old pill CSS removed. */
+
 .source-toggle {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 4px 0;
   margin-bottom: 16px;
   align-items: center;
 }
 
-.source-toggle__pill {
-  position: relative;
-  display: inline-block;
+/* Each independent toggle switch */
+.toggle-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  margin: 0 12px 8px 0;
 }
 
-.source-toggle__pill input[type="checkbox"] {
+/* The sliding track */
+.toggle-track {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background: #e0e0e0;
+  border: 2px solid #ccc;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  flex-shrink: 0;
+}
+
+/* The sliding handle */
+.toggle-handle {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: left 0.2s ease;
+}
+
+/* ON state — checkbox checked */
+input[type="checkbox"]:checked + .toggle-track {
+  background: var(--accent, #A78230);
+  border-color: var(--accent, #A78230);
+}
+
+input[type="checkbox"]:checked + .toggle-track .toggle-handle {
+  left: 22px;
+}
+
+/* Hide the native checkbox — toggle-track acts as the visual control */
+.toggle-switch input[type="checkbox"] {
   position: absolute;
   opacity: 0;
   width: 0;
   height: 0;
 }
 
-.source-toggle__pill label {
-  display: inline-block;
-  padding: 5px 14px;
-  font-size: 0.8125rem;
-  font-weight: 500;
+/* Toggle label text */
+.toggle-label {
+  font-size: 0.875rem;
   font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
-  letter-spacing: 0.02em;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-  user-select: none;
-}
-
-/* NZ exports pill */
-.source-toggle__pill--nz label {
-  color: var(--source-nz);
-  border: 2px solid var(--source-nz);
-  background: transparent;
-}
-
-.source-toggle__pill--nz input:checked + label {
-  background: var(--source-nz);
-  color: #FFFFFF;
-}
-
-/* Korea quarantine (QIA) pill */
-.source-toggle__pill--qia label {
-  color: var(--source-qia);
-  border: 2px solid var(--source-qia);
-  background: transparent;
-}
-
-.source-toggle__pill--qia input:checked + label {
-  background: var(--source-qia);
-  color: #FFFFFF;
-}
-
-/* Korea customs (KSTAT) pill */
-.source-toggle__pill--kstat label {
-  color: var(--source-kstat);
-  border: 2px solid var(--source-kstat);
-  background: transparent;
-}
-
-.source-toggle__pill--kstat input:checked + label {
-  background: var(--source-kstat);
-  color: #FFFFFF;
+  color: var(--text-primary, #222);
+  line-height: 1.3;
 }
 
 /* Harvest-year band — CSS fallback if annotation plugin not available */
