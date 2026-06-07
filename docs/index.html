@@ -13,7 +13,7 @@
   <div class="page-wrapper">
     <h1>Velvet Knowledge Hub</h1>
     <p class="tagline">Korea deer velvet market intelligence for the New Zealand deer industry</p>
-    <p class="last-built caption">Last built: 2026-06-06</p>
+    <p class="last-built caption">Last built: 2026-06-07</p>
     <a class="pdf-download-btn" href="velvet-knowledge-hub.pdf" download>Download PDF</a>
   </div>
 </header>
@@ -741,58 +741,65 @@
   (function () {
     var mfdsData = [{"x": "2004", "y": 18751.0}, {"x": "2005", "y": 17531.0}, {"x": "2006", "y": 17806.0}, {"x": "2007", "y": 21476.0}, {"x": "2008", "y": 14962.0}, {"x": "2009", "y": 14146.0}, {"x": "2010", "y": 16786.0}, {"x": "2011", "y": 17516.0}, {"x": "2012", "y": 18044.0}, {"x": "2013", "y": 19835.0}, {"x": "2014", "y": 26377.0}, {"x": "2015", "y": 31094.0}, {"x": "2016", "y": 29001.0}, {"x": "2017", "y": 28944.0}, {"x": "2018", "y": 30078.0}, {"x": "2019", "y": 32244.0}, {"x": "2020", "y": 31184.0}, {"x": "2021", "y": 34242.0}, {"x": "2022", "y": 39364.0}, {"x": "2023", "y": 24178.0}, {"x": "2024", "y": 28026.0}];
     if (!mfdsData || !mfdsData.length) return;
-    var canvas = document.getElementById('b7PriceChart');
-    if (!canvas) return;
+    function _initB7Chart() {
+      var canvas = document.getElementById('b7PriceChart');
+      if (!canvas) return;
 
-    var yearLabels = mfdsData.map(function (pt) { return String(pt.x); });
-    var values = mfdsData.map(function (pt) { return pt.y; });
+      var yearLabels = mfdsData.map(function (pt) { return String(pt.x); });
+      var values = mfdsData.map(function (pt) { return pt.y; });
 
-    new Chart(canvas.getContext('2d'), {
-      type: 'bar',
-      data: {
-        labels: yearLabels,
-        datasets: [{
-          label: 'Korean herbal medicine channel (MFDS annual statistics)',
-          data: values,
-          backgroundColor: 'rgba(26, 82, 118, 0.75)',
-          borderColor: '#1A5276',
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: true,
-            position: 'top',
-            align: 'start',
-            labels: { boxWidth: 12, padding: 14 }
-          },
-          tooltip: {
-            callbacks: {
-              label: function (ctx) {
-                return 'Korean herbal medicine channel — USD ' + ctx.parsed.y.toLocaleString() + ' thousands';
+      new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: yearLabels,
+          datasets: [{
+            label: 'Korean herbal medicine channel (MFDS annual statistics)',
+            data: values,
+            backgroundColor: 'rgba(26, 82, 118, 0.75)',
+            borderColor: '#1A5276',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top',
+              align: 'start',
+              labels: { boxWidth: 12, padding: 14 }
+            },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  return 'Korean herbal medicine channel — USD ' + ctx.parsed.y.toLocaleString() + ' thousands';
+                }
               }
             }
-          }
-        },
-        scales: {
-          x: {
-            type: 'category',
-            title: { display: true, text: 'Year' },
-            ticks: { maxTicksLimit: 11 },
-            grid: { color: 'rgba(204,204,204,0.4)' }
           },
-          y: {
-            beginAtZero: true,
-            title: { display: true, text: 'USD thousands' },
-            ticks: { callback: function (v) { return v.toLocaleString(); } },
-            grid: { color: 'rgba(204,204,204,0.4)' }
+          scales: {
+            x: {
+              type: 'category',
+              title: { display: true, text: 'Year' },
+              ticks: { maxTicksLimit: 11 },
+              grid: { color: 'rgba(204,204,204,0.4)' }
+            },
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'USD thousands' },
+              ticks: { callback: function (v) { return v.toLocaleString(); } },
+              grid: { color: 'rgba(204,204,204,0.4)' }
+            }
           }
         }
-      }
-    });
+      });
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', _initB7Chart);
+    } else {
+      _initB7Chart();
+    }
   }());
   </script>
   
@@ -7249,7 +7256,7 @@
   
   <script>
   (function () {
-    var CUTOFF = '2026-03-08';
+    var CUTOFF = '2026-03-09';
 
     function toggleImportRows(btn) {
       var tbody = document.getElementById('import-records-tbody');

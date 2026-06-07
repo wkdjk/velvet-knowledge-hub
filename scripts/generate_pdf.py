@@ -169,6 +169,21 @@ def generate_pdf(source_url: str, output_path: Path, build_date: str) -> int:
         # children regardless of CSS. Setting .open = true via JS ensures the DOM
         # state matches what the print CSS expects.
         dash_page.evaluate("document.querySelectorAll('details').forEach(el => el.open = true)")
+        # PDF: show only last-90-day import records rows; hide older ones.
+        dash_page.evaluate(
+            "(function(){"
+            "  var tbody=document.getElementById('import-records-tbody');"
+            "  if(!tbody)return;"
+            "  Array.from(tbody.querySelectorAll('tr.import-row')).forEach(function(r){"
+            "    r.style.display=r.classList.contains('row-90d')?'':'none';"
+            "  });"
+            "})();"
+        )
+        # PDF: hide placeholder supplement/market-presence section.
+        dash_page.evaluate(
+            "var mp=document.getElementById('market-presence');"
+            "if(mp)mp.style.display='none';"
+        )
         dashboard_pdf_bytes = dash_page.pdf(
             format="A4",
             print_background=True,

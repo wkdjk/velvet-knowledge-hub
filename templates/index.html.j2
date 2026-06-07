@@ -758,58 +758,65 @@
   (function () {
     var mfdsData = {{ mfds_annual_series.chart_points | tojson }};
     if (!mfdsData || !mfdsData.length) return;
-    var canvas = document.getElementById('b7PriceChart');
-    if (!canvas) return;
+    function _initB7Chart() {
+      var canvas = document.getElementById('b7PriceChart');
+      if (!canvas) return;
 
-    var yearLabels = mfdsData.map(function (pt) { return String(pt.x); });
-    var values = mfdsData.map(function (pt) { return pt.y; });
+      var yearLabels = mfdsData.map(function (pt) { return String(pt.x); });
+      var values = mfdsData.map(function (pt) { return pt.y; });
 
-    new Chart(canvas.getContext('2d'), {
-      type: 'bar',
-      data: {
-        labels: yearLabels,
-        datasets: [{
-          label: 'Korean herbal medicine channel (MFDS annual statistics)',
-          data: values,
-          backgroundColor: 'rgba(26, 82, 118, 0.75)',
-          borderColor: '#1A5276',
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: true,
-            position: 'top',
-            align: 'start',
-            labels: { boxWidth: 12, padding: 14 }
-          },
-          tooltip: {
-            callbacks: {
-              label: function (ctx) {
-                return 'Korean herbal medicine channel — USD ' + ctx.parsed.y.toLocaleString() + ' thousands';
+      new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: yearLabels,
+          datasets: [{
+            label: 'Korean herbal medicine channel (MFDS annual statistics)',
+            data: values,
+            backgroundColor: 'rgba(26, 82, 118, 0.75)',
+            borderColor: '#1A5276',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top',
+              align: 'start',
+              labels: { boxWidth: 12, padding: 14 }
+            },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  return 'Korean herbal medicine channel — USD ' + ctx.parsed.y.toLocaleString() + ' thousands';
+                }
               }
             }
-          }
-        },
-        scales: {
-          x: {
-            type: 'category',
-            title: { display: true, text: 'Year' },
-            ticks: { maxTicksLimit: 11 },
-            grid: { color: 'rgba(204,204,204,0.4)' }
           },
-          y: {
-            beginAtZero: true,
-            title: { display: true, text: 'USD thousands' },
-            ticks: { callback: function (v) { return v.toLocaleString(); } },
-            grid: { color: 'rgba(204,204,204,0.4)' }
+          scales: {
+            x: {
+              type: 'category',
+              title: { display: true, text: 'Year' },
+              ticks: { maxTicksLimit: 11 },
+              grid: { color: 'rgba(204,204,204,0.4)' }
+            },
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: 'USD thousands' },
+              ticks: { callback: function (v) { return v.toLocaleString(); } },
+              grid: { color: 'rgba(204,204,204,0.4)' }
+            }
           }
         }
-      }
-    });
+      });
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', _initB7Chart);
+    } else {
+      _initB7Chart();
+    }
   }());
   </script>
   {% endif %}
