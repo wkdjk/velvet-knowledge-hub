@@ -1,4 +1,4 @@
-// kvn_csv_email.gs — VKH CSV-by-email backend + ingest trigger
+// vkh_csv_email.gs — VKH CSV-by-email backend + ingest trigger
 // Deploy as: Web app → Execute as Me → Anyone can access
 //
 // doPost: receives {"email_address": "...", "request_source": "vkh_import_records"}
