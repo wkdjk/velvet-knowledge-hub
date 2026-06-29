@@ -131,6 +131,7 @@ KVN_ARTICLES_HEADERS = [
     "ai_processed_at",
     "include_on_site",
     "crawled_at",
+    "english_title",  # C-8 P0b: English headline ≤12 words, written by classifier
 ]
 # content_hash: SHA-256 of URL+title for cross-publication dedup
 # ai_processed_at: empty until AI classification runs

@@ -894,7 +894,7 @@
             {% for row in import_records_display %}
               <tr class="import-row{% if row._in_last_90d %} row-90d{% endif %}"
                   data-date="{{ row._display_date }}"
-                  style="{% if not loop.first and loop.index > 3 %}display:none{% endif %}">
+                  style="{% if loop.index > 5 %}display:none{% endif %}">
                 <td class="data">{{ row._display_date }}</td>
                 <td>{{ row._display_origin }}</td>
                 <td>{{ row._display_export_country }}</td>
@@ -909,7 +909,7 @@
 
       <div class="table-controls">
         <button class="show-more-btn" id="show-more-btn" type="button"
-                onclick="toggleImportRows(this)">Show last 90 days</button>
+                onclick="toggleImportRows(this)">Show more</button>
       </div>
 
       <p class="table-footnote">Source: Korea Ministry of Food and Drug Safety import notification database. Importer names translated from Korean using curated lookup; exporter names appear as recorded in MFDS source data.</p>
@@ -950,32 +950,17 @@
       var expanded = btn.getAttribute('data-expanded') === 'true';
 
       if (!expanded) {
-        /* Expand: show rows within last 90 days */
-        var shown = 0;
-        rows.forEach(function (row) {
-          var rowDate = row.getAttribute('data-date') || '';
-          if (rowDate >= CUTOFF) {
-            row.style.display = '';
-            shown++;
-          }
-        });
-        /* If no rows matched, show first 10 as fallback */
-        if (shown === 0) {
-          var fallback = 0;
-          rows.forEach(function (row) {
-            if (fallback < 10) { row.style.display = ''; fallback++; }
-          });
-        }
-        btn.textContent = 'Show fewer';
+        /* Expand: show all rows */
+        rows.forEach(function (row) { row.style.display = ''; });
+        btn.textContent = 'Show less';
         btn.setAttribute('data-expanded', 'true');
-        /* Scroll hint */
         checkOverflow();
       } else {
-        /* Collapse: show only first 3 rows */
+        /* Collapse: show only first 5 rows */
         rows.forEach(function (row, idx) {
-          row.style.display = idx < 3 ? '' : 'none';
+          row.style.display = idx < 5 ? '' : 'none';
         });
-        btn.textContent = 'Show last 90 days';
+        btn.textContent = 'Show more';
         btn.setAttribute('data-expanded', 'false');
       }
     }
@@ -1054,10 +1039,22 @@
             {# Column-swap schema (C-6a): 'title' = URL (href), 'url' = Korean title (anchor text).    #}
             {# english_summary restored as <p class="article-summary"> body below the title.           #}
             <li class="article-entry">
+              {# P0c: category-keyed SVG thumbnail. onerror → default.svg → collapse. #}
+              <img class="article-thumbnail"
+                   src="assets/thumbs/{{ article.category | default('기타') | lower | replace(' ', '_') }}.svg"
+                   onerror="this.onerror=null;this.src='assets/thumbs/default.svg';this.onerror=function(){this.style.display='none'};"
+                   alt="" width="80" height="60" loading="lazy">
               <div class="article-body">
+                {# P0b: show english_title; fall back to Korean title (article.url col) if absent. #}
                 <a class="article-title"
                    href="{{ article.title | default('#') }}"
-                   target="_blank" rel="noopener noreferrer">{{ article.url | default("[Title unavailable]") }}</a>
+                   target="_blank" rel="noopener noreferrer">
+                  {%- if article.english_title -%}
+                    {{ article.english_title }}
+                  {%- else -%}
+                    <span class="title-ko">{{ article.url | default("[Title unavailable]") }}</span>
+                  {%- endif -%}
+                </a>
                 <p class="article-summary">{{ article.english_summary | default("") }}</p>
               </div>
               <div class="article-meta">

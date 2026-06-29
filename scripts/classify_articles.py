@@ -39,6 +39,7 @@ from pathlib import Path
 
 import anthropic
 import gspread
+from dotenv import load_dotenv
 from gspread.utils import rowcol_to_a1
 
 # ---------------------------------------------------------------------------
@@ -84,6 +85,11 @@ _COL_CATEGORY = 6        # 'category' (G)
 _COL_ENGLISH_SUMMARY = 7  # 'english_summary' (H)
 _COL_AI_PROCESSED_AT = 8  # 'ai_processed_at' (I)
 _COL_INCLUDE_ON_SITE = 9  # 'include_on_site' (J)
+# crawled_at occupies col K (index 10) — english_title goes in col L (index 11).
+# C-8 P0b: english_title is a new column appended to the right of the existing schema.
+# Prerequisite: run setup_sheets_add_english_title.py (or manually add the header
+# 'english_title' to cell L1 of KVN_Articles) before running the classifier.
+_COL_ENGLISH_TITLE = 11   # 'english_title' (L) — added C-8 P0b
 
 # Valid category values — classifier must return one of these.
 _VALID_CATEGORIES = frozenset([
@@ -105,8 +111,9 @@ _ASYNC_RPM_LIMIT = 40
 # System prompt for Haiku classification.
 _SYSTEM_PROMPT = (
     "You are a Korean deer velvet industry news classifier. "
-    "Given a Korean news article title and description, return JSON with three fields:\n"
+    "Given a Korean news article title and description, return JSON with four fields:\n"
     "- category: one of [규제정책, 무역시장, 건강제품, 수입유통, 업계소식, 기타]\n"
+    "- english_title: a short English headline for this article (12 words max, title case, no full stop)\n"
     "- english_summary: 1-2 sentence English summary of the article\n"
     "- include_on_site: true if this article is relevant to the NZ deer velvet "
     "trade/import/market in Korea; false if it is off-topic\n"
@@ -159,6 +166,7 @@ def _parse_classification_response(raw_text: str, title_ko: str) -> dict:
         )
         category = "기타"
 
+    english_title = str(result.get("english_title", "")).strip()
     english_summary = str(result.get("english_summary", "")).strip()
 
     # include_on_site — accept bool or string.
@@ -170,6 +178,7 @@ def _parse_classification_response(raw_text: str, title_ko: str) -> dict:
 
     return {
         "category": category,
+        "english_title": english_title,
         "english_summary": english_summary,
         "include_on_site": include_on_site,
         "_error": False,
@@ -205,17 +214,17 @@ def classify_article(
         logger.warning(
             "JSON parse error for title='%s': %s", title_ko[:60], exc
         )
-        return {"category": "기타", "english_summary": "", "include_on_site": False, "_error": True}
+        return {"category": "기타", "english_title": "", "english_summary": "", "include_on_site": False, "_error": True}
     except anthropic.APIError as exc:
         logger.warning(
             "Anthropic API error for title='%s': %s", title_ko[:60], exc
         )
-        return {"category": "기타", "english_summary": "", "include_on_site": False, "_error": True}
+        return {"category": "기타", "english_title": "", "english_summary": "", "include_on_site": False, "_error": True}
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Unexpected error for title='%s': %s", title_ko[:60], exc
         )
-        return {"category": "기타", "english_summary": "", "include_on_site": False, "_error": True}
+        return {"category": "기타", "english_title": "", "english_summary": "", "include_on_site": False, "_error": True}
 
 
 # ---------------------------------------------------------------------------
@@ -376,7 +385,7 @@ def _write_results_to_sheets(
     sleep to stay within Sheets write quota (300 write requests/min per project).
     """
     _WRITE_CHUNK_ROWS = 200
-    cells_per_row = 4  # category + english_summary + ai_processed_at + include_on_site
+    cells_per_row = 5  # category + english_title + english_summary + ai_processed_at + include_on_site
 
     cell_updates: list[dict] = []
 
@@ -398,6 +407,10 @@ def _write_results_to_sheets(
         cell_updates.append({
             "range": rowcol_to_a1(sheet_row_num, _COL_INCLUDE_ON_SITE + 1),
             "values": [[include_val]],
+        })
+        cell_updates.append({
+            "range": rowcol_to_a1(sheet_row_num, _COL_ENGLISH_TITLE + 1),
+            "values": [[cls.get("english_title", "")]],
         })
 
     chunk_size = _WRITE_CHUNK_ROWS * cells_per_row
@@ -465,7 +478,7 @@ def main() -> None:
         print(f"  limit: {args.limit}")
 
     # L-2: load .env from repo root.
-    load_dotenv(REPO_ROOT / ".env")
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
     # L-11: validate ANTHROPIC_API_KEY prefix before any API call.
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()

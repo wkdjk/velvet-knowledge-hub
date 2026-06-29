@@ -61,7 +61,7 @@ IMPORT_INTELLIGENCE_CSV = DOWNLOADS_DIR / "import_intelligence.csv"
 # live tab and produced empty CSV columns. Replaced with live tab column names.
 _NEWS_PULSE_CSV_HEADERS = [
     "article_id", "title", "url", "content_hash", "published_date",
-    "source", "category", "english_summary", "ai_processed_at", "include_on_site",
+    "source", "category", "english_title", "english_summary", "ai_processed_at", "include_on_site",
 ]
 
 # Maps config section identifiers to the list of source IDs they aggregate.
