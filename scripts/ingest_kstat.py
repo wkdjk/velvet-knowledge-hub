@@ -67,7 +67,8 @@ from dotenv import load_dotenv
 # ---------------------------------------------------------------------------
 # L-1: ensure repo root is on sys.path.
 # ---------------------------------------------------------------------------
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.sheets_auth import _load_config, connect_sheets, resolve_sheet_id  # noqa: E402
 
