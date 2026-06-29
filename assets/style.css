@@ -582,6 +582,7 @@ footer .caption:last-child {
   border: 1px solid var(--border);
   padding: 2px 6px;
   line-height: 1.4;
+  display: none; /* Korean-only labels hidden from English-speaking DINZ readers */
 }
 
 /* Build date line */
