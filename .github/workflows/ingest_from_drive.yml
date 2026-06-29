@@ -1,0 +1,44 @@
+name: Ingest from Drive
+
+on:
+  workflow_dispatch:
+    inputs:
+      folder:
+        description: "Folder to ingest (qia / nz / mfds_price / mfds_records / kstat / all)"
+        required: false
+        default: "all"
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run ingest
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          VKH_SHEET_ID: ${{ secrets.VKH_SHEET_ID }}
+        run: |
+          PYTHONPATH=. python scripts/ingest_from_drive.py --folder ${{ github.event.inputs.folder }}
+
+      - name: Rebuild site
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          VKH_SHEET_ID: ${{ secrets.VKH_SHEET_ID }}
+        run: PYTHONPATH=. python scripts/build.py
+
+      - name: Commit built site
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/
+          git diff --cached --quiet || git commit -m "build: auto-rebuild after Drive ingest [skip ci]"
+          git push

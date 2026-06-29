@@ -1,9 +1,53 @@
-// kvn_csv_email.gs — VKH CSV-by-email backend
+// kvn_csv_email.gs — VKH CSV-by-email backend + ingest trigger
 // Deploy as: Web app → Execute as Me → Anyone can access
 //
 // doPost: receives {"email_address": "...", "request_source": "vkh_import_records"}
 //         reads VFI_Import_Records tab, filters last 90 days, emails CSV attachment.
 // doGet:  health check — returns {ok: true, service: "vkh-csv-email"}
+//
+// Ingest trigger (menu button):
+//   onOpen()        — adds "VKH Admin" menu to the sheet
+//   triggerIngest() — calls GitHub API to dispatch ingest_from_drive.yml
+//
+// Setup (one-time):
+//   Script editor → Project Settings → Script Properties → Add:
+//     GITHUB_PAT = <fine-grained PAT with actions:write on velvet-knowledge-hub>
+
+var GITHUB_OWNER    = 'wkdjk';
+var GITHUB_REPO     = 'velvet-knowledge-hub';
+var GITHUB_WORKFLOW = 'ingest_from_drive.yml';
+
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('VKH Admin')
+    .addItem('▶ Ingest all from Drive', 'triggerIngest')
+    .addToUi();
+}
+
+function triggerIngest() {
+  var pat = PropertiesService.getScriptProperties().getProperty('GITHUB_PAT');
+  if (!pat) {
+    SpreadsheetApp.getUi().alert('GITHUB_PAT not set.\nGo to Extensions → Apps Script → Project Settings → Script Properties.');
+    return;
+  }
+  var url = 'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO +
+            '/actions/workflows/' + GITHUB_WORKFLOW + '/dispatches';
+  var response = UrlFetchApp.fetch(url, {
+    method: 'post',
+    headers: {
+      'Authorization': 'Bearer ' + pat,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28'
+    },
+    payload: JSON.stringify({ ref: 'main', inputs: { folder: 'all' } }),
+    muteHttpExceptions: true
+  });
+  if (response.getResponseCode() === 204) {
+    SpreadsheetApp.getUi().alert('✅ Ingest triggered!\nCheck progress:\nhttps://github.com/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/actions');
+  } else {
+    SpreadsheetApp.getUi().alert('❌ Error ' + response.getResponseCode() + '\n' + response.getContentText());
+  }
+}
 
 var SHEET_ID = '1idbPiaK_Scd8znktn2cPutWP5Lg4azo1XBfXNyt5K2U';
 var TAB_NAME = 'VFI_Import_Records';
