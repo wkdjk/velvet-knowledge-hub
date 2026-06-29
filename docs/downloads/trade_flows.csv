@@ -3221,6 +3221,18 @@ date,series,hs_code,hs_label,value,unit,country,notes,hs_code_10digit,product_ty
 2023-01,korea_quarantine,507.9,"Horns, antlers, hooves, nails, claws and beaks — other",4560.71,KG,뉴질랜드,source: QIA_2023_ANNUAL_LIVESTOCK_QUARANTINE.xlsx | product: 녹용,507901190,dried
 2023-01,korea_quarantine,507.9,"Horns, antlers, hooves, nails, claws and beaks — other",2,shipments,뉴질랜드,source: QIA_2023_ANNUAL_LIVESTOCK_QUARANTINE.xlsx | product: 생녹용,507901110,frozen
 2023-01,korea_quarantine,507.9,"Horns, antlers, hooves, nails, claws and beaks — other",2500,KG,뉴질랜드,source: QIA_2023_ANNUAL_LIVESTOCK_QUARANTINE.xlsx | product: 생녹용,507901110,frozen
+2025-07,korea_quarantine,507.9,"Horns, antlers, hooves, nails, claws and beaks — other",1,shipments,러시아,source: QIA_2025_ANNUAL_LIVESTOCK_QUARANTINE.xlsx | product: 녹용,507901190,dried
+2025-07,korea_quarantine,507.9,"Horns, antlers, hooves, nails, claws and beaks — other",373.5,KG,러시아,source: QIA_2025_ANNUAL_LIVESTOCK_QUARANTINE.xlsx | product: 녹용,507901190,dried
+2022-06,korea_quarantine,507.9,"Horns, antlers, hooves, nails, claws and beaks — other",1,shipments,카자흐스탄,source: QIA_2022_ANNUAL_LIVESTOCK_QUARANTINE.xlsx | product: 녹용,507901190,dried
+2022-06,korea_quarantine,507.9,"Horns, antlers, hooves, nails, claws and beaks — other",356,KG,카자흐스탄,source: QIA_2022_ANNUAL_LIVESTOCK_QUARANTINE.xlsx | product: 녹용,507901190,dried
+2022-09,korea_quarantine,507.9,"Horns, antlers, hooves, nails, claws and beaks — other",3,shipments,카자흐스탄,source: QIA_2022_ANNUAL_LIVESTOCK_QUARANTINE.xlsx | product: 녹용,507901190,dried
+2022-09,korea_quarantine,507.9,"Horns, antlers, hooves, nails, claws and beaks — other",1170.1,KG,카자흐스탄,source: QIA_2022_ANNUAL_LIVESTOCK_QUARANTINE.xlsx | product: 녹용,507901190,dried
+2023-01,korea_quarantine,507.9,"Horns, antlers, hooves, nails, claws and beaks — other",4,shipments,중국,source: QIA_2023_ANNUAL_LIVESTOCK_QUARANTINE.xlsx | product: 녹용,507901190,dried
+2023-01,korea_quarantine,507.9,"Horns, antlers, hooves, nails, claws and beaks — other",5310,KG,중국,source: QIA_2023_ANNUAL_LIVESTOCK_QUARANTINE.xlsx | product: 녹용,507901190,dried
+2024-01,korea_quarantine,507.9,"Horns, antlers, hooves, nails, claws and beaks — other",6,shipments,러시아,source: QIA_2024_ANNUAL_LIVESTOCK_QUARANTINE.xlsx | product: 녹용,507901190,dried
+2024-01,korea_quarantine,507.9,"Horns, antlers, hooves, nails, claws and beaks — other",6754.9,KG,러시아,source: QIA_2024_ANNUAL_LIVESTOCK_QUARANTINE.xlsx | product: 녹용,507901190,dried
+2024-08,korea_quarantine,507.9,"Horns, antlers, hooves, nails, claws and beaks — other",2,shipments,뉴질랜드,source: QIA_2024_ANNUAL_LIVESTOCK_QUARANTINE.xlsx | product: 생녹용,507901110,frozen
+2024-08,korea_quarantine,507.9,"Horns, antlers, hooves, nails, claws and beaks — other",3002.18,KG,뉴질랜드,source: QIA_2024_ANNUAL_LIVESTOCK_QUARANTINE.xlsx | product: 생녹용,507901110,frozen
 2021-01,kstat_api,507.9,전지(全枝),21883,KG,뉴질랜드,source=CUSTOMS_2021_TRADE_BY_PRODUCT_COUNTRY.csv,507901110,frozen
 2021-01,kstat_api,507.9,전지(全枝),3726,USD_thousands,뉴질랜드,source=CUSTOMS_2021_TRADE_BY_PRODUCT_COUNTRY.csv,507901110,frozen
 2021-01,kstat_api,507.9,기타,19,KG,뉴질랜드,source=CUSTOMS_2021_TRADE_BY_PRODUCT_COUNTRY.csv,507901190,dried
