@@ -62,6 +62,7 @@ from pathlib import Path
 
 import gspread
 import requests
+from dotenv import load_dotenv
 
 # ---------------------------------------------------------------------------
 # L-1: ensure repo root is on sys.path.

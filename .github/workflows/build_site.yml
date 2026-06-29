@@ -115,7 +115,7 @@ jobs:
 
             To find out what went wrong:
 
-            1. Open this link: ${{ github.run_url }}
+            1. Open this link: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
             2. Look for any step marked with a red cross.
             3. Click that step to expand the log and read the error message.
             4. If the error mentions a data source (for example, Google Sheets or Naver), check that the source is accessible and try re-running the update from the same page.
