@@ -45,9 +45,7 @@
 # Security: no credentials or secrets in this file. All secrets from .env only.
 
 import argparse
-import json
 import logging
-import os
 import re
 import sys
 import time
@@ -56,14 +54,14 @@ from pathlib import Path
 
 import gspread
 import openpyxl
-import yaml
-from dotenv import load_dotenv
-from google.oauth2.service_account import Credentials
 
 # ---------------------------------------------------------------------------
 # L-1: ensure repo root is on sys.path.
 # ---------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from scripts.sheets_auth import _load_config, connect_sheets, resolve_sheet_id  # noqa: E402
+from scripts.ingest_common import _normalise_hs_code, build_dedup_key, rows_to_append  # noqa: E402
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -75,14 +73,9 @@ logger = logging.getLogger("ingest_qia")
 # Constants
 # ---------------------------------------------------------------------------
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-CONFIG_PATH = REPO_ROOT / "config.yaml"
 TARGET_TAB = "VTW_Trade_Monthly"
 SERIES_VALUE = "korea_quarantine"
 SERIES_VALUE_EXPORT = "korea_quarantine_export"
-
-# Sheets API only — no Drive API required (L-5 workaround).
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # HS code to assign to all QIA quarantine rows (dot notation TEXT — VKH schema).
 HS_CODE = "0507.90"
@@ -685,137 +678,8 @@ def parse_qia_file(filepath: Path) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Google Sheets helpers
-# ---------------------------------------------------------------------------
-
-def _load_config() -> dict:
-    """Read config.yaml from repo root. Returns empty dict on failure."""
-    if not CONFIG_PATH.exists():
-        return {}
-    try:
-        with CONFIG_PATH.open("r", encoding="utf-8") as fh:
-            return yaml.safe_load(fh) or {}
-    except yaml.YAMLError:
-        return {}
-
-
-def connect_sheets(sheet_id: str):
-    """
-    Connect to Google Sheets using service account credentials.
-
-    L-3: GOOGLE_SERVICE_ACCOUNT_JSON must be single-line JSON.
-    Returns gspread.Spreadsheet object. Calls sys.exit(1) on failure.
-    """
-    load_dotenv(REPO_ROOT / ".env")
-
-    sa_json_raw = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
-    if not sa_json_raw:
-        print(
-            "ERROR: GOOGLE_SERVICE_ACCOUNT_JSON environment variable is not set.\n"
-            "  Local dev: add it to .env at the repo root (single-line JSON — L-3).\n"
-            "  GitHub Actions: add it to repository Secrets.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    try:
-        sa_info = json.loads(sa_json_raw)
-    except json.JSONDecodeError as exc:
-        print(
-            f"ERROR: GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON — {exc}\n"
-            "  Minify: python -c \"import json,sys; print(json.dumps(json.load(sys.stdin),"
-            " separators=(',',':')))\" < key.json",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
-    gc = gspread.authorize(creds)
-
-    try:
-        spreadsheet = gc.open_by_key(sheet_id)
-    except gspread.exceptions.APIError as exc:
-        print(
-            f"ERROR: Could not open sheet {sheet_id} — {exc}\n"
-            "  Check the service account has Editor access to the sheet.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    return spreadsheet
-
-
-def resolve_sheet_id() -> str:
-    """
-    Resolve the Google Sheet ID from environment then config.yaml fallback.
-
-    Priority: VKH_SHEET_ID env var → config.yaml sheet_id.
-    Calls sys.exit(1) if neither is set.
-    """
-    load_dotenv(REPO_ROOT / ".env")
-
-    sheet_id = os.environ.get("VKH_SHEET_ID", "").strip()
-    if sheet_id:
-        return sheet_id
-
-    config = _load_config()
-    sheet_id = config.get("sheet_id", "").strip()
-    if sheet_id:
-        print("  (VKH_SHEET_ID not set — using sheet_id from config.yaml)")
-        return sheet_id
-
-    print(
-        "ERROR: Sheet ID not found.\n"
-        "  Set VKH_SHEET_ID in .env, or ensure sheet_id is set in config.yaml.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
-
-
-# ---------------------------------------------------------------------------
 # Dedup and write helpers
 # ---------------------------------------------------------------------------
-
-def _normalise_hs_code(raw) -> str:
-    """
-    Normalise an hs_code value to a canonical dot-notation string.
-
-    Google Sheets returns numeric cells as float (e.g. 507.9) even when the
-    stored value is the string "0507.90". Converting via str() produces "507.9",
-    which does not match the parser output "0507.90" — causing silent dedup
-    failure (L-9). This function maps both representations to "0507.90".
-
-    Mapping: 507.9 → "0507.90", 510.0 → "0510.00", "0507.90" → "0507.90".
-    Unknown values are returned as-is (str).
-    """
-    _FLOAT_TO_DOT: dict[float, str] = {
-        507.9:  "0507.90",
-        510.0:  "0510.00",
-    }
-    if isinstance(raw, float):
-        return _FLOAT_TO_DOT.get(raw, str(raw))
-    if isinstance(raw, int):
-        return _FLOAT_TO_DOT.get(float(raw), str(raw))
-    return str(raw)
-
-
-def build_dedup_key(row: dict) -> tuple:
-    """
-    Return the dedup key tuple for a VTW_Trade_Monthly row.
-
-    L-10: key is (date, series, hs_code, unit, country) — five fields.
-    Unit distinguishes shipments rows from KG rows.
-    L-9: hs_code is normalised via _normalise_hs_code() to handle the float/string
-    mismatch between Sheets (returns 507.9) and parser output ("0507.90").
-    """
-    return (
-        str(row.get("date", "")),
-        str(row.get("series", "")),
-        _normalise_hs_code(row.get("hs_code", "")),
-        str(row.get("unit", "")),
-        str(row.get("country", "")),
-    )
-
 
 def load_existing_keys(worksheet, series_filter: str = SERIES_VALUE) -> tuple[set, int]:
     """
@@ -828,29 +692,6 @@ def load_existing_keys(worksheet, series_filter: str = SERIES_VALUE) -> tuple[se
     existing_rows = worksheet.get_all_records()
     series_rows = [r for r in existing_rows if r.get("series") == series_filter]
     return {build_dedup_key(r) for r in series_rows}, len(existing_rows)
-
-
-def rows_to_append(
-    new_rows: list[dict],
-    existing_keys: set,
-    headers: list[str],
-) -> tuple[list[list], int]:
-    """
-    Filter new_rows to those not already in existing_keys.
-
-    Returns (list_of_lists_for_gspread, skipped_count).
-    """
-    to_write: list[list] = []
-    skipped = 0
-
-    for row in new_rows:
-        key = build_dedup_key(row)
-        if key in existing_keys:
-            skipped += 1
-            continue
-        to_write.append([row.get(h, "") for h in headers])
-
-    return to_write, skipped
 
 
 # ---------------------------------------------------------------------------

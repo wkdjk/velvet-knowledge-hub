@@ -16,15 +16,17 @@
 # Security: no credentials or secrets in this file. All secrets from .env only.
 
 import argparse
-import json
-import os
 import sys
 from pathlib import Path
 
 import gspread
-import yaml
-from dotenv import load_dotenv
-from google.oauth2.service_account import Credentials
+
+# ---------------------------------------------------------------------------
+# L-1: ensure repo root is on sys.path so scripts.sheets_auth is importable.
+# ---------------------------------------------------------------------------
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from scripts.sheets_auth import _load_config, connect_sheets as _sa_connect_sheets, resolve_sheet_id as _sa_resolve_sheet_id  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Optional Plotly import — fail gracefully with install hint.
@@ -41,10 +43,9 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).resolve().parent
-CONFIG_PATH = REPO_ROOT / "config.yaml"
 
-# Sheets API only (L-5: no Drive API required).
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+# Read-only scope — ask.py never writes to Sheets.
+_READ_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 # ---------------------------------------------------------------------------
 # Keyword routing table
@@ -79,83 +80,17 @@ EXAMPLE_QUESTIONS = [
 ]
 
 # ---------------------------------------------------------------------------
-# Sheets connection helpers (mirrors connect_sheets() in ingest_nz_export.py)
+# Sheets connection helpers
 # ---------------------------------------------------------------------------
 
-def _load_config() -> dict:
-    """Read config.yaml from repo root."""
-    if not CONFIG_PATH.exists():
-        return {}
-    try:
-        with CONFIG_PATH.open("r", encoding="utf-8") as fh:
-            return yaml.safe_load(fh) or {}
-    except yaml.YAMLError:
-        return {}
-
-
 def _resolve_sheet_id(config: dict) -> str:
-    """
-    Resolve sheet ID from env var then config.yaml fallback.
-
-    Priority: VKH_SHEET_ID env var → config.yaml sheet_id.
-    """
-    sheet_id = os.environ.get("VKH_SHEET_ID", "").strip()
-    if sheet_id:
-        return sheet_id
-    sheet_id = config.get("sheet_id", "").strip()
-    if sheet_id:
-        return sheet_id
-    print(
-        "ERROR: Sheet ID not found.\n"
-        "  Set VKH_SHEET_ID in .env, or ensure sheet_id is set in config.yaml.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
+    """Resolve sheet ID — thin wrapper so call sites need no changes."""
+    return _sa_resolve_sheet_id(config)
 
 
 def connect_sheets(sheet_id: str):
-    """
-    Connect to Google Sheets using service account credentials from .env.
-
-    L-2: .env loaded from repo root.
-    L-3: GOOGLE_SERVICE_ACCOUNT_JSON must be single-line JSON.
-    Returns a gspread.Spreadsheet object.
-    """
-    load_dotenv(REPO_ROOT / ".env")
-
-    sa_json_raw = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
-    if not sa_json_raw:
-        print(
-            "ERROR: GOOGLE_SERVICE_ACCOUNT_JSON environment variable is not set.\n"
-            "  Add it to .env at the repo root (single-line JSON — see L-3 in lessons).\n"
-            "  Minify: python -c \"import json,sys; "
-            "print(json.dumps(json.load(sys.stdin), separators=(',',':')))\" < key.json",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    try:
-        sa_info = json.loads(sa_json_raw)
-    except json.JSONDecodeError as exc:
-        print(
-            f"ERROR: GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON — {exc}\n"
-            "  Ensure the value is single-line minified JSON (L-3).",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
-    gc = gspread.authorize(creds)
-
-    try:
-        return gc.open_by_key(sheet_id)
-    except gspread.exceptions.APIError as exc:
-        print(
-            f"ERROR: Could not open sheet {sheet_id} — {exc}\n"
-            "  Check the service account has Viewer access to the sheet.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    """Connect to Sheets with read-only scope. Returns gspread.Spreadsheet."""
+    return _sa_connect_sheets(sheet_id, scopes=_READ_SCOPES)
 
 
 def _read_tab(spreadsheet, tab_name: str) -> list[dict]:

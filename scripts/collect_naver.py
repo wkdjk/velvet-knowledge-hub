@@ -22,7 +22,6 @@
 
 import argparse
 import hashlib
-import json
 import os
 import re
 import sys
@@ -33,21 +32,19 @@ from urllib.parse import urlparse
 
 import gspread
 import requests
-import yaml
-from dotenv import load_dotenv
-from google.oauth2.service_account import Credentials
+
+# ---------------------------------------------------------------------------
+# L-1: ensure repo root is on sys.path.
+# ---------------------------------------------------------------------------
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from scripts.sheets_auth import FULL_SCOPES, _load_config, connect_sheets, resolve_sheet_id  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-REPO_ROOT = Path(__file__).parent.parent
-CONFIG_PATH = REPO_ROOT / "config.yaml"
-
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive.readonly",
-]
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 NAVER_API_URL = "https://openapi.naver.com/v1/search/news.json"
 _HTML_TAG = re.compile(r"<[^>]+>")
@@ -139,73 +136,7 @@ def _content_hash(url: str, title_ko: str) -> str:
 
 def load_config() -> dict:
     """Read config.yaml from repo root."""
-    if not CONFIG_PATH.exists():
-        print(f"ERROR: config.yaml not found at {CONFIG_PATH}", file=sys.stderr)
-        sys.exit(1)
-    with CONFIG_PATH.open("r", encoding="utf-8") as fh:
-        try:
-            return yaml.safe_load(fh)
-        except yaml.YAMLError as exc:
-            print(f"ERROR: Failed to parse config.yaml — {exc}", file=sys.stderr)
-            sys.exit(1)
-
-
-def connect_sheets(config: dict):
-    """
-    Load credentials from .env (L-2: repo root only), connect to Sheets.
-    Returns (gspread.Spreadsheet, sheet_id) or exits on error.
-
-    L-3: GOOGLE_SERVICE_ACCOUNT_JSON must be single-line JSON.
-    """
-    load_dotenv(REPO_ROOT / ".env")
-
-    # Prefer VKH_SHEET_ID from env; fall back to config.yaml.
-    sheet_id = os.environ.get("VKH_SHEET_ID", "").strip()
-    if not sheet_id:
-        sheet_id = config.get("sheet_id", "").strip()
-    if not sheet_id:
-        print(
-            "ERROR: No sheet ID found. Set VKH_SHEET_ID in .env "
-            "or sheet_id in config.yaml.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    sa_json_raw = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
-    if not sa_json_raw:
-        print(
-            "ERROR: GOOGLE_SERVICE_ACCOUNT_JSON not set.\n"
-            "  Local dev: add to .env at the repo root (single-line JSON — L-3).\n"
-            "  GitHub Actions: add to repository Secrets.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    try:
-        sa_info = json.loads(sa_json_raw)
-    except json.JSONDecodeError as exc:
-        print(
-            f"ERROR: GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON — {exc}\n"
-            "  Minify: python -c \"import json,sys; "
-            'print(json.dumps(json.load(sys.stdin), separators=(\',\',\':\')))\" < key.json',
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
-    gc = gspread.authorize(creds)
-
-    try:
-        sheet = gc.open_by_key(sheet_id)
-    except gspread.exceptions.APIError as exc:
-        print(
-            f"ERROR: Could not open sheet {sheet_id} — {exc}\n"
-            "  Check the service account has Editor access to this sheet.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    return sheet, sheet_id
+    return _load_config()
 
 
 def get_naver_credentials() -> tuple[str, str]:
@@ -482,7 +413,8 @@ def main() -> None:
 
     # --- Credentials ----------------------------------------------------------
     config = load_config()
-    sheet, sheet_id = connect_sheets(config)
+    sheet_id = resolve_sheet_id(config)
+    sheet = connect_sheets(sheet_id, scopes=FULL_SCOPES)
     client_id, client_secret = get_naver_credentials()
     print(f"  sheet: {sheet.title} ({sheet_id})")
 

@@ -12,23 +12,25 @@
 
 import csv
 import json
+import re
 import os
 import shutil
 import sys
+from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import gspread
 import yaml
-from dotenv import load_dotenv
-from google.oauth2.service_account import Credentials
 from jinja2 import Environment, FileSystemLoader
+
+from scripts.sheets_auth import FULL_SCOPES, _load_config, connect_sheets as _sa_connect_sheets
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-REPO_ROOT = Path(__file__).parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_ROOT / "config.yaml"
 TEMPLATE_DIR = REPO_ROOT / "templates"
 OUTPUT_PATH = REPO_ROOT / "docs" / "index.html"
@@ -62,11 +64,6 @@ _NEWS_PULSE_CSV_HEADERS = [
     "source", "category", "english_summary", "ai_processed_at", "include_on_site",
 ]
 
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive.readonly",
-]
-
 # Maps config section identifiers to the list of source IDs they aggregate.
 SECTION_SOURCE_MAP = {
     "trade_flows": ["nz_export", "korea_quarantine", "kstat_api"],
@@ -75,6 +72,10 @@ SECTION_SOURCE_MAP = {
     "news_pulse": ["kvn_articles"],
 }
 
+# Month abbreviation list for KPI date labels (e.g. "Jan 2025").
+_MONTH_ABBR = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
 
 # ---------------------------------------------------------------------------
 # Step 1 — Config loading
@@ -82,15 +83,7 @@ SECTION_SOURCE_MAP = {
 
 def load_config(path: Path = CONFIG_PATH) -> dict:
     """Read config.yaml from repo root and return the full config dict."""
-    if not path.exists():
-        print(f"ERROR: config.yaml not found at {path}", file=sys.stderr)
-        sys.exit(1)
-    with path.open("r", encoding="utf-8") as fh:
-        try:
-            return yaml.safe_load(fh)
-        except yaml.YAMLError as exc:
-            print(f"ERROR: Failed to parse config.yaml — {exc}", file=sys.stderr)
-            sys.exit(1)
+    return _load_config(path)
 
 
 # ---------------------------------------------------------------------------
@@ -101,12 +94,10 @@ def connect_sheets(config: dict):
     """
     Load credentials from environment, connect to Google Sheets.
 
-    Returns (gspread.Client, gspread.Spreadsheet) tuple.
+    Returns (None, gspread.Spreadsheet) — gc is not used by callers (kept for
+    backward compatibility with the _gc, sheet = connect_sheets(config) call site).
     Calls sys.exit(1) on missing env vars or missing sheet_id.
     """
-    # L-2: load_dotenv() searches from repo root (cwd when running from repo root)
-    load_dotenv(REPO_ROOT / ".env")
-
     sheet_id = config.get("sheet_id", "").strip()
     if not sheet_id:
         print(
@@ -115,44 +106,8 @@ def connect_sheets(config: dict):
             file=sys.stderr,
         )
         sys.exit(1)
-
-    sa_json_raw = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
-    if not sa_json_raw:
-        print(
-            "ERROR: GOOGLE_SERVICE_ACCOUNT_JSON environment variable is not set.\n"
-            "  Local dev: add it to .env at the repo root (single-line JSON — L-3).\n"
-            "  GitHub Actions: add it to repository Secrets.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    # L-3: JSON must be on a single line in .env; json.loads() handles it correctly.
-    try:
-        sa_info = json.loads(sa_json_raw)
-    except json.JSONDecodeError as exc:
-        print(
-            f"ERROR: GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON — {exc}\n"
-            "  Tip: minify to one line with: "
-            'python -c "import json,sys; print(json.dumps(json.load(sys.stdin), '
-            'separators=(\',\',\':\')))" < key.json',
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
-    gc = gspread.authorize(creds)
-
-    try:
-        sheet = gc.open_by_key(sheet_id)
-    except gspread.exceptions.APIError as exc:
-        print(
-            f"ERROR: Could not open sheet {sheet_id} — {exc}\n"
-            "  Check the service account has Editor access to the sheet.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    return gc, sheet
+    sheet = _sa_connect_sheets(sheet_id, scopes=FULL_SCOPES)
+    return None, sheet
 
 
 # ---------------------------------------------------------------------------
@@ -376,9 +331,8 @@ def _normalise_date_str(raw: str) -> str:
     F-05 fix: KSTAT source files store months as "2026-3" rather than "2026-03",
     causing the Sheets-derived last_updated value to render as "2026-3" on site.
     """
-    import re as _re
     # Match "YYYY-M" (4-digit year, dash, 1-digit month) — pad month to 2 digits.
-    m = _re.fullmatch(r"(\d{4})-(\d)$", raw.strip())
+    m = re.fullmatch(r"(\d{4})-(\d)$", raw.strip())
     if m:
         return f"{m.group(1)}-0{m.group(2)}"
     return raw.strip()
@@ -519,8 +473,6 @@ def compute_kpis(sections: dict) -> dict:
                 while start_month <= 0:
                     start_month += 12
                     start_year -= 1
-                _MONTH_ABBR = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
                 kpi["qia_rolling12m_date_start"] = f"{_MONTH_ABBR[start_month]} {start_year}"
                 kpi["qia_rolling12m_date_end"] = f"{_MONTH_ABBR[end_month]} {end_year}"
 
@@ -749,7 +701,6 @@ def _build_b7_price_series(price_rows: list[dict]) -> list[dict]:
         return []
 
     # Group rows by origin_country.
-    from collections import defaultdict
     by_country: dict[str, list[dict]] = defaultdict(list)
     for row in price_rows:
         country = str(row.get("origin_country", "")).strip() or "Unknown"
@@ -1212,7 +1163,6 @@ def _latest_full_year_kg_by_destination(nz_rows: list[dict]) -> dict:
     kg_rows = [r for r in nz_rows if str(r.get("unit", "")) == "KG"]
 
     # Gather all months present per year (across all countries combined).
-    from collections import defaultdict
     months_per_year: dict[str, set] = defaultdict(set)
     for row in kg_rows:
         date_str = str(row.get("date", ""))
@@ -1262,8 +1212,6 @@ def _qia_monthly_by_country(qia_rows: list[dict]) -> dict:
     QIA_COLOURS mapped to "Other".
     Returns {"labels": [], "countries": [], "series": {}} if no data.
     """
-    from collections import defaultdict
-
     kg_rows = [r for r in qia_rows if str(r.get("unit", "")) == "KG"]
     if not kg_rows:
         return {"labels": [], "countries": [], "series": {}}
@@ -1318,8 +1266,6 @@ def _qia_annual_by_country(qia_rows: list[dict], n_years: int = 99) -> list[dict
     C-3h Panel D: stacked bar chart data.
     C-6g G4-B: default n_years changed to 99 — include all available complete years.
     """
-    from collections import defaultdict
-
     kg_rows = [r for r in qia_rows if str(r.get("unit", "")) == "KG"]
 
     if not kg_rows:
@@ -1438,10 +1384,6 @@ def prepare_chart_data(sections: dict, tab_data: dict | None = None) -> dict:
       - tf_destination_pie: {year, China, Korea, Hong Kong, Other} — KG by dest, latest year
       - tf_qia_by_origin: [{year, countries: {country_en: kg}}, ...] — QIA annual by origin
 
-    Also retains legacy keys for backward compatibility with any existing template
-    references during migration:
-      nz_export_kg, qia_kg, kstat_0507_kg, kstat_0510_kg,
-      nz_export_nzd, kstat_0507_usd, kstat_0510_usd.
     """
     tf = sections.get("trade_flows", {})
     all_data = tf.get("data", [])
@@ -1587,15 +1529,6 @@ def prepare_chart_data(sections: dict, tab_data: dict | None = None) -> dict:
         "harvest_boundaries": harvest_boundaries,
         "yoy_chip":           yoy_chip,
         "window":             {"start": win_start, "end": win_end},
-
-        # ── Legacy keys (backward compat — kept during template migration) ───
-        "nz_export_kg":    to_xy(nz_kg_raw),
-        "qia_kg":          to_xy(qia_kg_raw),
-        "kstat_0507_kg":   to_xy(_aggregate_series_by_date(kstat_0507_rows, "KG")),
-        "kstat_0510_kg":   to_xy(_aggregate_series_by_date(kstat_0510_rows, "KG")),
-        "nz_export_nzd":   to_xy(_aggregate_series_by_date(nz_rows, "NZD")),
-        "kstat_0507_usd":  to_xy(_aggregate_series_by_date(kstat_0507_rows, "USD_thousands")),
-        "kstat_0510_usd":  to_xy(_aggregate_series_by_date(kstat_0510_rows, "USD_thousands")),
 
         # ── B-7 price chart ───────────────────────────────────────────────────
         "b7_price_series":   b7_price_series,

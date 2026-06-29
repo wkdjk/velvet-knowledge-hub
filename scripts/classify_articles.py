@@ -39,14 +39,14 @@ from pathlib import Path
 
 import anthropic
 import gspread
-import yaml
-from dotenv import load_dotenv
-from google.oauth2.service_account import Credentials
+from gspread.utils import rowcol_to_a1
 
 # ---------------------------------------------------------------------------
 # L-1: ensure repo root is on sys.path.
 # ---------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from scripts.sheets_auth import _load_config, connect_sheets, resolve_sheet_id  # noqa: E402
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -61,12 +61,7 @@ sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
 # Constants
 # ---------------------------------------------------------------------------
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-CONFIG_PATH = REPO_ROOT / "config.yaml"
 TARGET_TAB = "KVN_Articles"
-
-# Sheets API only — no Drive API required (L-5 workaround).
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # Haiku model ID as specified in the brief.
 _HAIKU_MODEL = "claude-haiku-4-5-20251001"
@@ -117,109 +112,6 @@ _SYSTEM_PROMPT = (
     "trade/import/market in Korea; false if it is off-topic\n"
     "Return ONLY valid JSON. No explanation."
 )
-
-
-# ---------------------------------------------------------------------------
-# Google Sheets helpers
-# ---------------------------------------------------------------------------
-
-def _load_config() -> dict:
-    """Read config.yaml from repo root. Returns empty dict on failure."""
-    if not CONFIG_PATH.exists():
-        return {}
-    try:
-        with CONFIG_PATH.open("r", encoding="utf-8") as fh:
-            return yaml.safe_load(fh) or {}
-    except yaml.YAMLError:
-        return {}
-
-
-def connect_sheets(sheet_id: str):
-    """
-    Connect to Google Sheets using service account credentials.
-
-    L-3: GOOGLE_SERVICE_ACCOUNT_JSON must be single-line JSON.
-    Returns gspread.Spreadsheet object. Calls sys.exit(1) on failure.
-    """
-    load_dotenv(REPO_ROOT / ".env")
-
-    sa_json_raw = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
-    if not sa_json_raw:
-        print(
-            "ERROR: GOOGLE_SERVICE_ACCOUNT_JSON environment variable is not set.\n"
-            "  Local dev: add it to .env at the repo root (single-line JSON — L-3).\n"
-            "  GitHub Actions: add it to repository Secrets.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    try:
-        sa_info = json.loads(sa_json_raw)
-    except json.JSONDecodeError as exc:
-        print(
-            f"ERROR: GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON — {exc}\n"
-            "  Minify: python -c \"import json,sys; "
-            "print(json.dumps(json.load(sys.stdin), separators=(',',':')))\" < key.json",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
-    gc = gspread.authorize(creds)
-
-    try:
-        spreadsheet = gc.open_by_key(sheet_id)
-    except gspread.exceptions.APIError as exc:
-        print(
-            f"ERROR: Could not open sheet {sheet_id} — {exc}\n"
-            "  Check the service account has Editor access to the sheet.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    return spreadsheet
-
-
-def resolve_sheet_id() -> str:
-    """
-    Resolve the Google Sheet ID from environment then config.yaml fallback.
-
-    Priority: VKH_SHEET_ID env var → config.yaml sheet_id.
-    Calls sys.exit(1) if neither is set.
-    """
-    load_dotenv(REPO_ROOT / ".env")
-
-    sheet_id = os.environ.get("VKH_SHEET_ID", "").strip()
-    if sheet_id:
-        return sheet_id
-
-    config = _load_config()
-    sheet_id = config.get("sheet_id", "").strip()
-    if sheet_id:
-        print("  (VKH_SHEET_ID not set — using sheet_id from config.yaml)")
-        return sheet_id
-
-    print(
-        "ERROR: Sheet ID not found.\n"
-        "  Set VKH_SHEET_ID in .env, or ensure sheet_id is set in config.yaml.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
-
-
-def _col_letter(col_index: int) -> str:
-    """Convert a 0-based column index to a Sheets column letter (A, B, ..., Z, AA, ...)."""
-    result = ""
-    n = col_index + 1  # 1-based
-    while n > 0:
-        n, remainder = divmod(n - 1, 26)
-        result = chr(65 + remainder) + result
-    return result
-
-
-def _cell_ref(row_number: int, col_index: int) -> str:
-    """Return an A1 cell reference, e.g. row_number=2, col_index=8 → 'I2'."""
-    return f"{_col_letter(col_index)}{row_number}"
 
 
 # ---------------------------------------------------------------------------
@@ -492,19 +384,19 @@ def _write_results_to_sheets(
         include_val = "TRUE" if cls["include_on_site"] else "FALSE"
 
         cell_updates.append({
-            "range": _cell_ref(sheet_row_num, _COL_CATEGORY),
+            "range": rowcol_to_a1(sheet_row_num, _COL_CATEGORY + 1),
             "values": [[cls["category"]]],
         })
         cell_updates.append({
-            "range": _cell_ref(sheet_row_num, _COL_ENGLISH_SUMMARY),
+            "range": rowcol_to_a1(sheet_row_num, _COL_ENGLISH_SUMMARY + 1),
             "values": [[cls["english_summary"]]],
         })
         cell_updates.append({
-            "range": _cell_ref(sheet_row_num, _COL_AI_PROCESSED_AT),
+            "range": rowcol_to_a1(sheet_row_num, _COL_AI_PROCESSED_AT + 1),
             "values": [[processed_at_ts]],
         })
         cell_updates.append({
-            "range": _cell_ref(sheet_row_num, _COL_INCLUDE_ON_SITE),
+            "range": rowcol_to_a1(sheet_row_num, _COL_INCLUDE_ON_SITE + 1),
             "values": [[include_val]],
         })
 
