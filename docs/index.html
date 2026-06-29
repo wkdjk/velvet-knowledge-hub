@@ -2688,7 +2688,7 @@
             
               <tr class="import-row row-90d"
                   data-date="2026-04-03"
-                  style="">
+                  style="display:none">
                 <td class="data">2026-04-03</td>
                 <td>New Zealand</td>
                 <td>New Zealand</td>
@@ -2699,7 +2699,7 @@
             
               <tr class="import-row row-90d"
                   data-date="2026-04-03"
-                  style="">
+                  style="display:none">
                 <td class="data">2026-04-03</td>
                 <td>New Zealand</td>
                 <td>New Zealand</td>
@@ -8997,20 +8997,13 @@
         
         <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
           <button class="show-more-btn" id="show-more-btn" type="button"
-                  onclick="importShowMore(this)">Show more</button>
-          <button class="show-more-btn" id="show-all-btn" type="button"
-                  data-total="576"
-                  onclick="importShowAll()">Show all (576 records)</button>
+                  onclick="importShowMore(this)">Show more (in recent 90 days)</button>
           <button class="show-more-btn" id="show-fewer-btn" type="button"
                   style="display:none;"
                   onclick="importShowFewer(this)">Show fewer</button>
         </div>
         
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-          
-          <a class="show-more-btn" href="velvet-knowledge-hub.pdf" download
-             style="text-decoration:underline; text-underline-offset:3px;">Download PDF</a>
-
           
           <button class="show-more-btn" id="csv-request-btn" type="button"
                   onclick="csvShowForm()">CSV — request by email</button>
@@ -9613,52 +9606,47 @@
 (function () {
   'use strict';
 
-  /* ── Show more / show all / show fewer ──────────────────────────────── */
-  var visibleCount = 5;
+  /* ── Show more (90 days) / show fewer ───────────────────────────────── */
+  var visibleCount = 3;
 
   function getRows() {
     var tbody = document.getElementById('import-records-tbody');
     return tbody ? Array.prototype.slice.call(tbody.querySelectorAll('tr.import-row')) : [];
   }
 
-  function updateButtons(rows) {
+  function updateButtons(expanded) {
     var showMore  = document.getElementById('show-more-btn');
-    var showAll   = document.getElementById('show-all-btn');
     var showFewer = document.getElementById('show-fewer-btn');
-    if (!showMore || !showAll || !showFewer) return;
-
-    var allShown = rows.every(function (r) { return r.style.display !== 'none'; });
-
-    showMore.style.display  = allShown ? 'none' : '';
-    showAll.style.display   = allShown ? 'none' : '';
-    showFewer.style.display = (visibleCount > 5) ? '' : 'none';
+    if (!showMore || !showFewer) return;
+    showMore.style.display  = expanded ? 'none' : '';
+    showFewer.style.display = expanded ? '' : 'none';
   }
 
   window.importShowMore = function () {
+    /* Show only rows within the last 90 days */
+    var cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 90);
     var rows = getRows();
-    visibleCount = Math.min(visibleCount + 10, rows.length);
+    var anyShown = false;
     rows.forEach(function (r, i) {
-      r.style.display = i < visibleCount ? '' : 'none';
+      if (i < visibleCount) return; /* already visible */
+      var dateStr = r.getAttribute('data-date');
+      var d = dateStr ? new Date(dateStr) : null;
+      if (d && !isNaN(d.getTime()) && d >= cutoff) {
+        r.style.display = '';
+        anyShown = true;
+      }
     });
-    updateButtons(rows);
-    checkOverflow();
-  };
-
-  window.importShowAll = function () {
-    var rows = getRows();
-    visibleCount = rows.length;
-    rows.forEach(function (r) { r.style.display = ''; });
-    updateButtons(rows);
+    updateButtons(true);
     checkOverflow();
   };
 
   window.importShowFewer = function () {
     var rows = getRows();
-    visibleCount = 5;
     rows.forEach(function (r, i) {
-      r.style.display = i < 5 ? '' : 'none';
+      r.style.display = i < visibleCount ? '' : 'none';
     });
-    updateButtons(rows);
+    updateButtons(false);
     /* Scroll to table top without jumping to page top */
     var wrapper = document.getElementById('import-table-wrapper');
     if (wrapper) wrapper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });

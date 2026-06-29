@@ -90,6 +90,18 @@ function doPost(e) {
 
     Logger.log('CSV emailed to ' + email + ' — ' + filtered.length + ' rows');
 
+    // Log the request to csv_request_log tab.
+    var logSheet = ss.getSheetByName('csv_request_log');
+    if (!logSheet) {
+      logSheet = ss.insertSheet('csv_request_log');
+      logSheet.appendRow(['timestamp', 'email', 'request_source']);
+    }
+    logSheet.appendRow([
+      new Date().toISOString(),
+      email,
+      body.request_source || 'vkh_import_records'
+    ]);
+
     return ContentService
       .createTextOutput(JSON.stringify({ ok: true }))
       .setMimeType(ContentService.MimeType.JSON);
