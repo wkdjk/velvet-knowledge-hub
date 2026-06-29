@@ -332,9 +332,75 @@
       display: none;
     }
 
+    /* M3/R1 — sticky nav tab bar */
+    nav.page-wrapper {
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      z-index: 100;
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+
+    nav.section-nav a.is-active {
+      border-bottom: 2px solid var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* N2 — iOS-style T12M toggle switch */
+    .toggle-switch-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+    }
+    .toggle-switch {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: var(--border);
+      border-radius: 20px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      left: 3px;
+      top: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+    .toggle-switch input:checked + .toggle-slider {
+      background: var(--accent);
+    }
+    .toggle-switch input:checked + .toggle-slider::before {
+      transform: translateX(16px);
+    }
+
     /* ── C-8 print rules ─────────────────────────────────────────────────── */
     @media print {
       .chart-toggle-row { display: none; }
+      .toggle-switch-row { display: none; }
       .segmented-control { display: none; }
       .segmented-select { display: none; }
 
@@ -419,9 +485,9 @@
 </div>
 
 {# ── NAVIGATION ───────────────────────────────────────────────────────── #}
-<nav class="page-wrapper">
+<nav class="page-wrapper section-nav">
   <ul class="nav-list">
-    <li><a href="#section-a">Trade statistics</a></li>
+    <li><a href="#section-a">Basic trade statistics</a></li>
     <li><a href="#section-b">Analysis</a></li>
     <li><a href="#section-c">Reference</a></li>
     <li><a href="#section-d">Import records</a></li>
@@ -444,7 +510,7 @@
     {# ── A1 — Korea import volume (QIA) ──────────────────────────────────── #}
     <div id="a1-panel">
 
-      <h2 style="font-size:1.125rem; margin-top:24px; margin-bottom:4px; border-top: 2px solid var(--accent); padding-top:10px;">Korea import volume</h2>
+      <h2 style="font-size:1.125rem; margin-top:24px; margin-bottom:4px; padding-top:10px;">Korea import volume</h2>
       <p class="source-footnote" style="margin-top:4px; border-top:none; padding-top:0;">Source: Korea Animal and Plant Quarantine Agency (QIA) — import inspection records.</p>
 
       {% set trade_flows = sections.trade_flows if sections is defined and sections.trade_flows is defined else {} %}
@@ -488,6 +554,14 @@
 
         <div class="chart-panel">
           <h3>Korea import volume — monthly and trailing 12 months</h3>
+          {# N2: T12M toggle switch #}
+          <div class="toggle-switch-row">
+            <label class="toggle-switch">
+              <input type="checkbox" id="a1-t12m-toggle" checked onchange="a1ToggleT12M(this)">
+              <span class="toggle-slider"></span>
+            </label>
+            <span>12-month rolling total</span>
+          </div>
           <div class="chart-canvas-wrapper" style="height:320px;">
             <canvas id="chart-a1" aria-label="Korea QIA import volume — monthly stacked bar and trailing 12-month line" role="img"></canvas>
           </div>
@@ -545,6 +619,14 @@
 
         <div class="chart-panel">
           <h3>NZ export volume — monthly and trailing 12 months</h3>
+          {# N2: T12M toggle switch #}
+          <div class="toggle-switch-row">
+            <label class="toggle-switch">
+              <input type="checkbox" id="a2-t12m-toggle" checked onchange="a2ToggleT12M(this)">
+              <span class="toggle-slider"></span>
+            </label>
+            <span>12-month rolling total</span>
+          </div>
           <div class="chart-canvas-wrapper" style="height:320px;">
             <canvas id="chart-a2" aria-label="NZ Stats NZ export volume — monthly stacked bar and trailing 12-month line" role="img"></canvas>
           </div>
@@ -626,7 +708,7 @@
           <li>Quarantine inspection and phytosanitary certificate requirements</li>
           <li>Market entry channels — pharmaceutical, food ingredient, and direct export</li>
         </ul>
-        <a class="reference-download-link" href="velvet-knowledge-hub.pdf" download>Download full guidebook (PDF) →</a>
+        <a class="reference-download-link" href="velvet-knowledge-hub.pdf" download>Download dashboard (PDF) →</a>
       </div>
     </details>
 
@@ -694,7 +776,7 @@
           {# PDF — last 90 days: links to static PDF for now.
              ponytail: filtered PDF (last 90 days only) is a future enhancement — C8-P2. #}
           <a class="show-more-btn" href="velvet-knowledge-hub.pdf" download
-             style="text-decoration:underline; text-underline-offset:3px;">PDF — last 90 days</a>
+             style="text-decoration:underline; text-underline-offset:3px;">Download PDF</a>
 
           {# CSV via email — frontend only; backend endpoint is C8-P2.
              ponytail: /api/csv-request endpoint does not exist yet — wired up in C8-P2. #}
@@ -1075,6 +1157,25 @@
   var a1Chart = null;
   var a2Chart = null;
 
+  /* N2: T12M toggle handlers — hide/show the trailing-12-month line dataset */
+  window.a1ToggleT12M = function (cb) {
+    if (!window._a1Chart) return;
+    var ds = window._a1Chart.data.datasets;
+    var idx = ds.findIndex(function (d) { return d.label && d.label.indexOf('12') !== -1; });
+    if (idx === -1) return;
+    ds[idx].hidden = !cb.checked;
+    window._a1Chart.update();
+  };
+
+  window.a2ToggleT12M = function (cb) {
+    if (!window._a2Chart) return;
+    var ds = window._a2Chart.data.datasets;
+    var idx = ds.findIndex(function (d) { return d.label && d.label.indexOf('12') !== -1; });
+    if (idx === -1) return;
+    ds[idx].hidden = !cb.checked;
+    window._a2Chart.update();
+  };
+
   /* ── Render function for A1 ─────────────────────────────────────────── */
   function a1Render() {
     var isAnnual = a1State.view === 'annual';
@@ -1096,6 +1197,7 @@
       var ctx = document.getElementById('chart-a1');
       if (!ctx) return;
       a1Chart = new Chart(ctx.getContext('2d'), makeChartConfig(labels, datasets, isAnnual));
+      window._a1Chart = a1Chart;  /* N2: expose for T12M toggle */
     } else {
       a1Chart.data.labels   = labels;
       a1Chart.data.datasets = datasets;
@@ -1126,6 +1228,7 @@
       var ctx = document.getElementById('chart-a2');
       if (!ctx) return;
       a2Chart = new Chart(ctx.getContext('2d'), makeChartConfig(labels, datasets, isAnnual));
+      window._a2Chart = a2Chart;  /* N2: expose for T12M toggle */
     } else {
       a2Chart.data.labels   = labels;
       a2Chart.data.datasets = datasets;
@@ -1195,6 +1298,13 @@
     a2Render();
   };
 
+  /* ── N1: derive min/max year bounds from actual data arrays ─────────── */
+  function dataDateBounds(rows) {
+    if (!rows || !rows.length) return { min: '', max: '' };
+    var dates = rows.map(function (r) { return r.date; }).filter(Boolean).sort();
+    return { min: dates[0], max: dates[dates.length - 1] };
+  }
+
   /* ── Init: set defaults, populate dropdowns, render ─────────────────── */
   (function init() {
     var range = last12Months();
@@ -1203,20 +1313,40 @@
     populateCountries(QIA_ROWS, 'a1-country', qiaCountryEn);
     populateCountries(NZ_ROWS,  'a2-country', nzCountryEn);
 
-    /* Set default date range */
+    /* N1: constrain date inputs to actual data bounds */
+    var a1Bounds = dataDateBounds(QIA_ROWS);
+    var a2Bounds = dataDateBounds(NZ_ROWS);
+
+    /* Set default date range (clamped to data bounds) */
     var a1From = document.getElementById('a1-from');
     var a1To   = document.getElementById('a1-to');
-    if (a1From) a1From.value = range.start;
-    if (a1To)   a1To.value   = range.end;
-    a1State.from = range.start;
-    a1State.to   = range.end;
+    if (a1From) {
+      if (a1Bounds.min) a1From.min = a1Bounds.min;
+      if (a1Bounds.max) a1From.max = a1Bounds.max;
+      a1From.value = range.start > a1Bounds.min ? range.start : a1Bounds.min;
+    }
+    if (a1To) {
+      if (a1Bounds.min) a1To.min = a1Bounds.min;
+      if (a1Bounds.max) a1To.max = a1Bounds.max;
+      a1To.value = a1Bounds.max && range.end > a1Bounds.max ? a1Bounds.max : range.end;
+    }
+    a1State.from = a1From ? a1From.value : '';
+    a1State.to   = a1To   ? a1To.value   : '';
 
     var a2From = document.getElementById('a2-from');
     var a2To   = document.getElementById('a2-to');
-    if (a2From) a2From.value = range.start;
-    if (a2To)   a2To.value   = range.end;
-    a2State.from = range.start;
-    a2State.to   = range.end;
+    if (a2From) {
+      if (a2Bounds.min) a2From.min = a2Bounds.min;
+      if (a2Bounds.max) a2From.max = a2Bounds.max;
+      a2From.value = range.start > a2Bounds.min ? range.start : a2Bounds.min;
+    }
+    if (a2To) {
+      if (a2Bounds.min) a2To.min = a2Bounds.min;
+      if (a2Bounds.max) a2To.max = a2Bounds.max;
+      a2To.value = a2Bounds.max && range.end > a2Bounds.max ? a2Bounds.max : range.end;
+    }
+    a2State.from = a2From ? a2From.value : '';
+    a2State.to   = a2To   ? a2To.value   : '';
 
     /* Initial render */
     a1Render();
@@ -1226,6 +1356,40 @@
 }());
 </script>
 {% endif %}
+
+{# ── M3/R1: sticky nav active-section observer ───────────────────────── #}
+<script>
+(function () {
+  'use strict';
+  var sections = ['section-a', 'section-b', 'section-c', 'section-d', 'news-pulse'];
+  var navLinks = {};
+  sections.forEach(function (id) {
+    var link = document.querySelector('nav.section-nav a[href="#' + id + '"]');
+    if (link) navLinks[id] = link;
+  });
+
+  function setActive(id) {
+    Object.keys(navLinks).forEach(function (k) {
+      navLinks[k].classList.toggle('is-active', k === id);
+    });
+  }
+
+  if ('IntersectionObserver' in window) {
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          setActive(entry.target.id);
+        }
+      });
+    }, { rootMargin: '-30% 0px -60% 0px' });
+
+    sections.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+  }
+}());
+</script>
 
 {# ── A3 PRICE CHART (MFDS) ───────────────────────────────────────────── #}
 {% if mfds_annual_series and mfds_annual_series.has_data %}
