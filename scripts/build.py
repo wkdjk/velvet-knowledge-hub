@@ -650,6 +650,9 @@ def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date
         cutoff_30d=cutoff_30d,
         # C-5e: cutoff_90d for news pulse article list 90-day filter.
         cutoff_90d=cutoff_90d,
+        # C-8: raw KG rows for A1/A2 toggle charts.
+        qia_raw_rows=chart_data.get("qia_raw_rows", []),
+        nz_raw_rows=chart_data.get("nz_raw_rows", []),
     )
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -1521,6 +1524,32 @@ def prepare_chart_data(sections: dict, tab_data: dict | None = None) -> dict:
     vtw_monthly_all = (tab_data or {}).get("VTW_Trade_Monthly", []) if tab_data else all_data
     mfds_annual_series = _build_mfds_annual_series(vtw_monthly_all)
 
+    # ── C-8 A1/A2 toggle raw rows ─────────────────────────────────────────────
+    # QIA rows: each dict has date (YYYY-MM), country (Korean text, e.g. 뉴질랜드),
+    # value (float, kg), unit (KG), product_type (dried/frozen), series.
+    # NZ rows: date (YYYY-MM), country (English destination), value (float, kg),
+    # unit (KG), product_type (dried/frozen), series.
+    # product_type back-filled above via _backfill_product_type().
+    # country already normalised to English for NZ rows via _normalise_qia_country
+    # for QIA (Korean text — JS does the lookup via QIA_COUNTRY_MAP).
+    # Sending only KG rows to keep payload small.
+    qia_raw_for_toggle = [
+        {"date": str(r.get("date", ""))[:7],
+         "country": str(r.get("country", "")).strip(),
+         "value": float(r.get("value", 0) or 0),
+         "product_type": str(r.get("product_type", "")).strip()}
+        for r in qia_rows
+        if str(r.get("unit", "")) == "KG" and str(r.get("date", ""))
+    ]
+    nz_raw_for_toggle = [
+        {"date": str(r.get("date", ""))[:7],
+         "country": str(r.get("country", "")).strip(),
+         "value": float(r.get("value", 0) or 0),
+         "product_type": str(r.get("product_type", "")).strip()}
+        for r in nz_rows
+        if str(r.get("unit", "")) == "KG" and str(r.get("date", ""))
+    ]
+
     return {
         # ── C-3e: new structured source objects ──────────────────────────────
         "nz_export":          nz_source,
@@ -1544,6 +1573,10 @@ def prepare_chart_data(sections: dict, tab_data: dict | None = None) -> dict:
 
         # ── P2-H: QIA monthly origin view ────────────────────────────────────
         "tf_qia_monthly_by_origin": tf_qia_monthly_by_origin,
+
+        # ── C-8: raw rows for A1/A2 toggle charts ────────────────────────────
+        "qia_raw_rows": qia_raw_for_toggle,
+        "nz_raw_rows":  nz_raw_for_toggle,
     }
 
 

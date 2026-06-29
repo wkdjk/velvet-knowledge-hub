@@ -5,6 +5,363 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Velvet Knowledge Hub — Korea deer velvet trade intelligence</title>
   <link rel="stylesheet" href="assets/style.css">
+  <style>
+    /* ── C-8 additions ─────────────────────────────────────────────────────── */
+
+    /* CSS variables — new toggle tokens */
+    :root {
+      --toggle-radius:       4px;
+      --toggle-bg:           var(--surface);
+      --toggle-active-bg:    var(--text-primary);
+      --toggle-active-text:  #ffffff;
+    }
+
+    /* Segmented control (monthly/annual) */
+    .segmented-control {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: var(--toggle-radius);
+      overflow: hidden;
+    }
+
+    .segmented-control button {
+      padding: 5px 14px;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+      background: var(--toggle-bg);
+      color: var(--text-secondary);
+      border: none;
+      border-right: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.12s ease, color 0.12s ease;
+    }
+
+    .segmented-control button:last-child {
+      border-right: none;
+    }
+
+    .segmented-control button[aria-pressed="true"] {
+      background: var(--toggle-active-bg);
+      color: var(--toggle-active-text);
+    }
+
+    /* Toggle row for A1/A2 charts */
+    .chart-toggle-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 14px;
+      align-items: center;
+    }
+
+    .chart-toggle-row label {
+      font-size: 0.8125rem;
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .chart-toggle-row select,
+    .chart-toggle-row input[type="month"] {
+      font-size: 0.8125rem;
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text-primary);
+    }
+
+    .chart-toggle-row select:focus,
+    .chart-toggle-row input[type="month"]:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .chart-toggle-row .toggle-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Section B placeholder */
+    .analysis-placeholder {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 24px 20px;
+      background: var(--surface);
+      border: 1px dashed var(--border);
+      border-left: 3px solid var(--border);
+    }
+
+    .analysis-placeholder__title {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+    }
+
+    .analysis-placeholder__body {
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+    }
+
+    /* Section C reference accordion */
+    .reference-accordion {
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+    }
+
+    .reference-accordion summary {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      cursor: pointer;
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+      list-style: none;
+      user-select: none;
+    }
+
+    .reference-accordion summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .reference-accordion summary::after {
+      content: "\25B6";
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      transition: transform 0.15s ease;
+    }
+
+    details[open].reference-accordion summary::after {
+      transform: rotate(90deg);
+    }
+
+    .reference-accordion__body {
+      padding: 16px 16px 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .reference-accordion__body p {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      line-height: 1.65;
+      margin-bottom: 12px;
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+    }
+
+    .reference-accordion__body ul {
+      padding-left: 20px;
+      margin-bottom: 16px;
+    }
+
+    .reference-accordion__body li {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      line-height: 1.55;
+      margin-bottom: 6px;
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+    }
+
+    .reference-download-link {
+      display: inline-block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--accent);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+    }
+
+    .reference-download-link:hover {
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+
+    /* Section D — CSV email form */
+    .csv-email-form {
+      display: none;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .csv-email-form.is-visible {
+      display: flex;
+    }
+
+    .csv-email-input {
+      font-size: 0.8125rem;
+      padding: 5px 10px;
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+      min-width: 220px;
+      flex: 1;
+    }
+
+    .csv-email-input:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .csv-send-btn {
+      font-size: 0.8125rem;
+      font-weight: 500;
+      padding: 5px 14px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+    }
+
+    .csv-send-btn:hover {
+      background: var(--text-primary);
+    }
+
+    .csv-cancel-btn {
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .csv-confirmation {
+      display: none;
+      font-size: 0.8125rem;
+      color: var(--text-secondary);
+      font-style: italic;
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+    }
+
+    .csv-confirmation.is-visible {
+      display: block;
+    }
+
+    .csv-error {
+      display: none;
+      font-size: 0.8125rem;
+      color: var(--delta-negative);
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+      margin-top: 4px;
+    }
+
+    .csv-error.is-visible {
+      display: block;
+    }
+
+    /* Article thumbnail — C-8 update */
+    .article-thumbnail {
+      width: 80px;
+      height: 60px;
+      object-fit: cover;
+      flex-shrink: 0;
+      display: block;
+    }
+
+    /* ── C-8 responsive ──────────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .chart-toggle-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .chart-toggle-row select,
+      .chart-toggle-row input[type="month"] {
+        width: 100%;
+      }
+
+      .chart-toggle-row .toggle-group {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .table-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+      }
+
+      .csv-email-form {
+        flex-direction: column;
+      }
+
+      .csv-email-input {
+        min-width: 0;
+        width: 100%;
+      }
+
+      /* Thumbnail: smaller on mobile */
+      .article-thumbnail {
+        width: 64px;
+        height: 48px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      /* Segmented control degrades to a select at narrowest widths.
+         The HTML includes both; JS swaps which is visible. */
+      .segmented-control {
+        display: none;
+      }
+
+      .segmented-select {
+        display: block;
+      }
+
+      /* Thumbnail: hide entirely at narrowest widths */
+      .article-thumbnail {
+        display: none;
+      }
+    }
+
+    /* At wider widths the select fallback is hidden (JS shows/hides segmented). */
+    .segmented-select {
+      display: none;
+    }
+
+    /* ── C-8 print rules ─────────────────────────────────────────────────── */
+    @media print {
+      .chart-toggle-row { display: none; }
+      .segmented-control { display: none; }
+      .segmented-select { display: none; }
+
+      .analysis-placeholder {
+        border: 1px solid #999;
+        border-left: 3px solid #999;
+      }
+
+      details.reference-accordion {
+        border-left: 3px solid #888;
+      }
+
+      details.reference-accordion > .reference-accordion__body {
+        display: block !important;
+      }
+
+      .table-controls,
+      .csv-email-form,
+      .csv-confirmation {
+        display: none;
+      }
+
+      .import-records-table tbody tr {
+        display: table-row !important;
+      }
+    }
+  </style>
 </head>
 <body>
 
@@ -19,11 +376,9 @@
 </header>
 
 {# ── KPI STRIP ────────────────────────────────────────────────────────── #}
-{# Source: meta object built by build.py from cross-section data           #}
 <div class="page-wrapper">
   <div class="kpi-strip">
 
-    {# KPI 1: Korea imports rolling 12-month — P2-D / D-3: switched from NZ to QIA source #}
     <div class="kpi-card">
       <p class="kpi-label">KOREA IMPORTS (ROLLING 12 MONTHS)</p>
       {% if kpi is defined and kpi.qia_rolling12m_kg is defined and kpi.qia_rolling12m_kg != "—" %}
@@ -40,7 +395,6 @@
       {% endif %}
     </div>
 
-    {# KPI 2: News articles past 90 days. P2-E: footer describes Korean media articles. #}
     <div class="kpi-card">
       <p class="kpi-label">NEWS ARTICLES (LAST 90 DAYS)</p>
       {% if kpi is defined and kpi.articles_90d is defined and kpi.articles_90d != "—" %}
@@ -51,8 +405,6 @@
       {% endif %}
     </div>
 
-    {# KPI 3: Food imports last 90 days. P2-F: MFDS food safety declarations (food channel only). #}
-    {# Commander decision: English term for 건 = "declarations" (2026-06-06).                      #}
     <div class="kpi-card">
       <p class="kpi-label">FOOD IMPORTS (LAST 90 DAYS)</p>
       {% if kpi is defined and kpi.food_imports_90d is defined and kpi.food_imports_90d != "—" %}
@@ -63,15 +415,16 @@
       {% endif %}
     </div>
 
-  </div>{# /kpi-strip #}
+  </div>
 </div>
 
 {# ── NAVIGATION ───────────────────────────────────────────────────────── #}
 <nav class="page-wrapper">
   <ul class="nav-list">
-    <li><a href="#trade-flows">Volume flows</a></li>
-    <li><a href="#import-intelligence">Import intelligence</a></li>
-    <li><a href="#market-presence">Market presence</a></li>
+    <li><a href="#section-a">Trade statistics</a></li>
+    <li><a href="#section-b">Analysis</a></li>
+    <li><a href="#section-c">Reference</a></li>
+    <li><a href="#section-d">Import records</a></li>
     <li><a href="#news-pulse">News pulse</a></li>
   </ul>
 </nav>
@@ -79,805 +432,222 @@
 {# ── MAIN CONTENT ─────────────────────────────────────────────────────── #}
 <main class="page-wrapper">
 
-  {# ── SECTION: VOLUME FLOWS (D-6 rename from Trade flows; P2-A KSTAT removed from display) #}
-  {# C-3c DesignQ spec / C-3d CommsQ copy / English-only (Commander decision)                 #}
-  {% set trade_flows = sections.trade_flows if sections is defined and sections.trade_flows is defined else {} %}
-  <section id="trade-flows">
+  {# ── SECTION A — BASIC TRADE STATISTICS ──────────────────────────────── #}
+  <section id="section-a">
 
     <div class="section-header">
       <div class="section-header-left">
-        <h2>Volume flows</h2>
-        <span class="last-updated">Last updated: {{ trade_flows.last_updated | default("—") }}</span>
+        <h2>Basic trade statistics</h2>
       </div>
     </div>
 
-    <p class="source-footnote">Monthly deer velvet volumes, dried-equivalent kg — QIA (Korea quarantine) and Stats NZ (NZ exports), last 24 months.</p>
+    {# ── A1 — Korea import volume (QIA) ──────────────────────────────────── #}
+    <div id="a1-panel">
 
-    {% if trade_flows.enabled and trade_flows.has_data %}
+      <h2 style="font-size:1.125rem; margin-top:24px; margin-bottom:4px; border-top: 2px solid var(--accent); padding-top:10px;">Korea import volume</h2>
+      <p class="source-footnote" style="margin-top:4px; border-top:none; padding-top:0;">Source: Korea Animal and Plant Quarantine Agency (QIA) — import inspection records.</p>
 
-      {# C-6g G3: iOS-style toggle switches — QIA first, Stats NZ second #}
-      {# Each source gets its own independent toggle; multiple can be ON simultaneously. #}
-      <div class="source-toggle" role="group" aria-label="Show or hide data sources">
-        <label class="toggle-switch">
-          <input type="checkbox" id="toggle-qia" name="source" value="qia" checked>
-          <span class="toggle-track"><span class="toggle-handle"></span></span>
-          <span class="toggle-label">QIA — Korea quarantine</span>
-        </label>
-        <label class="toggle-switch">
-          <input type="checkbox" id="toggle-nz" name="source" value="nz" checked>
-          <span class="toggle-track"><span class="toggle-handle"></span></span>
-          <span class="toggle-label">Stats NZ — NZ exports</span>
-        </label>
-      </div>
+      {% set trade_flows = sections.trade_flows if sections is defined and sections.trade_flows is defined else {} %}
+      {% if trade_flows.enabled and trade_flows.has_data %}
 
-      {# ── Panel A — Volume chart (P2-B: rolling 12-month annotation added) ── #}
-      <div class="chart-panel">
-        <h3>Volume — monthly and rolling 12-month (dried-equivalent kg)</h3>
-        <p class="chart-scope-note">Rolling 12-month smooths seasonal peaks — NZ velvet ships primarily Dec–Mar.</p>
-        <div class="chart-canvas-wrapper" style="height:320px;">
-          <canvas id="chart-volume"
-            aria-label="Monthly and rolling 12-month trade volume in dried-equivalent kg" role="img"></canvas>
-        </div>
-        <p class="chart-annotation">All volumes are shown as dried-equivalent kg. Conversion applied: fresh/frozen velvet × 0.33 = dried-equivalent kg. Dried velvet requires no conversion.</p>
-      </div>
-
-      {# Panel B (unit price chart) removed per Commander feedback F-06. #}
-
-      {# ── Panel C — NZ export destinations (P2-C: merged into Volume flows; no separate section heading) #}
-      <h3 class="section-subheading">NZ export destinations</h3>
-
-      {# C-6g G4-C: iOS view toggle — all months / rolling 12 months #}
-      <div class="source-toggle" role="group" aria-label="Switch destination chart date range">
-        <label class="toggle-switch">
-          <input type="checkbox" id="toggle-dest-full" checked>
-          <span class="toggle-track"><span class="toggle-handle"></span></span>
-          <span class="toggle-label">All months</span>
-        </label>
-        <label class="toggle-switch">
-          <input type="checkbox" id="toggle-dest-rolling">
-          <span class="toggle-track"><span class="toggle-handle"></span></span>
-          <span class="toggle-label">Rolling 12 months</span>
-        </label>
-      </div>
-
-      {# C1 — Stacked area chart: NZD FOB by destination, all available dates #}
-      <div class="chart-panel">
-        <h3 id="dest-chart-title">NZ velvet exports by destination — FOB value (NZD)</h3>
-        <div class="chart-canvas-wrapper" style="height:280px;">
-          <canvas id="chart-destination-area"
-            aria-label="NZ deer velvet exports by destination, stacked area chart of NZD FOB value" role="img"></canvas>
-        </div>
-        <p class="chart-annotation" id="dest-chart-annotation">Source: Stats NZ. All available months shown. Countries not individually listed are grouped as Other.</p>
-      </div>
-
-      {# C2 (pie chart — 2025 volume share) removed per Commander feedback F-12. #}
-
-      {# ── Panel D — Korea imports by origin ─────────────────────────────── #}
-      <h3 class="section-subheading">Korea imports by origin</h3>
-
-      {% if tf_qia_by_origin and tf_qia_by_origin | length > 0 %}
-        {# C-6g G3/G4-A/G4-B: iOS view toggle — Annual/Monthly stacked bar charts #}
-        {# Annual shows all available complete years; Monthly shows stacked bar by month. #}
-        <div class="source-toggle" role="group" aria-label="Switch between annual and monthly view">
-          <label class="toggle-switch" id="qia-origin-annual-toggle-label">
-            <input type="checkbox" id="toggle-qia-annual" checked>
-            <span class="toggle-track"><span class="toggle-handle"></span></span>
-            <span class="toggle-label">Annual view</span>
-          </label>
-          <label class="toggle-switch" id="qia-origin-monthly-toggle-label">
-            <input type="checkbox" id="toggle-qia-monthly">
-            <span class="toggle-track"><span class="toggle-handle"></span></span>
-            <span class="toggle-label">Monthly view</span>
-          </label>
-        </div>
-
-        {# Annual stacked bar — all available complete years (G4-B) #}
-        <div id="panel-qia-annual" class="chart-panel">
-          <h3>South Korean velvet imports by origin — annual (kg)</h3>
-          <div class="chart-canvas-wrapper" style="height:260px;">
-            <canvas id="chart-qia-origin"
-              aria-label="South Korean deer velvet imports by country of origin, annual stacked bar chart" role="img"></canvas>
-          </div>
-          <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Annual totals for all available complete years. Raw import kg at quarantine inspection. No dried-equivalent conversion applied.</p>
-        </div>
-
-        {# Monthly stacked bar — all available months (G4-A) — initially hidden #}
-        {% if tf_qia_monthly_by_origin and tf_qia_monthly_by_origin.labels | length > 0 %}
-          <div id="panel-qia-monthly" class="chart-panel" style="display:none;">
-            <h3>South Korean velvet imports by origin — monthly (kg)</h3>
-            <div class="chart-canvas-wrapper" style="height:280px;">
-              <canvas id="chart-qia-origin-monthly"
-                aria-label="South Korean deer velvet imports by country of origin, monthly stacked bar chart" role="img"></canvas>
+        {# Toggle row #}
+        <div class="chart-toggle-row" id="a1-toggle-row" style="margin-top:12px;">
+          <div class="toggle-group">
+            {# Segmented control — monthly/annual #}
+            <div class="segmented-control" id="a1-seg" role="group" aria-label="View period">
+              <button type="button" aria-pressed="true" data-view="monthly" onclick="a1SetView('monthly',this)">Monthly</button>
+              <button type="button" aria-pressed="false" data-view="annual" onclick="a1SetView('annual',this)">Annual summary</button>
             </div>
-            <p class="chart-annotation">Source: Animal and Plant Quarantine Agency (South Korea). Monthly raw import kg at quarantine inspection. No dried-equivalent conversion applied.</p>
+            {# Select fallback for ≤480px — JS syncs value with segmented control #}
+            <select class="segmented-select" id="a1-seg-select" onchange="a1SetViewFromSelect(this)">
+              <option value="monthly">Monthly</option>
+              <option value="annual">Annual summary</option>
+            </select>
           </div>
-        {% endif %}
+          <div class="toggle-group">
+            <label for="a1-from">From</label>
+            <input type="month" id="a1-from" onchange="a1Render()">
+            <label for="a1-to">To</label>
+            <input type="month" id="a1-to" onchange="a1Render()">
+          </div>
+          <div class="toggle-group">
+            <label for="a1-country">Country</label>
+            <select id="a1-country" onchange="a1Render()">
+              <option value="">All countries</option>
+            </select>
+          </div>
+          <div class="toggle-group">
+            <label for="a1-form">Form</label>
+            <select id="a1-form" onchange="a1Render()">
+              <option value="">All forms</option>
+              <option value="frozen">Fresh velvet</option>
+              <option value="dried">Dried velvet</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="chart-panel">
+          <h3>Korea import volume — monthly and trailing 12 months</h3>
+          <div class="chart-canvas-wrapper" style="height:320px;">
+            <canvas id="chart-a1" aria-label="Korea QIA import volume — monthly stacked bar and trailing 12-month line" role="img"></canvas>
+          </div>
+          <p class="chart-annotation">Frozen equivalent volume: dried velvet converted at ÷ 0.33 (1 kg dried = 3.03 kg frozen equivalent). Source: QIA import inspection records.</p>
+        </div>
+
       {% else %}
-        <div class="placeholder-card">
-          <p class="placeholder-title">Korean import origin data not yet available</p>
-          <p class="placeholder-body">QIA quarantine data will appear here after the next scheduled ingest. Source: Animal and Plant Quarantine Agency (South Korea).</p>
+        <div class="placeholder-card" style="margin-top:16px;">
+          <p class="placeholder-title">Korea import volume data not yet available</p>
+          <p class="placeholder-body">Data will appear after the next scheduled build.</p>
+        </div>
+      {% endif %}
+    </div>{# /a1-panel #}
+
+    {# ── A2 — NZ export volume (Stats NZ) ────────────────────────────────── #}
+    <div id="a2-panel" style="margin-top:40px;">
+
+      <h2 style="font-size:1.125rem; margin-top:0; margin-bottom:4px; border-top: 2px solid var(--accent); padding-top:10px;">NZ export volume</h2>
+      <p class="source-footnote" style="margin-top:4px; border-top:none; padding-top:0;">Source: Stats NZ — overseas merchandise trade, deer velvet HS codes.</p>
+
+      {% if trade_flows.enabled and trade_flows.has_data %}
+
+        <div class="chart-toggle-row" id="a2-toggle-row" style="margin-top:12px;">
+          <div class="toggle-group">
+            <div class="segmented-control" id="a2-seg" role="group" aria-label="View period">
+              <button type="button" aria-pressed="true" data-view="monthly" onclick="a2SetView('monthly',this)">Monthly</button>
+              <button type="button" aria-pressed="false" data-view="annual" onclick="a2SetView('annual',this)">Annual summary</button>
+            </div>
+            <select class="segmented-select" id="a2-seg-select" onchange="a2SetViewFromSelect(this)">
+              <option value="monthly">Monthly</option>
+              <option value="annual">Annual summary</option>
+            </select>
+          </div>
+          <div class="toggle-group">
+            <label for="a2-from">From</label>
+            <input type="month" id="a2-from" onchange="a2Render()">
+            <label for="a2-to">To</label>
+            <input type="month" id="a2-to" onchange="a2Render()">
+          </div>
+          <div class="toggle-group">
+            <label for="a2-country">Country</label>
+            <select id="a2-country" onchange="a2Render()">
+              <option value="">All countries</option>
+            </select>
+          </div>
+          <div class="toggle-group">
+            <label for="a2-form">HS code category</label>
+            <select id="a2-form" onchange="a2Render()">
+              <option value="">All forms</option>
+              <option value="frozen">Fresh</option>
+              <option value="dried">Dried</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="chart-panel">
+          <h3>NZ export volume — monthly and trailing 12 months</h3>
+          <div class="chart-canvas-wrapper" style="height:320px;">
+            <canvas id="chart-a2" aria-label="NZ Stats NZ export volume — monthly stacked bar and trailing 12-month line" role="img"></canvas>
+          </div>
+          <p class="chart-annotation">Frozen equivalent volume: Stats NZ reports fresh and dried velvet separately under distinct HS codes. Dried velvet converted at ÷ 0.33 for comparability with A1.</p>
+        </div>
+
+      {% else %}
+        <div class="placeholder-card" style="margin-top:16px;">
+          <p class="placeholder-title">NZ export volume data not yet available</p>
+          <p class="placeholder-body">Data will appear after the next scheduled build.</p>
+        </div>
+      {% endif %}
+    </div>{# /a2-panel #}
+
+    {# ── A3 — Korea import price (MFDS) ──────────────────────────────────── #}
+    <div id="a3-panel" style="margin-top:40px;">
+
+      <h2 style="font-size:1.125rem; margin-top:0; margin-bottom:4px; border-top: 2px solid var(--accent); padding-top:10px;">Korea import price</h2>
+      <p class="source-footnote" style="margin-top:4px; border-top:none; padding-top:0;">Source: MFDS (Ministry of Food and Drug Safety, Korea) — 식품의약품통계연보 (Korean medicine yearbook), herbal medicine channel. Annual data.</p>
+
+      {% if mfds_annual_series and mfds_annual_series.has_data %}
+        <div class="chart-panel" style="margin-top:12px;">
+          <h3>Average import price — Korean herbal medicine channel</h3>
+          <p class="chart-scope-note">Herbal medicine channel only. Does not include food ingredient imports.</p>
+          <div class="chart-canvas-wrapper" style="height:260px;">
+            <canvas id="chart-a3" aria-label="MFDS annual average import price, Korean herbal medicine channel" role="img"></canvas>
+          </div>
+          <p class="chart-annotation">Source: MFDS 식품의약품통계연보 Table 6-3-8. Korean herbal medicine channel (pharmaceutical classification). Does not include food ingredient imports shown in the import records section below.</p>
+        </div>
+      {% else %}
+        <div class="placeholder-card" style="margin-top:16px;">
+          <p class="placeholder-title">Korea import price data not yet available</p>
+          <p class="placeholder-body">MFDS annual herbal medicine channel data will appear after the next scheduled build.</p>
         </div>
       {% endif %}
 
-      {# ── Source discrepancy accordion (P2-A: updated for 2 sources — KSTAT removed from display) #}
-      <details class="discrepancy-accordion">
-        <summary class="discrepancy-accordion__trigger" aria-label="Why do the two sources show different volumes?">
-          <span>ⓘ Why do the two sources show different volumes?</span>
-          <span class="discrepancy-accordion__chevron" aria-hidden="true">&#9654;</span>
-        </summary>
-        <div class="discrepancy-accordion__body">
-          <h4>Why the two sources show different volumes</h4>
-          <p>NZ exports (Stats NZ) records shipments at the point of export from New Zealand. Korea quarantine (QIA) records physical arrivals at Korean ports, inspected upon landing.</p>
-          <p>Three factors cause the figures to differ:</p>
-          <ol>
-            <li><strong>Timing.</strong> Sea freight from New Zealand to Korea takes approximately two to three weeks. An NZ shipment recorded in October may appear in QIA data in November.</li>
-            <li><strong>Transit and re-export.</strong> New Zealand also exports velvet to China, Hong Kong, and Taiwan. Some of that product is subsequently re-exported to Korea and appears in QIA data without a matching NZ-to-Korea export record.</li>
-            <li><strong>Classification codes.</strong> NZ Customs and Korea Customs use structurally different sub-classification schemes under HS heading 0507. The two countries' sub-codes do not map directly to one another, so NZ and Korean figures cannot be reliably reconciled at the sub-code level.</li>
-          </ol>
-          <p class="closing-note">These differences are not data errors. They reflect the different measurement points and classification systems of two independent agencies.</p>
-        </div>
-      </details>
-
-    {% else %}
-      <p class="source-footnote">Source: Stats NZ · QIA · Korea Customs (KCS)</p>
-      <div class="placeholder-card">
-        <p class="placeholder-title">Trade flows data not yet available</p>
-        <p class="placeholder-body">Data will appear here after the next scheduled build.</p>
-      </div>
-    {% endif %}
+    </div>{# /a3-panel #}
 
   </section>
 
-  {# ── CHART.JS SCRIPT — trade flows + MFDS annual chart (no CDN — bundled M-1) #}
-  <script src="assets/chart.min.js"></script>
-  {% if trade_flows.enabled and trade_flows.has_data %}
-  <script>
-  (function () {
-    'use strict';
-
-    /* ── Source colours (P2-A: KSTAT removed from display) ─────────── */
-    var C_NZ    = '#1A5276';
-    var C_QIA   = '#7D6608';
-
-    /* ── Embedded datasets (injected by build.py) ────────────────────── */
-    var NZ    = {{ tf_nz_export    | tojson }};
-    var QIA   = {{ tf_korea_qia    | tojson }};
-    var KSTAT = {{ tf_korea_kstat  | tojson }};
-    var HARVEST_BOUNDS = {{ tf_harvest_boundaries | tojson }};
-
-    /* ── Chart.js shared defaults ────────────────────────────────────── */
-    var FONT_FAMILY = '"Trebuchet MS", "Gill Sans MT", Arial, sans-serif';
-    Chart.defaults.font.family = FONT_FAMILY;
-    Chart.defaults.font.size   = 11;
-    Chart.defaults.color       = '#444444';
-
-    /* ── Helper: extract {x, y} arrays from source objects ──────────── */
-    function xyFrom(arr) {
-      return (arr || []).map(function (p) { return { x: p.x, y: p.y }; });
-    }
-
-    /* ── Build harvest-year background plugins (canvas afterDraw) ────── */
-    /* Falls back from annotation plugin to custom afterDraw callback.    */
-    var harvestPlugin = {
-      id: 'harvestBands',
-      afterDraw: function (chart) {
-        if (!HARVEST_BOUNDS || !HARVEST_BOUNDS.length) return;
-        var ctx  = chart.ctx;
-        var xScale = chart.scales['x'];
-        if (!xScale) return;
-        var top    = chart.chartArea.top;
-        var bottom = chart.chartArea.bottom;
-        var labels = chart.data.labels || [];
-
-        HARVEST_BOUNDS.forEach(function (oct, idx) {
-          var octIdx = labels.indexOf(oct);
-          if (octIdx < 0) return;
-
-          /* Band: from left edge of October bar to left edge of November bar */
-          var x0 = xScale.getPixelForValue(octIdx) - (xScale.getPixelForValue(1) - xScale.getPixelForValue(0)) / 2;
-          var x1 = xScale.getPixelForValue(octIdx) + (xScale.getPixelForValue(1) - xScale.getPixelForValue(0)) / 2;
-
-          ctx.save();
-          ctx.fillStyle = 'rgba(167, 130, 48, 0.08)';
-          ctx.fillRect(x0, top, x1 - x0, bottom - top);
-
-          /* Label "Season start" only on the first (leftmost) October band */
-          if (idx === 0) {
-            ctx.fillStyle = '#777777';
-            ctx.font      = '9px ' + FONT_FAMILY;
-            ctx.fillText('Season start', x0 + 3, top + 12);
-          }
-          ctx.restore();
-        });
-      }
-    };
-
-    /* ── Panel A — Volume chart ──────────────────────────────────────── */
-    var ctxVol = document.getElementById('chart-volume');
-    if (!ctxVol) return;
-
-    /* Build x-axis labels from QIA (primary source) merged with NZ for full coverage. */
-    var _labelSet = {};
-    (QIA.monthly_dried_eq_kg || []).forEach(function (p) { _labelSet[p.x] = true; });
-    (NZ.monthly_dried_eq_kg  || []).forEach(function (p) { _labelSet[p.x] = true; });
-    var volLabels = Object.keys(_labelSet).sort();
-
-    /* P2-A: KSTAT removed from display (data kept in Sheets). Two sources: QIA first, NZ second. */
-    function buildVolDatasets(showQia, showNz) {
-      var ds = [];
-      if (showQia) {
-        ds.push({
-          type: 'bar',
-          label: 'Korea quarantine (QIA) — monthly kg',
-          data: xyFrom(QIA.monthly_dried_eq_kg),
-          backgroundColor: 'rgba(125, 102, 8, 0.75)',
-          borderColor: C_QIA,
-          borderWidth: 1,
-          barPercentage: 0.8,
-          categoryPercentage: 0.9,
-          yAxisID: 'y',
-          order: 2
-        });
-        ds.push({
-          type: 'line',
-          label: 'Korea quarantine (QIA) — rolling 12-month',
-          data: xyFrom(QIA.rolling_12m_dried_eq_kg),
-          borderColor: C_QIA,
-          backgroundColor: 'transparent',
-          borderWidth: 2,
-          borderDash: [6, 3],
-          pointStyle: 'rectRot',
-          pointRadius: 3,
-          tension: 0.3,
-          yAxisID: 'y',
-          order: 1
-        });
-      }
-      if (showNz) {
-        ds.push({
-          type: 'bar',
-          label: 'NZ exports (Stats NZ) — monthly kg',
-          data: xyFrom(NZ.monthly_dried_eq_kg),
-          backgroundColor: 'rgba(26, 82, 118, 0.75)',
-          borderColor: C_NZ,
-          borderWidth: 1,
-          barPercentage: 0.8,
-          categoryPercentage: 0.9,
-          yAxisID: 'y',
-          order: 2
-        });
-        ds.push({
-          type: 'line',
-          label: 'NZ exports (Stats NZ) — rolling 12-month',
-          data: xyFrom(NZ.rolling_12m_dried_eq_kg),
-          borderColor: C_NZ,
-          backgroundColor: 'transparent',
-          borderWidth: 2,
-          borderDash: [],
-          pointStyle: 'circle',
-          pointRadius: 3,
-          tension: 0.3,
-          yAxisID: 'y',
-          order: 1
-        });
-      }
-      return ds;
-    }
-
-    var volChart = new Chart(ctxVol.getContext('2d'), {
-      type: 'bar',
-      plugins: [harvestPlugin],
-      data: {
-        labels: volLabels,
-        datasets: buildVolDatasets(true, true)
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: {
-            position: 'top',
-            align: 'start',
-            labels: { boxWidth: 12, padding: 14 }
-          },
-          tooltip: {
-            callbacks: {
-              label: function (ctx) {
-                return ctx.dataset.label + ': ' + Math.round(ctx.parsed.y).toLocaleString() + ' kg';
-              }
-            }
-          }
-        },
-        scales: {
-          x: {
-            type: 'category',
-            ticks: { maxTicksLimit: 8, maxRotation: 45 },
-            grid: { color: 'rgba(204,204,204,0.4)' }
-          },
-          y: {
-            beginAtZero: true,
-            title: { display: true, text: 'Dried-equivalent kg' },
-            ticks: { callback: function (v) { return v.toLocaleString(); } },
-            grid: { color: 'rgba(204,204,204,0.4)' }
-          }
-        }
-      }
-    });
-
-    /* Panel B (unit price chart) removed per Commander feedback F-06. */
-
-    /* ── Panel C — Destination charts ───────────────────────────────── */
-    /* C1: Stacked area — NZD FOB by destination, all available dates.  */
-    /* C2: Pie — KG share by destination, latest full year.             */
-
-    var DEST_AREA_DATA  = {{ tf_destination_area | tojson }};
-    /* DEST_PIE_DATA removed per F-12 (pie chart removed). */
-    var DEST_COLOURS = {
-      'China':      '#A78230',
-      'Korea':      '#1A5276',
-      'Hong Kong':  '#7D6608',
-      'Other':      '#9E9E9E'
-    };
-    var DEST_ORDER = ['China', 'Korea', 'Hong Kong', 'Other'];
-
-    /* Build sorted label array from all dates across all destinations */
-    (function buildDestCharts() {
-      var ctxArea = document.getElementById('chart-destination-area');
-      if (!ctxArea) return;
-
-      /* Collect all unique dates across all destination series */
-      var dateSet = {};
-      DEST_ORDER.forEach(function (c) {
-        var series = DEST_AREA_DATA[c] || [];
-        series.forEach(function (pt) { dateSet[pt.x] = true; });
-      });
-      var areaLabels = Object.keys(dateSet).sort();
-      if (!areaLabels.length) return;
-
-      /* Build a lookup for each country: date -> value */
-      function buildDataset(country) {
-        var lookup = {};
-        (DEST_AREA_DATA[country] || []).forEach(function (pt) { lookup[pt.x] = pt.y; });
-        return areaLabels.map(function (d) { return lookup[d] || 0; });
-      }
-
-      var hexToRgba = function (hex, alpha) {
-        var r = parseInt(hex.slice(1, 3), 16);
-        var g = parseInt(hex.slice(3, 5), 16);
-        var b = parseInt(hex.slice(5, 7), 16);
-        return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
-      };
-
-      var areaDsets = DEST_ORDER.map(function (country) {
-        return {
-          label: country,
-          data: buildDataset(country),
-          backgroundColor: hexToRgba(DEST_COLOURS[country], 0.65),
-          borderColor: DEST_COLOURS[country],
-          borderWidth: 1.5,
-          fill: true,
-          tension: 0.2,
-          pointRadius: 0,
-          pointHoverRadius: 4
-        };
-      });
-
-      new Chart(ctxArea.getContext('2d'), {
-        type: 'line',
-        data: { labels: areaLabels, datasets: areaDsets },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: {
-              position: 'top',
-              align: 'start',
-              labels: { boxWidth: 12, padding: 14 }
-            },
-            tooltip: {
-              callbacks: {
-                label: function (ctx) {
-                  return ctx.dataset.label + ': NZD ' + Math.round(ctx.parsed.y).toLocaleString();
-                }
-              }
-            }
-          },
-          scales: {
-            x: {
-              type: 'category',
-              ticks: { maxTicksLimit: 10, maxRotation: 45 },
-              grid: { color: 'rgba(204,204,204,0.4)' }
-            },
-            y: {
-              beginAtZero: true,
-              stacked: true,
-              title: { display: true, text: 'FOB value (NZD)' },
-              ticks: { callback: function (v) { return v.toLocaleString(); } },
-              grid: { color: 'rgba(204,204,204,0.4)' }
-            }
-          }
-        }
-      });
-
-      /* C2 (pie chart) removed per Commander feedback F-12. */
-    }());
-
-    /* ── Panel D1 (C-6g G4-A) — QIA monthly origin — stacked bar ───── */
-    (function buildQiaMonthlyChart() {
-      var ctxMonthly = document.getElementById('chart-qia-origin-monthly');
-      if (!ctxMonthly) return;
-
-      var QIA_MONTHLY = {{ tf_qia_monthly_by_origin | tojson }};
-      if (!QIA_MONTHLY || !QIA_MONTHLY.labels || !QIA_MONTHLY.labels.length) return;
-
-      var QIA_COLOURS_M = {
-        'New Zealand':     '#1A5276',
-        'China':           '#A78230',
-        'Russia':          '#888888',
-        'Hong Kong (SAR)': '#7D6608',
-        'Kazakhstan':      '#E8A87C',
-        'Australia':       '#2C3E50',
-        'Other':           '#BDBDBD'
-      };
-
-      /* C-6g G4-A: stacked bar chart instead of multi-line */
-      var monthlyDsets = QIA_MONTHLY.countries.map(function (country) {
-        return {
-          label: country,
-          data: QIA_MONTHLY.series[country] || [],
-          backgroundColor: QIA_COLOURS_M[country] || '#BDBDBD',
-          borderColor: QIA_COLOURS_M[country] || '#BDBDBD',
-          borderWidth: 1
-        };
-      });
-
-      new Chart(ctxMonthly.getContext('2d'), {
-        type: 'bar',
-        data: { labels: QIA_MONTHLY.labels, datasets: monthlyDsets },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: {
-              position: 'top',
-              align: 'start',
-              labels: { boxWidth: 12, padding: 14 }
-            },
-            tooltip: {
-              callbacks: {
-                label: function (ctx) {
-                  return ctx.dataset.label + ': ' + Math.round(ctx.parsed.y).toLocaleString() + ' kg';
-                }
-              }
-            }
-          },
-          scales: {
-            x: {
-              type: 'category',
-              stacked: true,
-              ticks: { maxTicksLimit: 10, maxRotation: 45 },
-              grid: { color: 'rgba(204,204,204,0.4)' }
-            },
-            y: {
-              beginAtZero: true,
-              stacked: true,
-              title: { display: true, text: 'Import weight (kg)' },
-              ticks: { callback: function (v) { return v.toLocaleString(); } },
-              grid: { color: 'rgba(204,204,204,0.4)' }
-            }
-          }
-        }
-      });
-    }());
-
-    /* ── Panel D2 — QIA imports by origin (annual) ───────────────────── */
-    /* Graceful skip if QIA data is empty (placeholder card shown in HTML) */
-    (function buildQiaChart() {
-      var ctxQia = document.getElementById('chart-qia-origin');
-      if (!ctxQia) return;
-
-      var QIA_DATA = {{ tf_qia_by_origin | tojson }};
-      if (!QIA_DATA || !QIA_DATA.length) return;
-
-      var QIA_COLOURS = {
-        'New Zealand':     '#1A5276',
-        'China':           '#A78230',
-        'Russia':          '#888888',
-        'Hong Kong (SAR)': '#7D6608',
-        'Kazakhstan':      '#E8A87C',
-        'Australia':       '#2C3E50',
-        'Other':           '#BDBDBD'
-      };
-
-      /* Build the set of all countries that appear across both years */
-      var allCountries = {};
-      QIA_DATA.forEach(function (yr) {
-        Object.keys(yr.countries).forEach(function (c) { allCountries[c] = true; });
-      });
-      /* Sort: named countries first in preferred order, then alphabetically */
-      var preferred = ['New Zealand','China','Russia','Hong Kong (SAR)','Kazakhstan','Australia','Other'];
-      var countryList = preferred.filter(function (c) { return allCountries[c]; });
-      Object.keys(allCountries).forEach(function (c) {
-        if (countryList.indexOf(c) < 0) countryList.push(c);
-      });
-
-      /* One dataset per country across years */
-      var yearLabels = QIA_DATA.map(function (d) { return String(d.year); });
-
-      var qiaDsets = countryList.map(function (country) {
-        return {
-          label: country,
-          data: QIA_DATA.map(function (yr) { return yr.countries[country] || 0; }),
-          backgroundColor: QIA_COLOURS[country] || '#BDBDBD',
-          borderColor: QIA_COLOURS[country] || '#BDBDBD',
-          borderWidth: 1
-        };
-      });
-
-      new Chart(ctxQia.getContext('2d'), {
-        type: 'bar',
-        data: { labels: yearLabels, datasets: qiaDsets },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: {
-              position: 'top',
-              align: 'start',
-              labels: { boxWidth: 12, padding: 14 }
-            },
-            tooltip: {
-              callbacks: {
-                label: function (ctx) {
-                  return ctx.dataset.label + ': ' + Math.round(ctx.parsed.y).toLocaleString() + ' kg';
-                }
-              }
-            }
-          },
-          scales: {
-            x: {
-              type: 'category',
-              stacked: true,
-              grid: { color: 'rgba(204,204,204,0.4)' }
-            },
-            y: {
-              beginAtZero: true,
-              stacked: true,
-              title: { display: true, text: 'Import weight (kg)' },
-              ticks: { callback: function (v) { return v.toLocaleString(); } },
-              grid: { color: 'rgba(204,204,204,0.4)' }
-            }
-          }
-        }
-      });
-    }());
-
-    /* ── Source toggle handler — scoped to volume chart toggles only ─── */
-    /* C-6g G3: handler uses specific IDs to avoid capturing origin/dest toggles. */
-    function getChecked() {
-      return {
-        qia: document.getElementById('toggle-qia') ? document.getElementById('toggle-qia').checked : true,
-        nz:  document.getElementById('toggle-nz')  ? document.getElementById('toggle-nz').checked  : true
-      };
-    }
-
-    ['toggle-qia', 'toggle-nz'].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (!el) return;
-      el.addEventListener('change', function () {
-        var sel = getChecked();
-        volChart.data.datasets = buildVolDatasets(sel.qia, sel.nz);
-        volChart.update();
-      });
-    });
-
-    /* ── QIA origin view toggle (G3): Annual / Monthly panel swap ────── */
-    (function initOriginViewToggle() {
-      var annualCb  = document.getElementById('toggle-qia-annual');
-      var monthlyCb = document.getElementById('toggle-qia-monthly');
-      var annualPanel  = document.getElementById('panel-qia-annual');
-      var monthlyPanel = document.getElementById('panel-qia-monthly');
-      if (!annualCb || !monthlyCb) return;
-
-      function applyOriginView() {
-        if (annualPanel)  annualPanel.style.display  = annualCb.checked  ? '' : 'none';
-        if (monthlyPanel) monthlyPanel.style.display = monthlyCb.checked ? '' : 'none';
-      }
-
-      annualCb.addEventListener('change',  applyOriginView);
-      monthlyCb.addEventListener('change', applyOriginView);
-    }());
-
-    /* ── NZ destination view toggle (G4-C): All months / Rolling 12 m ── */
-    (function initDestViewToggle() {
-      var fullCb    = document.getElementById('toggle-dest-full');
-      var rollCb    = document.getElementById('toggle-dest-rolling');
-      if (!fullCb || !rollCb) return;
-
-      /* DEST_AREA_DATA is in scope — declared at the enclosing function level. */
-      /* Chart.js v4: Chart.getChart(canvas element or id string). */
-      var destCanvas = document.getElementById('chart-destination-area');
-      var destChart  = destCanvas ? Chart.getChart(destCanvas) : null;
-
-      function applyDestFilter() {
-        if (!destChart) return;
-        var showRolling = rollCb.checked;
-        /* Build a reduced label set: last 12 months if rolling, all months otherwise. */
-        var allLabels = Object.keys(
-          (function () {
-            var s = {};
-            var DEST_ORDER = ['China', 'Korea', 'Hong Kong', 'Other'];
-            DEST_ORDER.forEach(function (c) {
-              (DEST_AREA_DATA[c] || []).forEach(function (pt) { s[pt.x] = true; });
-            });
-            return s;
-          })()
-        ).sort();
-
-        var filteredLabels = showRolling ? allLabels.slice(-12) : allLabels;
-        var titleEl    = document.getElementById('dest-chart-title');
-        var annotEl    = document.getElementById('dest-chart-annotation');
-
-        if (titleEl) {
-          titleEl.textContent = showRolling
-            ? 'NZ velvet exports by destination — rolling 12 months (NZD FOB)'
-            : 'NZ velvet exports by destination — FOB value (NZD)';
-        }
-        if (annotEl) {
-          annotEl.textContent = showRolling
-            ? 'Source: Stats NZ. Most recent 12 months shown. Countries not individually listed are grouped as Other.'
-            : 'Source: Stats NZ. All available months shown. Countries not individually listed are grouped as Other.';
-        }
-
-        destChart.data.labels = filteredLabels;
-        destChart.data.datasets.forEach(function (ds) {
-          var DEST_ORDER = ['China', 'Korea', 'Hong Kong', 'Other'];
-          var country = ds.label;
-          var lookup = {};
-          (DEST_AREA_DATA[country] || []).forEach(function (pt) { lookup[pt.x] = pt.y; });
-          ds.data = filteredLabels.map(function (d) { return lookup[d] || 0; });
-        });
-        destChart.update();
-      }
-
-      fullCb.addEventListener('change',  applyDestFilter);
-      rollCb.addEventListener('change',  applyDestFilter);
-    }());
-
-  }());
-  </script>
-  {% endif %}
-
-  {# ── P1-G: MFDS annual import-value chart — data from VTW_Trade_Monthly mfds_annual #}
-  {% if mfds_annual_series and mfds_annual_series.has_data %}
-  <script>
-  (function () {
-    var mfdsData = {{ mfds_annual_series.chart_points | tojson }};
-    if (!mfdsData || !mfdsData.length) return;
-    function _initB7Chart() {
-      var canvas = document.getElementById('b7PriceChart');
-      if (!canvas) return;
-
-      var yearLabels = mfdsData.map(function (pt) { return String(pt.x); });
-      var values = mfdsData.map(function (pt) { return pt.y; });
-
-      new Chart(canvas.getContext('2d'), {
-        type: 'bar',
-        data: {
-          labels: yearLabels,
-          datasets: [{
-            label: 'Korean herbal medicine channel (MFDS annual statistics)',
-            data: values,
-            backgroundColor: 'rgba(26, 82, 118, 0.75)',
-            borderColor: '#1A5276',
-            borderWidth: 1
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              display: true,
-              position: 'top',
-              align: 'start',
-              labels: { boxWidth: 12, padding: 14 }
-            },
-            tooltip: {
-              callbacks: {
-                label: function (ctx) {
-                  return 'Korean herbal medicine channel — USD ' + ctx.parsed.y.toLocaleString() + ' thousands';
-                }
-              }
-            }
-          },
-          scales: {
-            x: {
-              type: 'category',
-              title: { display: true, text: 'Year' },
-              ticks: { maxTicksLimit: 11 },
-              grid: { color: 'rgba(204,204,204,0.4)' }
-            },
-            y: {
-              beginAtZero: true,
-              title: { display: true, text: 'USD thousands' },
-              ticks: { callback: function (v) { return v.toLocaleString(); } },
-              grid: { color: 'rgba(204,204,204,0.4)' }
-            }
-          }
-        }
-      });
-    }
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', _initB7Chart);
-    } else {
-      _initB7Chart();
-    }
-  }());
-  </script>
-  {% endif %}
-
-  {# ── SECTION: IMPORT INTELLIGENCE — C-4e redesign ─────────────────── #}
-  {# F-17: all Korean text removed. F-16: 3-row default + "Show last 30 days". #}
-  {# F-18: new column order with exporter. B-9/B-14: accordion added.         #}
-  {% set import_intelligence = sections.import_intelligence if sections is defined and sections.import_intelligence is defined else {} %}
-  <section id="import-intelligence">
+  {# ── SECTION B — ANALYTICAL TRADE STATISTICS ──────────────────────────── #}
+  <section id="section-b">
 
     <div class="section-header">
       <div class="section-header-left">
-        <h2>Import intelligence</h2>
+        <h2>Analytical trade statistics</h2>
+      </div>
+    </div>
+
+    <p class="source-footnote">Planned: time-lag analysis comparing NZ export records (Stats NZ) with Korea import records (QIA). See sections A1 and A2 for the underlying data.</p>
+
+    <div class="analysis-placeholder" style="margin-top:16px;">
+      <p class="analysis-placeholder__title">Analysis in progress</p>
+      <p class="analysis-placeholder__body">Time-lag and correlation analysis between NZ export shipments and Korea import arrivals is planned for a future update. The data shown in sections A1 and A2 provides the underlying series.</p>
+    </div>
+
+  </section>
+
+  {# ── SECTION C — TRADE REFERENCE MATERIALS ───────────────────────────── #}
+  <section id="section-c">
+
+    <div class="section-header">
+      <div class="section-header-left">
+        <h2>Trade reference materials</h2>
+      </div>
+    </div>
+
+    <p class="source-footnote">Exporter guidebook produced by Deer Industry New Zealand (DINZ) for velvet exporters.</p>
+
+    <details class="reference-accordion" style="margin-top:16px;">
+      <summary>Exporter guidebook</summary>
+      <div class="reference-accordion__body">
+        <p>The DINZ Velvet Exporter Guidebook covers the requirements and procedures for exporting deer velvet from New Zealand to Korea and other Asian markets. It is produced by Deer Industry New Zealand for registered velvet exporters.</p>
+        <p>Topics covered:</p>
+        <ul>
+          <li>Korea import regulatory requirements and MFDS approval procedures</li>
+          <li>Velvet grading and product classification standards</li>
+          <li>Export documentation and customs declaration requirements</li>
+          <li>Quarantine inspection and phytosanitary certificate requirements</li>
+          <li>Market entry channels — pharmaceutical, food ingredient, and direct export</li>
+        </ul>
+        <a class="reference-download-link" href="velvet-knowledge-hub.pdf" download>Download full guidebook (PDF) →</a>
+      </div>
+    </details>
+
+  </section>
+
+  {# ── SECTION D — IMPORT RECORDS ───────────────────────────────────────── #}
+  {% set import_intelligence = sections.import_intelligence if sections is defined and sections.import_intelligence is defined else {} %}
+  <section id="section-d">
+
+    <div class="section-header">
+      <div class="section-header-left">
+        <h2>Import records</h2>
         <span class="last-updated">Last updated: {{ import_intelligence.last_updated | default("—") }}</span>
       </div>
     </div>
 
-    <p class="source-footnote">Two MFDS (Ministry of Food and Drug Safety, Korea) databases: annual herbal medicine channel value (2004–2024) and food ingredient import notifications (2016–present).</p>
+    <p class="source-footnote">Source: Korea Ministry of Food and Drug Safety import notification database. Food ingredient channel.</p>
 
-    {# C-6g 2-A: OI-1 nz-share-callout removed per Commander walkthrough (C-6g). #}
-    {# DesignQ spec OI1_nz_share_placement_spec.md retained in Domain_Knowledge. #}
-
-    {# ── MFDS annual import-value chart (P1-G: data from VTW_Trade_Monthly mfds_annual) #}
-    {# Falls back to compact placeholder if series is empty.                             #}
-    {% if mfds_annual_series and mfds_annual_series.has_data %}
-      <div class="chart-panel" id="b7-price-chart">
-        <h3>Annual import value — Korean herbal medicine channel (MFDS, 2004–2024)</h3>
-        <p class="chart-scope-note">Herbal medicine channel only — does not include food ingredient imports shown in the table below.</p>
-        <div class="chart-canvas-wrapper" style="height:280px;">
-          <canvas id="b7PriceChart" aria-label="Annual import value, Korean herbal medicine channel, MFDS statistics 2004 to 2024"></canvas>
-        </div>
-        <p class="chart-annotation">Source: MFDS (Ministry of Food and Drug Safety, Korea) annual statistics yearbook, Table 6-3-8. Korean herbal medicine channel only. Covers 2004–2024. Value in USD thousands. Does not include food ingredient imports.</p>
-        {# Compact data table — recent years #}
-        {% set recent_rows = mfds_annual_series.table_rows[-8:] if mfds_annual_series.table_rows | length > 8 else mfds_annual_series.table_rows %}
-        <details class="discrepancy-accordion" style="margin-top:12px;">
-          <summary class="discrepancy-accordion__trigger" aria-label="Recent years import value table">
-            <span>Recent years — import value (USD thousands)</span>
-            <span class="discrepancy-accordion__chevron" aria-hidden="true">&#9654;</span>
-          </summary>
-          <div class="discrepancy-accordion__body">
-            <table class="import-records-table" style="max-width:320px;">
-              <thead><tr><th scope="col">Year</th><th scope="col">USD thousands</th></tr></thead>
-              <tbody>
-                {% for r in recent_rows %}
-                  <tr><td class="data">{{ r.year }}</td><td class="data">{{ "{:,.1f}".format(r.usd_k) }}</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </details>
-      </div>
-    {% else %}
-      <div class="price-placeholder">Annual import value data will appear here once available.</div>
-    {% endif %}
-
-    {# ── Import records table (independent degradation) ─────────────────── #}
     {% if import_records_has_data %}
-      <h3 style="margin-top:32px;">Import records</h3>
-      <p class="source-footnote">MFDS-registered deer velvet food-channel import notifications.</p>
 
-      <div class="table-scroll-wrapper" id="import-table-wrapper">
+      <div class="table-scroll-wrapper" id="import-table-wrapper" style="margin-top:12px;">
         <table class="import-records-table" id="import-records-table">
           <caption>Korea deer velvet food import notifications</caption>
           <thead>
@@ -907,21 +677,52 @@
         </table>
       </div>
 
-      <div class="table-controls">
-        <button class="show-more-btn" id="show-more-btn" type="button"
-                onclick="toggleImportRows(this)">Show more</button>
+      <div class="table-controls" id="import-table-controls">
+        {# Left group: expansion controls #}
+        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+          <button class="show-more-btn" id="show-more-btn" type="button"
+                  onclick="importShowMore(this)">Show more</button>
+          <button class="show-more-btn" id="show-all-btn" type="button"
+                  data-total="{{ import_records_total }}"
+                  onclick="importShowAll()">Show all ({{ import_records_total }} records)</button>
+          <button class="show-more-btn" id="show-fewer-btn" type="button"
+                  style="display:none;"
+                  onclick="importShowFewer(this)">Show fewer</button>
+        </div>
+        {# Right group: export controls #}
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          {# PDF — last 90 days: links to static PDF for now.
+             ponytail: filtered PDF (last 90 days only) is a future enhancement — C8-P2. #}
+          <a class="show-more-btn" href="velvet-knowledge-hub.pdf" download
+             style="text-decoration:underline; text-underline-offset:3px;">PDF — last 90 days</a>
+
+          {# CSV via email — frontend only; backend endpoint is C8-P2.
+             ponytail: /api/csv-request endpoint does not exist yet — wired up in C8-P2. #}
+          <button class="show-more-btn" id="csv-request-btn" type="button"
+                  onclick="csvShowForm()">CSV — request by email</button>
+        </div>
       </div>
+
+      {# CSV email form (hidden until button click) #}
+      <div class="csv-email-form" id="csv-email-form" aria-live="polite">
+        <input type="email" id="csv-email-input" class="csv-email-input"
+               placeholder="Your email address" required autocomplete="email">
+        <button type="submit" class="csv-send-btn" onclick="csvSubmit()">Send CSV</button>
+        <button type="button" class="csv-cancel-btn" onclick="csvCancel()">Cancel</button>
+      </div>
+      <div class="csv-error" id="csv-error">Request failed — please try again.</div>
+      <div class="csv-confirmation" id="csv-confirmation"></div>
 
       <p class="table-footnote">Source: Korea Ministry of Food and Drug Safety import notification database. Importer names translated from Korean using curated lookup; exporter names appear as recorded in MFDS source data.</p>
 
     {% else %}
-      <div class="placeholder-card" style="margin-top:32px;">
+      <div class="placeholder-card" style="margin-top:16px;">
         <p class="placeholder-title">No import records available</p>
         <p class="placeholder-body">Data will appear here once the MFDS import records tab is populated.</p>
       </div>
     {% endif %}
 
-    {# ── F-14 accordion — channel scope explanation ───────────────────── #}
+    {# Channel scope accordion #}
     <details class="discrepancy-accordion" style="margin-top:20px;">
       <summary class="discrepancy-accordion__trigger" aria-label="Why do different sources show different import volumes?">
         <span>ⓘ Why do different sources show different import volumes?</span>
@@ -930,7 +731,7 @@
       <div class="discrepancy-accordion__body">
         <h4>Why the chart and table show different figures</h4>
         <p>The numbers are not directly comparable, and neither is wrong — they come from two distinct MFDS databases covering different import channels.</p>
-        <p><strong>The chart</strong> uses the MFDS annual statistics yearbook (식품의약품통계연보, Table 6-3-8), which records deer velvet imported as a <em>herbal medicine or pharmaceutical ingredient</em>. This is a separate regulatory channel governed by Korea's pharmaceutical authority. Figures show total annual value in USD, 2004–2024.</p>
+        <p><strong>The A3 chart</strong> uses the MFDS annual statistics yearbook (식품의약품통계연보, Table 6-3-8), which records deer velvet imported as a <em>herbal medicine or pharmaceutical ingredient</em>. Figures show total annual value in USD, 2004–2024.</p>
         <p><strong>The records table</strong> uses the MFDS food-import portal (수입식품 정보마루), which records deer velvet imported as a <em>food ingredient</em>. These are individual shipment notifications filed under Korea's food safety system, 2016–2026.</p>
         <p>A third channel also exists — sliced velvet under a separate product code (HS 0507.90.1190) — which neither source covers. Total Korean deer velvet imports are therefore higher than either source shows alone.</p>
       </div>
@@ -938,74 +739,7 @@
 
   </section>
 
-  {# ── Import records JS — show/hide rows (client-side, no rebuild) ──── #}
-  <script>
-  (function () {
-    var CUTOFF = '{{ cutoff_90d }}';
-
-    function toggleImportRows(btn) {
-      var tbody = document.getElementById('import-records-tbody');
-      if (!tbody) return;
-      var rows = tbody.querySelectorAll('tr.import-row');
-      var expanded = btn.getAttribute('data-expanded') === 'true';
-
-      if (!expanded) {
-        /* Expand: show all rows */
-        rows.forEach(function (row) { row.style.display = ''; });
-        btn.textContent = 'Show less';
-        btn.setAttribute('data-expanded', 'true');
-        checkOverflow();
-      } else {
-        /* Collapse: show only first 5 rows */
-        rows.forEach(function (row, idx) {
-          row.style.display = idx < 5 ? '' : 'none';
-        });
-        btn.textContent = 'Show more';
-        btn.setAttribute('data-expanded', 'false');
-      }
-    }
-
-    /* Expose for inline onclick */
-    window.toggleImportRows = toggleImportRows;
-
-    /* Scroll hint: add .is-overflowing if table wider than wrapper */
-    function checkOverflow() {
-      var wrapper = document.getElementById('import-table-wrapper');
-      if (!wrapper) return;
-      var table = wrapper.querySelector('table');
-      if (!table) return;
-      if (table.scrollWidth > wrapper.clientWidth) {
-        wrapper.classList.add('is-overflowing');
-      } else {
-        wrapper.classList.remove('is-overflowing');
-      }
-    }
-
-    window.addEventListener('resize', checkOverflow);
-    checkOverflow();
-  }());
-  </script>
-
-  {# ── SECTION: MARKET PRESENCE (OI-3: title + stub copy updated C-7) #}
-  <section id="market-presence">
-
-    <div class="section-header">
-      <div class="section-header-left">
-        <h2>Velvet product examples — Korea</h2>
-      </div>
-    </div>
-
-    <p>This section will list Korean velvet supplement and food products by company, drawing on the official product registry and trade press. Data collection is under way.</p>
-
-  </section>
-
-  {# ── SECTION: NEWS PULSE ──────────────────────────────────────────── #}
-  {# Data source: KVN_Articles tab. Column schema (from classify_articles.py): #}
-  {#   content_hash | url | title_ko | description | published_date |          #}
-  {#   source_name | source_type | keyword_matched | category |                #}
-  {#   english_summary | ai_processed_at | include_on_site                     #}
-  {# Only rows where include_on_site is "TRUE" AND published_date >= cutoff_90d #}
-  {# appear in the article list (C-5e: 90-day window applied at render time).  #}
+  {# ── SECTION: NEWS PULSE ──────────────────────────────────────────────── #}
   {% set news_pulse = sections.news_pulse if sections is defined and sections.news_pulse is defined else {} %}
   <section id="news-pulse">
 
@@ -1016,13 +750,10 @@
       </div>
     </div>
 
-    {# D-17 / T-27: framing line above article list — scope context before content #}
     <p class="source-footnote">Korean media articles matching the velvet keyword, classified and summarised by AI. Showing relevant articles from the last 90 days.</p>
 
     {% if news_pulse.enabled and news_pulse.has_data %}
 
-      {# C-5e D-14: filter to include_on_site == "TRUE" AND published_date >= cutoff_90d #}
-      {# cutoff_90d is injected by build.py as an ISO date string (YYYY-MM-DD).          #}
       {% set publishable = [] %}
       {% for row in news_pulse.data %}
         {% if row.include_on_site | string | upper in ("TRUE", "1", "YES") and row.published_date | string >= cutoff_90d %}
@@ -1031,13 +762,12 @@
       {% endfor %}
 
       {% if publishable %}
-        {# D-18: count + period label above the article list #}
         <p class="article-list-header">{{ publishable | length }} relevant article{{ 's' if publishable | length != 1 else '' }} — last 90 days</p>
         <ul class="article-list" aria-label="Korea deer velvet relevant articles — last 90 days">
           {% for article in publishable %}
-            {# C-6g 1-A: Restored two-element card per DesignQ spec OI_newspulse_font_designq_spec.md. #}
-            {# Column-swap schema (C-6a): 'title' = URL (href), 'url' = Korean title (anchor text).    #}
-            {# english_summary restored as <p class="article-summary"> body below the title.           #}
+            {# Column-swap schema (C-6a): 'title' = URL (href), 'url' = Korean title (anchor text). #}
+            {# english_title shown if available; fall back to Korean title (article.url col).        #}
+            {# Language badge (D-19) removed per C-8 spec.                                          #}
             <li class="article-entry">
               {# P0c: category-keyed SVG thumbnail. onerror → default.svg → collapse. #}
               <img class="article-thumbnail"
@@ -1045,7 +775,6 @@
                    onerror="this.onerror=null;this.src='assets/thumbs/default.svg';this.onerror=function(){this.style.display='none'};"
                    alt="" width="80" height="60" loading="lazy">
               <div class="article-body">
-                {# P0b: show english_title; fall back to Korean title (article.url col) if absent. #}
                 <a class="article-title"
                    href="{{ article.title | default('#') }}"
                    target="_blank" rel="noopener noreferrer">
@@ -1067,7 +796,6 @@
           {% endfor %}
         </ul>
       {% else %}
-        {# D-15 State A: data exists but 90-day count = 0 — quiet period, pipeline healthy #}
         <div class="placeholder-card">
           <p class="placeholder-title">No relevant articles in the last 90 days.</p>
           <p class="placeholder-body">Korea deer velvet news is monitored regularly via Korean media sources.</p>
@@ -1075,7 +803,6 @@
       {% endif %}
 
     {% else %}
-      {# D-15 State B: section not enabled or no data rows at all — graceful degradation (L-12) #}
       <div class="placeholder-card">
         <p class="placeholder-title">News collection is in progress.</p>
         <p class="placeholder-body">Articles will appear after the next scheduled update.</p>
@@ -1092,11 +819,606 @@
     <p class="caption">Data sources:
       <a href="https://www.stats.govt.nz" target="_blank" rel="noopener noreferrer">Stats NZ</a> ·
       <a href="https://www.qia.go.kr" target="_blank" rel="noopener noreferrer">QIA (Animal and Plant Quarantine Agency, Korea)</a> ·
-      <a href="https://unipass.customs.go.kr" target="_blank" rel="noopener noreferrer">Korea Customs (KCS)</a> ·
       <a href="https://www.mfds.go.kr" target="_blank" rel="noopener noreferrer">MFDS (Ministry of Food and Drug Safety, Korea)</a>
     </p>
   </div>
 </footer>
+
+{# ── CHART.JS ─────────────────────────────────────────────────────────── #}
+<script src="assets/chart.min.js"></script>
+
+{# ── A1/A2 TOGGLE CHARTS ─────────────────────────────────────────────── #}
+{% if sections is defined and sections.trade_flows is defined and sections.trade_flows.enabled and sections.trade_flows.has_data %}
+<script>
+(function () {
+  'use strict';
+
+  /* ── Raw row data injected by build.py ──────────────────────────────── */
+  var QIA_ROWS = {{ qia_raw_rows | tojson }};
+  var NZ_ROWS  = {{ nz_raw_rows  | tojson }};
+
+  /* Korean country name → English mapping for QIA rows */
+  var QIA_COUNTRY_MAP = {
+    '뉴질랜드': 'New Zealand',  /* 뉴질랜드 */
+    '중국':             'China',          /* 중국 */
+    '러시아':       'Russia',         /* 러시아 */
+    '홍콩':             'Hong Kong',      /* 홍콩 */
+    '카자흐스탄': 'Kazakhstan', /* 카자흐스탄 */
+    '호주':             'Australia'       /* 호주 */
+  };
+
+  /* ── Chart.js shared defaults ─────────────────────────────────────── */
+  var FONT = '"Trebuchet MS", "Gill Sans MT", Arial, sans-serif';
+  Chart.defaults.font.family = FONT;
+  Chart.defaults.font.size   = 11;
+  Chart.defaults.color       = '#444444';
+
+  /* ── Colour palette (from spec §4) ──────────────────────────────────── */
+  var C_FRESH  = { fill: 'rgba(26, 82, 118, 0.75)',   border: '#1A5276' };
+  var C_DRIED  = { fill: 'rgba(125, 102, 8, 0.75)',   border: '#7D6608' };
+  var C_OTHER  = { fill: 'rgba(110, 47, 10, 0.75)',   border: '#6E2F0A' };
+  var C_LINE   = '#000000';
+
+  /* ── State for each chart ────────────────────────────────────────────── */
+  var a1State = { view: 'monthly', from: '', to: '', country: '', form: '' };
+  var a2State = { view: 'monthly', from: '', to: '', country: '', form: '' };
+
+  /* ── Helper: last 12 months as YYYY-MM strings ───────────────────────── */
+  function last12Months() {
+    var now = new Date();
+    var end = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    var d = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+    var start = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    return { start: start, end: end };
+  }
+
+  /* ── Populate country dropdowns from raw data ─────────────────────── */
+  function populateCountries(rows, selectId, countryMapFn) {
+    var seen = {};
+    rows.forEach(function (r) {
+      var en = countryMapFn(r.country);
+      if (en && !seen[en]) { seen[en] = true; }
+    });
+    var sel = document.getElementById(selectId);
+    if (!sel) return;
+    Object.keys(seen).sort().forEach(function (name) {
+      var opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      sel.appendChild(opt);
+    });
+  }
+
+  /* QIA: map Korean → English (unknown kept as-is) */
+  function qiaCountryEn(raw) {
+    return QIA_COUNTRY_MAP[raw] || raw;
+  }
+
+  /* NZ: already English */
+  function nzCountryEn(raw) { return raw; }
+
+  /* ── Filter raw rows ─────────────────────────────────────────────────── */
+  function filterRows(rows, state, countryMapFn) {
+    return rows.filter(function (r) {
+      var date = r.date; /* YYYY-MM */
+      if (state.from && date < state.from) return false;
+      if (state.to   && date > state.to)   return false;
+      if (state.country) {
+        var en = countryMapFn(r.country);
+        if (en !== state.country) return false;
+      }
+      if (state.form) {
+        if (r.product_type !== state.form) return false;
+      }
+      return true;
+    });
+  }
+
+  /* ── Aggregate filtered rows by month ────────────────────────────────── */
+  /* Frozen equivalent: dried ÷ 0.33 (spec §1 A1 Unit note) */
+  function toFrozenEq(value, productType) {
+    if (productType === 'dried') return value / 0.33;
+    return value; /* frozen already in frozen units; other passes through */
+  }
+
+  function aggregateByMonth(rows, countryMapFn) {
+    /* Returns { date: { fresh: kg, dried: kg, other: kg } } */
+    var totals = {};
+    rows.forEach(function (r) {
+      var d = r.date;
+      if (!totals[d]) totals[d] = { fresh: 0, dried: 0, other: 0 };
+      var frozenEq = toFrozenEq(r.value, r.product_type);
+      if (r.product_type === 'frozen') {
+        totals[d].fresh += frozenEq;
+      } else if (r.product_type === 'dried') {
+        totals[d].dried += frozenEq;
+      } else {
+        totals[d].other += frozenEq;
+      }
+    });
+    return totals;
+  }
+
+  function aggregateByYear(rows, countryMapFn) {
+    /* Returns { year: { fresh: kg, dried: kg, other: kg } } */
+    var totals = {};
+    rows.forEach(function (r) {
+      var yr = r.date.slice(0, 4);
+      if (!totals[yr]) totals[yr] = { fresh: 0, dried: 0, other: 0 };
+      var frozenEq = toFrozenEq(r.value, r.product_type);
+      if (r.product_type === 'frozen') {
+        totals[yr].fresh += frozenEq;
+      } else if (r.product_type === 'dried') {
+        totals[yr].dried += frozenEq;
+      } else {
+        totals[yr].other += frozenEq;
+      }
+    });
+    return totals;
+  }
+
+  /* ── Rolling 12-month total from monthly totals ────────────────────── */
+  function computeRolling12m(monthlyTotals, sortedLabels) {
+    return sortedLabels.map(function (d, i) {
+      var window = sortedLabels.slice(Math.max(0, i - 11), i + 1);
+      return window.reduce(function (sum, w) {
+        var t = monthlyTotals[w] || { fresh: 0, dried: 0, other: 0 };
+        return sum + t.fresh + t.dried + t.other;
+      }, 0);
+    });
+  }
+
+  /* ── Format month label ─────────────────────────────────────────────── */
+  var MONTH_ABBR = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  function formatMonthLabel(yyyymm) {
+    var yr = yyyymm.slice(0, 4);
+    var mo = parseInt(yyyymm.slice(5, 7), 10);
+    return MONTH_ABBR[mo] + ' ' + yr;
+  }
+
+  /* ── Build Chart.js datasets ─────────────────────────────────────────── */
+  function buildMonthlyDatasets(monthlyTotals, sortedLabels) {
+    var freshData  = sortedLabels.map(function (d) { return Math.round((monthlyTotals[d] || {}).fresh || 0); });
+    var driedData  = sortedLabels.map(function (d) { return Math.round((monthlyTotals[d] || {}).dried || 0); });
+    var otherData  = sortedLabels.map(function (d) { return Math.round((monthlyTotals[d] || {}).other || 0); });
+    var rolling    = computeRolling12m(monthlyTotals, sortedLabels);
+
+    /* Only include segments that have non-zero data */
+    var ds = [];
+    if (freshData.some(function (v) { return v > 0; })) {
+      ds.push({ type: 'bar', label: 'Fresh velvet', data: freshData,
+                backgroundColor: C_FRESH.fill, borderColor: C_FRESH.border,
+                borderWidth: 1, stack: 'forms', order: 2 });
+    }
+    if (driedData.some(function (v) { return v > 0; })) {
+      ds.push({ type: 'bar', label: 'Dried velvet', data: driedData,
+                backgroundColor: C_DRIED.fill, borderColor: C_DRIED.border,
+                borderWidth: 1, stack: 'forms', order: 2 });
+    }
+    if (otherData.some(function (v) { return v > 0; })) {
+      ds.push({ type: 'bar', label: 'Other', data: otherData,
+                backgroundColor: C_OTHER.fill, borderColor: C_OTHER.border,
+                borderWidth: 1, stack: 'forms', order: 2 });
+    }
+    ds.push({ type: 'line', label: 'Trailing 12 months', data: rolling,
+              borderColor: C_LINE, backgroundColor: 'transparent',
+              borderWidth: 2, pointStyle: 'none', tension: 0.3, order: 1 });
+    return ds;
+  }
+
+  function buildAnnualDatasets(annualTotals, sortedLabels) {
+    var freshData  = sortedLabels.map(function (yr) { return Math.round((annualTotals[yr] || {}).fresh || 0); });
+    var driedData  = sortedLabels.map(function (yr) { return Math.round((annualTotals[yr] || {}).dried || 0); });
+    var otherData  = sortedLabels.map(function (yr) { return Math.round((annualTotals[yr] || {}).other || 0); });
+
+    var ds = [];
+    if (freshData.some(function (v) { return v > 0; })) {
+      ds.push({ type: 'bar', label: 'Fresh velvet', data: freshData,
+                backgroundColor: C_FRESH.fill, borderColor: C_FRESH.border,
+                borderWidth: 1, stack: 'forms' });
+    }
+    if (driedData.some(function (v) { return v > 0; })) {
+      ds.push({ type: 'bar', label: 'Dried velvet', data: driedData,
+                backgroundColor: C_DRIED.fill, borderColor: C_DRIED.border,
+                borderWidth: 1, stack: 'forms' });
+    }
+    if (otherData.some(function (v) { return v > 0; })) {
+      ds.push({ type: 'bar', label: 'Other', data: otherData,
+                backgroundColor: C_OTHER.fill, borderColor: C_OTHER.border,
+                borderWidth: 1, stack: 'forms' });
+    }
+    /* No rolling line in annual view */
+    return ds;
+  }
+
+  /* ── Chart config factory ────────────────────────────────────────────── */
+  function makeChartConfig(labels, datasets, isAnnual) {
+    return {
+      type: 'bar',
+      data: { labels: labels, datasets: datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'top', align: 'start', labels: { boxWidth: 12, padding: 14 } },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                return ctx.dataset.label + ': ' + Math.round(ctx.parsed.y).toLocaleString() + ' kg';
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: 'category',
+            stacked: true,
+            ticks: { maxTicksLimit: 12, maxRotation: 45 },
+            grid: { display: false }
+          },
+          y: {
+            beginAtZero: true,
+            stacked: true,
+            title: { display: true, text: 'Frozen equivalent volume (kg)' },
+            ticks: { callback: function (v) { return v.toLocaleString(); } },
+            grid: { color: 'rgba(204,204,204,0.4)' }
+          }
+        }
+      }
+    };
+  }
+
+  /* ── Chart instances ─────────────────────────────────────────────────── */
+  var a1Chart = null;
+  var a2Chart = null;
+
+  /* ── Render function for A1 ─────────────────────────────────────────── */
+  function a1Render() {
+    var isAnnual = a1State.view === 'annual';
+    var filtered = filterRows(QIA_ROWS, a1State, qiaCountryEn);
+
+    var labels, datasets;
+    if (isAnnual) {
+      var annual = aggregateByYear(filtered, qiaCountryEn);
+      labels   = Object.keys(annual).sort();
+      datasets = buildAnnualDatasets(annual, labels);
+    } else {
+      var monthly = aggregateByMonth(filtered, qiaCountryEn);
+      var allLabels = Object.keys(monthly).sort();
+      labels   = allLabels.map(formatMonthLabel);
+      datasets = buildMonthlyDatasets(monthly, allLabels);
+    }
+
+    if (!a1Chart) {
+      var ctx = document.getElementById('chart-a1');
+      if (!ctx) return;
+      a1Chart = new Chart(ctx.getContext('2d'), makeChartConfig(labels, datasets, isAnnual));
+    } else {
+      a1Chart.data.labels   = labels;
+      a1Chart.data.datasets = datasets;
+      a1Chart.options.scales.x.stacked = true;
+      a1Chart.options.scales.y.stacked = !isAnnual;
+      a1Chart.update();
+    }
+  }
+
+  /* ── Render function for A2 ─────────────────────────────────────────── */
+  function a2Render() {
+    var isAnnual = a2State.view === 'annual';
+    var filtered = filterRows(NZ_ROWS, a2State, nzCountryEn);
+
+    var labels, datasets;
+    if (isAnnual) {
+      var annual = aggregateByYear(filtered, nzCountryEn);
+      labels   = Object.keys(annual).sort();
+      datasets = buildAnnualDatasets(annual, labels);
+    } else {
+      var monthly = aggregateByMonth(filtered, nzCountryEn);
+      var allLabels = Object.keys(monthly).sort();
+      labels   = allLabels.map(formatMonthLabel);
+      datasets = buildMonthlyDatasets(monthly, allLabels);
+    }
+
+    if (!a2Chart) {
+      var ctx = document.getElementById('chart-a2');
+      if (!ctx) return;
+      a2Chart = new Chart(ctx.getContext('2d'), makeChartConfig(labels, datasets, isAnnual));
+    } else {
+      a2Chart.data.labels   = labels;
+      a2Chart.data.datasets = datasets;
+      a2Chart.options.scales.y.stacked = !isAnnual;
+      a2Chart.update();
+    }
+  }
+
+  /* ── View toggle handlers ────────────────────────────────────────────── */
+  window.a1SetView = function (view, btn) {
+    a1State.view = view;
+    document.querySelectorAll('#a1-seg button').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.dataset.view === view ? 'true' : 'false');
+    });
+    var sel = document.getElementById('a1-seg-select');
+    if (sel) sel.value = view;
+    a1Render();
+  };
+
+  window.a1SetViewFromSelect = function (sel) {
+    a1State.view = sel.value;
+    document.querySelectorAll('#a1-seg button').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.dataset.view === sel.value ? 'true' : 'false');
+    });
+    a1Render();
+  };
+
+  window.a2SetView = function (view, btn) {
+    a2State.view = view;
+    document.querySelectorAll('#a2-seg button').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.dataset.view === view ? 'true' : 'false');
+    });
+    var sel = document.getElementById('a2-seg-select');
+    if (sel) sel.value = view;
+    a2Render();
+  };
+
+  window.a2SetViewFromSelect = function (sel) {
+    a2State.view = sel.value;
+    document.querySelectorAll('#a2-seg button').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.dataset.view === sel.value ? 'true' : 'false');
+    });
+    a2Render();
+  };
+
+  window.a1Render = function () {
+    var fromEl    = document.getElementById('a1-from');
+    var toEl      = document.getElementById('a1-to');
+    var countryEl = document.getElementById('a1-country');
+    var formEl    = document.getElementById('a1-form');
+    a1State.from    = fromEl    ? fromEl.value    : '';
+    a1State.to      = toEl      ? toEl.value      : '';
+    a1State.country = countryEl ? countryEl.value : '';
+    a1State.form    = formEl    ? formEl.value    : '';
+    a1Render();
+  };
+
+  window.a2Render = function () {
+    var fromEl    = document.getElementById('a2-from');
+    var toEl      = document.getElementById('a2-to');
+    var countryEl = document.getElementById('a2-country');
+    var formEl    = document.getElementById('a2-form');
+    a2State.from    = fromEl    ? fromEl.value    : '';
+    a2State.to      = toEl      ? toEl.value      : '';
+    a2State.country = countryEl ? countryEl.value : '';
+    a2State.form    = formEl    ? formEl.value    : '';
+    a2Render();
+  };
+
+  /* ── Init: set defaults, populate dropdowns, render ─────────────────── */
+  (function init() {
+    var range = last12Months();
+
+    /* Populate country dropdowns */
+    populateCountries(QIA_ROWS, 'a1-country', qiaCountryEn);
+    populateCountries(NZ_ROWS,  'a2-country', nzCountryEn);
+
+    /* Set default date range */
+    var a1From = document.getElementById('a1-from');
+    var a1To   = document.getElementById('a1-to');
+    if (a1From) a1From.value = range.start;
+    if (a1To)   a1To.value   = range.end;
+    a1State.from = range.start;
+    a1State.to   = range.end;
+
+    var a2From = document.getElementById('a2-from');
+    var a2To   = document.getElementById('a2-to');
+    if (a2From) a2From.value = range.start;
+    if (a2To)   a2To.value   = range.end;
+    a2State.from = range.start;
+    a2State.to   = range.end;
+
+    /* Initial render */
+    a1Render();
+    a2Render();
+  }());
+
+}());
+</script>
+{% endif %}
+
+{# ── A3 PRICE CHART (MFDS) ───────────────────────────────────────────── #}
+{% if mfds_annual_series and mfds_annual_series.has_data %}
+<script>
+(function () {
+  'use strict';
+  var mfdsData = {{ mfds_annual_series.chart_points | tojson }};
+  if (!mfdsData || !mfdsData.length) return;
+
+  var canvas = document.getElementById('chart-a3');
+  if (!canvas) return;
+
+  var yearLabels = mfdsData.map(function (pt) { return String(pt.x); });
+  var values     = mfdsData.map(function (pt) { return pt.y; });
+
+  new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: yearLabels,
+      datasets: [{
+        data: values,
+        backgroundColor: 'rgba(26, 82, 118, 0.75)',
+        borderColor: '#1A5276',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },  /* single-series — no legend needed */
+        tooltip: {
+          callbacks: {
+            label: function (ctx) {
+              return 'USD ' + ctx.parsed.y.toLocaleString() + ' thousands';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'category',
+          ticks: { maxTicksLimit: 10 },
+          grid: { display: false }
+        },
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: 'Average import price (KRW/kg)' },
+          ticks: { callback: function (v) { return v.toLocaleString(); } },
+          grid: { color: 'rgba(204,204,204,0.4)' }
+        }
+      }
+    }
+  });
+}());
+</script>
+{% endif %}
+
+{# ── SECTION D — IMPORT RECORDS JS ──────────────────────────────────── #}
+<script>
+(function () {
+  'use strict';
+
+  /* ── Show more / show all / show fewer ──────────────────────────────── */
+  var visibleCount = 5;
+
+  function getRows() {
+    var tbody = document.getElementById('import-records-tbody');
+    return tbody ? Array.prototype.slice.call(tbody.querySelectorAll('tr.import-row')) : [];
+  }
+
+  function updateButtons(rows) {
+    var showMore  = document.getElementById('show-more-btn');
+    var showAll   = document.getElementById('show-all-btn');
+    var showFewer = document.getElementById('show-fewer-btn');
+    if (!showMore || !showAll || !showFewer) return;
+
+    var allShown = rows.every(function (r) { return r.style.display !== 'none'; });
+
+    showMore.style.display  = allShown ? 'none' : '';
+    showAll.style.display   = allShown ? 'none' : '';
+    showFewer.style.display = (visibleCount > 5) ? '' : 'none';
+  }
+
+  window.importShowMore = function () {
+    var rows = getRows();
+    visibleCount = Math.min(visibleCount + 10, rows.length);
+    rows.forEach(function (r, i) {
+      r.style.display = i < visibleCount ? '' : 'none';
+    });
+    updateButtons(rows);
+    checkOverflow();
+  };
+
+  window.importShowAll = function () {
+    var rows = getRows();
+    visibleCount = rows.length;
+    rows.forEach(function (r) { r.style.display = ''; });
+    updateButtons(rows);
+    checkOverflow();
+  };
+
+  window.importShowFewer = function () {
+    var rows = getRows();
+    visibleCount = 5;
+    rows.forEach(function (r, i) {
+      r.style.display = i < 5 ? '' : 'none';
+    });
+    updateButtons(rows);
+    /* Scroll to table top without jumping to page top */
+    var wrapper = document.getElementById('import-table-wrapper');
+    if (wrapper) wrapper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+
+  /* Scroll hint — add .is-overflowing if table wider than wrapper */
+  function checkOverflow() {
+    var wrapper = document.getElementById('import-table-wrapper');
+    if (!wrapper) return;
+    var table = wrapper.querySelector('table');
+    if (!table) return;
+    wrapper.classList.toggle('is-overflowing', table.scrollWidth > wrapper.clientWidth);
+  }
+
+  window.addEventListener('resize', checkOverflow);
+  checkOverflow();
+
+  /* ── CSV email flow ──────────────────────────────────────────────────── */
+  /* ponytail: backend endpoint /api/csv-request wired up in C8-P2.
+     This is frontend-only; submits to placeholder and shows confirmation. */
+
+  window.csvShowForm = function () {
+    var btn  = document.getElementById('csv-request-btn');
+    var form = document.getElementById('csv-email-form');
+    if (btn)  btn.style.display  = 'none';
+    if (form) form.classList.add('is-visible');
+  };
+
+  window.csvCancel = function () {
+    var btn   = document.getElementById('csv-request-btn');
+    var form  = document.getElementById('csv-email-form');
+    var error = document.getElementById('csv-error');
+    if (btn)   btn.style.display = '';
+    if (form)  form.classList.remove('is-visible');
+    if (error) error.classList.remove('is-visible');
+    var input = document.getElementById('csv-email-input');
+    if (input) input.value = '';
+  };
+
+  window.csvSubmit = function () {
+    var input  = document.getElementById('csv-email-input');
+    var form   = document.getElementById('csv-email-form');
+    var conf   = document.getElementById('csv-confirmation');
+    var errEl  = document.getElementById('csv-error');
+    var btn    = document.getElementById('csv-request-btn');
+    if (!input || !input.checkValidity()) {
+      input.reportValidity();
+      return;
+    }
+
+    var email = input.value.trim();
+
+    fetch('/api/csv-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email_address:  email,
+        request_source: 'vkh_import_records'
+      })
+    })
+    .then(function (resp) {
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      /* Success: show confirmation */
+      if (form)  form.classList.remove('is-visible');
+      if (errEl) errEl.classList.remove('is-visible');
+      if (conf) {
+        conf.textContent = 'CSV file sent to ' + email + '. Check your inbox within a few minutes.';
+        conf.classList.add('is-visible');
+      }
+      /* After 6 seconds: hide confirmation, restore button */
+      setTimeout(function () {
+        if (conf) conf.classList.remove('is-visible');
+        if (btn)  btn.style.display = '';
+        if (input) input.value = '';
+      }, 6000);
+    })
+    .catch(function () {
+      /* Error: show inline error, keep form visible */
+      if (errEl) errEl.classList.add('is-visible');
+    });
+  };
+
+}());
+</script>
 
 </body>
 </html>
