@@ -154,7 +154,7 @@ sources:
 # Leave empty until the script is deployed (C8-P2).
 # After deployment: paste the web app URL here and rebuild.
 # ---------------------------------------------------------------------------
-csv_endpoint_url: "https://script.google.com/macros/s/AKfycbyRiLmRtFb6LKGehcEzGmi7gqf0T-nbfmdc_ei8r082vgeiSr97rGfHtRY6AmXEDpmc/exec"  # set after deploying scripts/vkh_csv_email.gs
+csv_endpoint_url: "https://script.google.com/macros/s/AKfycbxHQO5CkfaWiWV3ZxYByuoFq9B8KW7ElY46rp-sn8DiI6fH5FOi9qKqCYReJz5mRHT26w/exec"  # set after deploying scripts/vkh_csv_email.gs
 
 # ---------------------------------------------------------------------------
 # Markets — Phase 3 cross-market expansion placeholder.
