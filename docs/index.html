@@ -10299,8 +10299,14 @@
   }
 
   window.importShowMore = function () {
-    /* Show only rows within the last 90 days */
-    var cutoff = new Date();
+    /* Show rows within 90 days of the most recent record (not today) */
+    var allRows = getRows();
+    var maxDate = new Date(0);
+    allRows.forEach(function (r) {
+      var d = new Date(r.getAttribute('data-date') || '');
+      if (!isNaN(d.getTime()) && d > maxDate) maxDate = d;
+    });
+    var cutoff = new Date(maxDate);
     cutoff.setDate(cutoff.getDate() - 90);
     var rows = getRows();
     var anyShown = false;
