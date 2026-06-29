@@ -653,6 +653,8 @@ def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date
         # C-8: raw KG rows for A1/A2 toggle charts.
         qia_raw_rows=chart_data.get("qia_raw_rows", []),
         nz_raw_rows=chart_data.get("nz_raw_rows", []),
+        # C8-P2: Apps Script endpoint URL injected at build time.
+        csv_endpoint_url=config.get("csv_endpoint_url", ""),
     )
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
