@@ -294,6 +294,13 @@ def _process_folder(folder_key: str, dry_run: bool) -> tuple[int, int, int]:
             if file_flag == "--auto":
                 resolved_flag = _resolve_vfi_records_flag(file_meta["name"])
 
+            # Archive files (e.g. historical Excel) resolve to --historical, which
+            # expects a directory — not a single file. Skip them: they stay in Drive
+            # for reference but are not re-ingested once already loaded.
+            if file_flag == "--auto" and resolved_flag == "--historical":
+                print(f"  Skipping archive file (kept in Drive, not re-ingested): {file_meta['name']}")
+                continue
+
             # Primary script dispatch.
             cmd = _build_cmd(primary_script, resolved_flag, dest, dry_run)
             if dry_run:
