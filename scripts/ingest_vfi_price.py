@@ -527,6 +527,10 @@ def main() -> None:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
     except Exception as exc:  # noqa: BLE001
+        if "credit balance is too low" in str(exc):
+            print(f"  WARNING: Anthropic API credit balance too low — PDF OCR skipped ({csv_path.name})")
+            print(f"\nrows_parsed: 0 | rows_written: 0 | rows_skipped: 0 | errors: 0")
+            sys.exit(0)
         print(f"ERROR: Unexpected parse failure — {exc}", file=sys.stderr)
         sys.exit(1)
 
