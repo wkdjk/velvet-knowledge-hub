@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -152,8 +153,12 @@ def _resolve_vfi_records_flag(filename: str) -> str:
     (MFDS portal download). Detect by filename pattern.
     MFDS portal files match: 수입식품조회YYYYMMDD.xlsx
     Everything else is treated as --historical.
+
+    NFC normalisation: Mac uploads filenames in NFD (decomposed jamo);
+    the comparison string in source is NFC. Normalise before comparing.
     """
-    if filename.startswith("수입식품조회") and filename.endswith(".xlsx"):
+    name = unicodedata.normalize("NFC", filename)
+    if name.startswith("수입식품조회") and name.endswith(".xlsx"):
         return "--mfds"
     return "--historical"
 
@@ -293,13 +298,6 @@ def _process_folder(folder_key: str, dry_run: bool) -> tuple[int, int, int]:
             resolved_flag = file_flag
             if file_flag == "--auto":
                 resolved_flag = _resolve_vfi_records_flag(file_meta["name"])
-
-            # Archive files (e.g. historical Excel) resolve to --historical, which
-            # expects a directory — not a single file. Skip them: they stay in Drive
-            # for reference but are not re-ingested once already loaded.
-            if file_flag == "--auto" and resolved_flag == "--historical":
-                print(f"  Skipping archive file (kept in Drive, not re-ingested): {file_meta['name']}")
-                continue
 
             # Primary script dispatch.
             cmd = _build_cmd(primary_script, resolved_flag, dest, dry_run)
