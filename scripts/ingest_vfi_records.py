@@ -123,21 +123,33 @@ _HISTORICAL_COLUMN_MAP: dict[str, str] = {
 _HISTORICAL_REQUIRED = {"Year", "Importer (Korean)", "Product name (Korean)", "Date"}
 
 # MFDS Schema B — Korean header → VKH field mapping.
+# Supports both old format (pre-2026) and new format (2026-06-29+).
+# Old format names listed first; new format names follow — last non-empty write wins,
+# so if the new format name is present it overwrites the old format's empty result.
 _MFDS_COLUMN_MAP: dict[str, str] = {
-    "처리일자":     "date_raw",
-    "수입업체":     "importer_ko",
+    "처리일자":     "date_raw",       # both formats
+    "수입업체":     "importer_ko",    # both formats
+    "제품명(한글)": "product_name",   # both formats
+    "제품명(영문)": "product_en",     # both formats
+    "수출국":       "country_export_ko",  # both formats
+    "제조국":       "country_origin_ko",  # both formats
+    # Old format only:
     "신고번호":     "_report_no",
     "품목제조번호": "_item_no",
-    "제품명(한글)": "product_name",
-    "제품명(영문)": "product_en",
-    "품목류":       "product_type_ko",
-    "수출국":       "country_export_ko",
-    "제조국":       "country_origin_ko",
-    "제조사(영문)": "exporter_en",
     "순중량(KG)":  "_weight_kg",
     "수량(갯수)":  "_quantity",
-    "유통기한":     "expiry_date_raw",
     "원산지":       "_country_origin_raw",
+    "품목류":       "product_type_ko",
+    "제조사(영문)": "exporter_en",
+    "유통기한":     "expiry_date_raw",
+    # New format (2026-06-29+) — overwrite if present:
+    "품목(유형)":  "product_type_ko",
+    "해외제조업소": "exporter_en",
+    "소비기한":    "expiry_date_raw",
+    "구분":         "_category",
+    "냉동전환번호": "_frozen_conv_no",
+    "이력추적번호": "_trace_no",
+    "원재료":       "_raw_material",
 }
 
 # Required keywords for MFDS header detection (L-13).
@@ -346,19 +358,21 @@ def _parse_mfds(filepath: Path) -> list[dict]:
 
     Raises ValueError listing missing required columns if L-13 validation fails.
     """
-    wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
+    # read_only=False required: openpyxl read_only mode silently drops shared-string
+    # cells in some MFDS portal files, returning only the first inline-string cell.
+    wb = openpyxl.load_workbook(filepath, data_only=True)
     ws = wb.worksheets[0]
     all_rows = list(ws.iter_rows(values_only=True))
 
     header_idx = _find_mfds_header_row(all_rows)
     raw_headers = [_safe_str(c) for c in all_rows[header_idx]]
 
-    # Full column validation — all 14 MFDS columns must be present (L-13).
-    all_mfds_required = set(_MFDS_COLUMN_MAP.keys())
-    missing = all_mfds_required - set(raw_headers)
+    # Only require the 3 core dedup columns — optional columns vary between
+    # old (pre-2026) and new (2026-06-29+) MFDS portal download formats.
+    missing = _MFDS_REQUIRED - set(raw_headers)
     if missing:
         raise ValueError(
-            f"MFDS file is missing columns: {missing}\n"
+            f"MFDS file is missing required columns: {missing}\n"
             f"Actual headers: {raw_headers}"
         )
 
