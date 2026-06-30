@@ -1,14 +1,15 @@
-# Run as: PYTHONPATH=. python scripts/ingest_vfi_price.py --file /path/to/price_rankings_2024.csv
+# Run as: PYTHONPATH=. python scripts/ingest_vfi_price.py --file /path/to/file.csv
+#         PYTHONPATH=. python scripts/ingest_vfi_price.py --file /path/to/file.pdf
 #
 # ingest_vfi_price.py — MFDS annual deer velvet price rankings ingestion.
 #
-# Commander manually extracts the annual MFDS deer velvet price rankings from
-# the PDF and saves to a CSV. This script parses the CSV and upserts rows to
-# the VKH VFI_Price_Annual tab.
+# Accepts CSV (manual extract) or PDF (Claude API extracts the table).
+# Upserts rows to the VKH VFI_Price_Annual tab.
 #
 # Usage:
 #   PYTHONPATH=. python scripts/ingest_vfi_price.py --file /path/to/price_rankings_2024.csv
-#   PYTHONPATH=. python scripts/ingest_vfi_price.py --file /path/to/price_rankings_2024.csv --dry-run
+#   PYTHONPATH=. python scripts/ingest_vfi_price.py --file /path/to/mfds_stats_2024.pdf
+#   PYTHONPATH=. python scripts/ingest_vfi_price.py --file /path/to/file.csv --dry-run
 #
 # Expected CSV format (headers must match VKH schema or accepted Korean variants):
 #   year,rank,product_name,price_krw,company_name,origin_country,notes
@@ -21,6 +22,7 @@
 # L-4:  get_all_records() called once; batch writes with 200-row batches / 1.1s sleep.
 # L-10: Dedup key is (year, rank, product_name) — three fields (from setup_sheets.py).
 # L-13: CSV header names validated by name, not by index. Korean variants accepted.
+# L-14: PDF → Claude API extracts table; ANTHROPIC_API_KEY from .env or GitHub Secrets.
 #
 # VFI_Price_Annual schema (7 columns) — from setup_sheets.py:
 #   year, rank, product_name, price_krw, company_name, origin_country, notes
@@ -28,6 +30,7 @@
 # Security: no credentials or secrets in this file. All secrets from .env only.
 
 import argparse
+import base64
 import csv
 import json
 import logging
@@ -35,6 +38,8 @@ import os
 import sys
 import time
 from pathlib import Path
+
+import anthropic
 
 import gspread
 import yaml
@@ -57,6 +62,29 @@ logger = logging.getLogger("ingest_vfi_price")
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# ponytail: haiku for table extraction — cheap repeated runs; upgrade to opus if accuracy degrades
+_PDF_EXTRACTION_MODEL = "claude-haiku-4-5"
+
+_PDF_EXTRACTION_PROMPT = """\
+This is a Korean MFDS (식품의약품안전처) publication containing annual deer velvet \
+(녹용) price ranking data.
+
+Extract the deer velvet annual price ranking table and return it as CSV with exactly \
+these columns:
+year,rank,product_name,price_krw,company_name,origin_country,notes
+
+Rules:
+- year: 4-digit year (e.g. 2024). If not shown in the table, infer from the document title.
+- rank: integer ranking position (1, 2, 3 …).
+- product_name: full product name in Korean.
+- price_krw: price in Korean won as a plain integer — no commas, no ₩ symbol (e.g. 150000).
+- company_name: importer or company name if shown, else leave blank.
+- origin_country: country of origin if shown (e.g. 뉴질랜드), else leave blank.
+- notes: any footnotes or remarks, else leave blank.
+
+Return ONLY the CSV rows including the header line. No explanation, no markdown fences.\
+"""
 CONFIG_PATH = REPO_ROOT / "config.yaml"
 TARGET_TAB = "VFI_Price_Annual"
 
@@ -89,6 +117,50 @@ _HEADER_ALIASES: dict[str, list[str]] = {
 # L-4: batch write parameters.
 _BATCH_SIZE = 200
 _BATCH_SLEEP = 1.1
+
+
+# ---------------------------------------------------------------------------
+# PDF extraction (L-14)
+# ---------------------------------------------------------------------------
+
+def _extract_table_from_pdf(pdf_path: Path) -> str:
+    """
+    Send the PDF to Claude API and return the extracted price table as a CSV string.
+
+    L-14: uses ANTHROPIC_API_KEY from environment (never hardcoded).
+    """
+    load_dotenv(REPO_ROOT / ".env")
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise ValueError(
+            "ANTHROPIC_API_KEY not set. "
+            "Local dev: add to .env at repo root. "
+            "GitHub Actions: add to repository Secrets."
+        )
+
+    with pdf_path.open("rb") as fh:
+        pdf_b64 = base64.standard_b64encode(fh.read()).decode("utf-8")
+
+    client = anthropic.Anthropic(api_key=api_key)
+    response = client.messages.create(
+        model=_PDF_EXTRACTION_MODEL,
+        max_tokens=4096,
+        messages=[{
+            "role": "user",
+            "content": [
+                {
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "application/pdf",
+                        "data": pdf_b64,
+                    },
+                },
+                {"type": "text", "text": _PDF_EXTRACTION_PROMPT},
+            ],
+        }],
+    )
+    return response.content[0].text
 
 
 # ---------------------------------------------------------------------------
@@ -174,9 +246,12 @@ def _parse_price(raw) -> tuple[float | None, str]:
 
 def parse_price_csv(filepath: Path) -> tuple[list[dict], int]:
     """
-    Parse the Commander's annual price ranking CSV.
+    Parse the Commander's annual price ranking file (CSV or PDF).
 
     Returns (list_of_valid_rows, error_count).
+
+    For PDF files: Claude API extracts the table as CSV first (L-14).
+    For CSV files: direct parsing.
 
     Validation per row:
     - year: 4-digit integer (2000–2099)
@@ -190,16 +265,21 @@ def parse_price_csv(filepath: Path) -> tuple[list[dict], int]:
     valid_rows: list[dict] = []
     error_count = 0
 
-    # Try UTF-8 first; fall back to cp949 for files exported from Korean Windows.
-    for encoding in ("utf-8-sig", "utf-8", "cp949"):
-        try:
-            with open(filepath, encoding=encoding, newline="") as fh:
-                content = fh.read()
-            break
-        except UnicodeDecodeError:
-            continue
+    if filepath.suffix.lower() == ".pdf":
+        print(f"  PDF detected — extracting table via Claude API ({_PDF_EXTRACTION_MODEL})...")
+        content = _extract_table_from_pdf(filepath)
+        logger.info("PDF extraction returned %d characters.", len(content))
     else:
-        raise ValueError(f"Could not decode {filepath.name} as UTF-8 or CP949.")
+        # Try UTF-8 first; fall back to cp949 for files exported from Korean Windows.
+        for encoding in ("utf-8-sig", "utf-8", "cp949"):
+            try:
+                with open(filepath, encoding=encoding, newline="") as fh:
+                    content = fh.read()
+                break
+            except UnicodeDecodeError:
+                continue
+        else:
+            raise ValueError(f"Could not decode {filepath.name} as UTF-8 or CP949.")
 
     reader = csv.DictReader(content.splitlines())
 
@@ -309,7 +389,7 @@ def connect_sheets(sheet_id: str):
             f"ERROR: GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON — {exc}\n"
             "  Tip: minify with: "
             'python -c "import json,sys; print(json.dumps(json.load(sys.stdin), '
-            "separators=(',',':')))" < key.json",
+            "separators=(',',':')))\" < key.json",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -421,7 +501,7 @@ def main() -> None:
     parser.add_argument(
         "--file",
         required=True,
-        help="Path to the annual price ranking CSV file.",
+        help="Path to the annual price ranking file (CSV or PDF).",
     )
     parser.add_argument(
         "--dry-run",

@@ -62,8 +62,8 @@ _EXTRA_SCRIPTS: dict[str, list[tuple[str, str]]] = {
 # Files to skip regardless of folder.
 _SKIP_NAMES = {"HOW_TO_UPDATE.txt"}
 
-# File suffixes to skip regardless of folder (e.g. PDF reference files in mfds_price).
-_SKIP_SUFFIXES = frozenset({".pdf"})
+# File suffixes to skip regardless of folder.
+_SKIP_SUFFIXES: frozenset[str] = frozenset()
 
 # Sleep between folder dispatches when --folder all is used.
 # Sheets API quota: 60 read requests per minute per user.
