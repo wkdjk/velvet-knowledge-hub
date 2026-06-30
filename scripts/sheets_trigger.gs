@@ -36,7 +36,7 @@ function onOpen() {
  */
 function triggerDriveIngest() {
   _triggerWorkflow(WORKFLOW, { folder: "all" },
-    "Drive ingest started — the dashboard will update in approximately 3 minutes.");
+    "Drive ingest started — the dashboard will update in approximately 10 minutes (quota-safe pacing).");
 }
 
 /**
