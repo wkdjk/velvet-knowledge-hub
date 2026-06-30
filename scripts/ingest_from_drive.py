@@ -67,9 +67,13 @@ _SKIP_SUFFIXES: frozenset[str] = frozenset()
 
 # Sleep between folder dispatches when --folder all is used.
 # Sheets API quota: 60 read requests per minute per user.
-# Each folder runs ~10 scripts × 3 reads = 30 reads in ~20s.
 # 65s sleep guarantees the quota window fully resets before the next folder.
 _INTER_FOLDER_SLEEP = 65
+
+# Sleep between individual file dispatches within a folder.
+# QIA folder has 16 files × ~3 Sheets reads = 48 reads — close to the 60/min limit.
+# 3s intra-file sleep spreads 48 reads over ~90s → ~32 reads/min, well within quota.
+_INTRA_FILE_SLEEP = 3
 
 
 # ---------------------------------------------------------------------------
@@ -281,7 +285,7 @@ def _process_folder(folder_key: str, dry_run: bool) -> tuple[int, int, int]:
         errors = 0
         scripts_run = 0
 
-        for file_meta in files:
+        for file_idx, file_meta in enumerate(files):
             dest = tmpdir / file_meta["name"]
 
             if dry_run:
@@ -325,6 +329,9 @@ def _process_folder(folder_key: str, dry_run: bool) -> tuple[int, int, int]:
                         scripts_run += 1
                     else:
                         errors += 1
+
+            if not dry_run and file_idx < len(files) - 1:
+                time.sleep(_INTRA_FILE_SLEEP)
 
         return downloaded, scripts_run, errors
     finally:
