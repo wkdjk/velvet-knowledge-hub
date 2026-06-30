@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -59,6 +60,15 @@ _EXTRA_SCRIPTS: dict[str, list[tuple[str, str]]] = {
 
 # Files to skip regardless of folder.
 _SKIP_NAMES = {"HOW_TO_UPDATE.txt"}
+
+# File suffixes to skip regardless of folder (e.g. PDF reference files in mfds_price).
+_SKIP_SUFFIXES = frozenset({".pdf"})
+
+# Sleep between folder dispatches when --folder all is used.
+# Sheets API quota: 60 read requests per minute per user.
+# Each folder runs ~10 scripts × 3 reads = 30 reads in ~20s.
+# 65s sleep guarantees the quota window fully resets before the next folder.
+_INTER_FOLDER_SLEEP = 65
 
 
 # ---------------------------------------------------------------------------
@@ -196,8 +206,12 @@ def _process_folder(folder_key: str, dry_run: bool) -> tuple[int, int, int]:
         print("  No files found (or folder inaccessible).")
         return 0, 0, 0
 
-    # Filter skipped files
-    files = [f for f in files if f["name"] not in _SKIP_NAMES]
+    # Filter skipped files (by name or suffix).
+    files = [
+        f for f in files
+        if f["name"] not in _SKIP_NAMES
+        and Path(f["name"]).suffix.lower() not in _SKIP_SUFFIXES
+    ]
     print(f"  Found {len(files)} file(s) to process:")
     for f in files:
         print(f"    {f['name']}")
@@ -342,11 +356,14 @@ def main() -> None:
     total_scripts = 0
     total_errors = 0
 
-    for folder_key in folders:
+    for i, folder_key in enumerate(folders):
         dl, sr, err = _process_folder(folder_key, args.dry_run)
         total_downloaded += dl
         total_scripts += sr
         total_errors += err
+        if not args.dry_run and i < len(folders) - 1:
+            print(f"\n  Sleeping {_INTER_FOLDER_SLEEP}s to stay within Sheets API quota...")
+            time.sleep(_INTER_FOLDER_SLEEP)
 
     print(
         f"\n=== Summary: {total_downloaded} file(s) downloaded, "
