@@ -4,7 +4,20 @@ Quarterly deer velvet trade intelligence dashboard for New Zealand exporters.
 
 Built with GitHub Actions + Google Sheets + GitHub Pages.
 
-Live site: https://wkdjk.github.io/velvet-knowledge-hub/ (coming soon)
+Live site: https://wkdjk.github.io/velvet-knowledge-hub/
+
+---
+
+## Data sections
+
+| Section | What it shows | Update cadence |
+|---------|--------------|----------------|
+| News pulse | Korean-language deer velvet news, AI-classified and summarised | Weekly (automated) |
+| Trade flows | NZ export volumes, QIA quarantine clearances, KSTAT import statistics | Monthly |
+| Import intelligence | MFDS food-use import records, annual price rankings | Quarterly / annual |
+| Market presence | Korea product registry | Deferred to Phase 3 |
+
+For operator instructions (non-technical): see [OPERATOR_GUIDE.md](OPERATOR_GUIDE.md).
 
 ---
 
