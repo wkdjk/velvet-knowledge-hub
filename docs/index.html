@@ -262,15 +262,6 @@
       display: block;
     }
 
-    /* Article thumbnail — C-8 update */
-    .article-thumbnail {
-      width: 80px;
-      height: 60px;
-      object-fit: cover;
-      flex-shrink: 0;
-      display: block;
-    }
-
     /* ── C-8 responsive ──────────────────────────────────────────────────── */
     @media (max-width: 768px) {
       .chart-toggle-row {
@@ -302,12 +293,6 @@
         min-width: 0;
         width: 100%;
       }
-
-      /* Thumbnail: smaller on mobile */
-      .article-thumbnail {
-        width: 64px;
-        height: 48px;
-      }
     }
 
     @media (max-width: 480px) {
@@ -319,11 +304,6 @@
 
       .segmented-select {
         display: block;
-      }
-
-      /* Thumbnail: hide entirely at narrowest widths */
-      .article-thumbnail {
-        display: none;
       }
     }
 
@@ -16091,11 +16071,6 @@
             
             
             <li class="article-entry">
-              
-              <img class="article-thumbnail"
-                   src="assets/thumbs/업계소식.svg"
-                   onerror="this.onerror=null;this.src='assets/thumbs/default.svg';this.onerror=function(){this.style.display='none'};"
-                   alt="" width="80" height="60" loading="lazy">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.lawissue.co.kr/view.php?ud=20260521190353785204ead0791_12"
