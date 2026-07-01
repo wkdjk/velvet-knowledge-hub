@@ -18,6 +18,17 @@ import shutil
 import sys
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
+
+# M-3 fix (VKH audit 2026-07-01): use KST, not runner UTC, for calendar-date
+# cutoffs — workflow_dispatch triggers between 00:00-09:00 KST are still the
+# previous UTC day, which shifted 90-day KPI windows and the build date back
+# by one day.
+_KST = ZoneInfo("Asia/Seoul")
+
+
+def _today_kst() -> date:
+    return datetime.now(_KST).date()
 from pathlib import Path
 
 import gspread
@@ -494,7 +505,7 @@ def compute_kpis(sections: dict) -> dict:
     # include_on_site truthy AND published_date >= cutoff. L-COUNT-LIST.
     news_data = sections.get("news_pulse", {}).get("data", [])
     if news_data:
-        cutoff = date.today() - timedelta(days=90)
+        cutoff = _today_kst() - timedelta(days=90)
         count = 0
         for row in news_data:
             # C-5g: require include_on_site truthy (same as template filter).
@@ -518,7 +529,7 @@ def compute_kpis(sections: dict) -> dict:
     # time basis for DINZ readers.
     import_data = sections.get("import_intelligence", {}).get("data", [])
     if import_data:
-        cutoff = date.today() - timedelta(days=90)
+        cutoff = _today_kst() - timedelta(days=90)
         count = 0
         for row in import_data:
             raw_date = str(row.get("date", "")).strip()
@@ -571,9 +582,9 @@ def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date
         sorted_records = all_import_records
 
     # Determine 30-day cutoff for the JS expand function.
-    cutoff_30d = (date.today() - timedelta(days=30)).isoformat()
+    cutoff_30d = (_today_kst() - timedelta(days=30)).isoformat()
     # C-5e: 90-day cutoff for news pulse article list filter and KPI count.
-    cutoff_90d = (date.today() - timedelta(days=90)).isoformat()
+    cutoff_90d = (_today_kst() - timedelta(days=90)).isoformat()
 
     import_records_display = []
     for row in sorted_records:
@@ -1705,7 +1716,7 @@ def _write_news_pulse_csv(sections: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    build_date = date.today().isoformat()
+    build_date = _today_kst().isoformat()
 
     print("build.py — VKH build pipeline")
 

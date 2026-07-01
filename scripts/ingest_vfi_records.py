@@ -37,9 +37,7 @@
 
 import argparse
 import datetime
-import json
 import logging
-import os
 import re
 import sys
 import time
@@ -47,14 +45,13 @@ from pathlib import Path
 
 import gspread
 import openpyxl
-import yaml
-from dotenv import load_dotenv
-from google.oauth2.service_account import Credentials
 
 # ---------------------------------------------------------------------------
 # L-1: ensure repo root is on sys.path.
 # ---------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from scripts.sheets_auth import _load_config, connect_sheets, resolve_sheet_id  # noqa: E402
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -67,11 +64,7 @@ logger = logging.getLogger("ingest_vfi_records")
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CONFIG_PATH = REPO_ROOT / "config.yaml"
 TARGET_TAB = "VFI_Import_Records"
-
-# Sheets API only — no Drive API required (L-5 workaround).
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # VKH VFI_Import_Records schema (19 columns) — from setup_sheets.py.
 VFI_HEADERS = [
@@ -448,97 +441,17 @@ def _parse_mfds(filepath: Path) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Google Sheets helpers — reused from ingest_nz_export.py pattern
-# ---------------------------------------------------------------------------
-
-def _load_config() -> dict:
-    """Read config.yaml from repo root. Returns empty dict on failure."""
-    if not CONFIG_PATH.exists():
-        return {}
-    try:
-        with CONFIG_PATH.open("r", encoding="utf-8") as fh:
-            return yaml.safe_load(fh) or {}
-    except yaml.YAMLError:
-        return {}
-
-
-def connect_sheets(sheet_id: str):
-    """
-    Connect to Google Sheets using service account credentials.
-
-    L-3: GOOGLE_SERVICE_ACCOUNT_JSON must be single-line JSON.
-    Returns gspread.Spreadsheet object. Calls sys.exit(1) on failure.
-    """
-    load_dotenv(REPO_ROOT / ".env")
-
-    sa_json_raw = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
-    if not sa_json_raw:
-        print(
-            "ERROR: GOOGLE_SERVICE_ACCOUNT_JSON environment variable is not set.\n"
-            "  Local dev: add it to .env at the repo root (single-line JSON — L-3).\n"
-            "  GitHub Actions: add it to repository Secrets.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    try:
-        sa_info = json.loads(sa_json_raw)
-    except json.JSONDecodeError as exc:
-        print(
-            f"ERROR: GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON — {exc}\n"
-            "  Tip: minify with: "
-            'python -c "import json,sys; print(json.dumps(json.load(sys.stdin), '
-            "separators=(',',':')))\" < key.json",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
-    gc = gspread.authorize(creds)
-
-    try:
-        spreadsheet = gc.open_by_key(sheet_id)
-    except gspread.exceptions.APIError as exc:
-        print(
-            f"ERROR: Could not open sheet {sheet_id} — {exc}\n"
-            "  Check the service account has Editor access to the sheet.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    return spreadsheet
-
-
-def resolve_sheet_id() -> str:
-    """
-    Resolve the Google Sheet ID from environment then config.yaml fallback.
-
-    Priority: VKH_SHEET_ID env var → config.yaml sheet_id.
-    Calls sys.exit(1) if neither is set.
-    """
-    load_dotenv(REPO_ROOT / ".env")
-
-    sheet_id = os.environ.get("VKH_SHEET_ID", "").strip()
-    if sheet_id:
-        return sheet_id
-
-    config = _load_config()
-    sheet_id = config.get("sheet_id", "").strip()
-    if sheet_id:
-        print("  (VKH_SHEET_ID not set — using sheet_id from config.yaml)")
-        return sheet_id
-
-    print(
-        "ERROR: Sheet ID not found.\n"
-        "  Set VKH_SHEET_ID in .env, or ensure sheet_id is set in config.yaml.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
-
-
-# ---------------------------------------------------------------------------
 # Dedup and write helpers
 # ---------------------------------------------------------------------------
+#
+# _load_config, connect_sheets, resolve_sheet_id imported from
+# scripts.sheets_auth (see H-3 fix, VKH audit 2026-07-01), matching the
+# pattern used in ingest_kstat.py, ingest_qia.py, classify_articles.py, etc.
+#
+# build_dedup_key/load_existing_keys/rows_to_append stay local (M-1, not
+# fixed): this file's dedup key is (date, importer_ko, product_name), a
+# genuinely different shape from ingest_common's 5-field trade key, so
+# importing the shared function would not serve this file's needs.
 
 def build_dedup_key(row: dict) -> tuple:
     """

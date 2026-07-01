@@ -1,6 +1,6 @@
 # Velvet Knowledge Hub
 
-Quarterly deer velvet trade intelligence dashboard for New Zealand exporters.
+Deer velvet trade intelligence dashboard for New Zealand exporters and Korean partners — updated weekly.
 
 Built with GitHub Actions + Google Sheets + GitHub Pages.
 
@@ -15,7 +15,7 @@ Live site: https://wkdjk.github.io/velvet-knowledge-hub/
 | News pulse | Korean-language deer velvet news, AI-classified and summarised | Weekly (automated) |
 | Trade flows | NZ export volumes, QIA quarantine clearances, KSTAT import statistics | Monthly |
 | Import intelligence | MFDS food-use import records, annual price rankings | Quarterly / annual |
-| Market presence | Korea product registry | Deferred to Phase 3 |
+| Market presence | Korea product registry | Deferred to a future phase |
 
 For operator instructions (non-technical): see [OPERATOR_GUIDE.md](OPERATOR_GUIDE.md).
 

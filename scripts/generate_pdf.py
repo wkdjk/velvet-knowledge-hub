@@ -18,8 +18,12 @@
 import argparse
 import os
 import sys
-from datetime import date
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+# M-3 fix (VKH audit 2026-07-01): KST, not runner UTC — see scripts/build.py.
+_KST = ZoneInfo("Asia/Seoul")
 
 REPO_ROOT = Path(__file__).parent.parent
 OUTPUT_PATH = REPO_ROOT / "docs" / "velvet-knowledge-hub.pdf"
@@ -271,7 +275,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    build_date = date.today().isoformat()
+    build_date = datetime.now(_KST).date().isoformat()
     source_url = args.url or GITHUB_PAGES_URL
     output_path = Path(args.output)
 

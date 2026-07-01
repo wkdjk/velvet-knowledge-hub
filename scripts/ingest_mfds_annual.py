@@ -15,18 +15,29 @@
 #   PYTHONPATH=. python scripts/ingest_mfds_annual.py --dry-run
 
 import argparse
-import json
-import os
 import sys
 from pathlib import Path
 
-import gspread
-from dotenv import load_dotenv
-from google.oauth2.service_account import Credentials
+# L-1: ensure repo root is on sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from scripts.sheets_auth import connect_sheets, resolve_sheet_id  # noqa: E402
+from scripts.ingest_common import build_dedup_key, rows_to_append  # noqa: E402
 
 REPO_ROOT = Path(__file__).parent.parent
 TARGET_TAB = "VTW_Trade_Monthly"
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+
+
+def load_existing_keys(worksheet) -> tuple[set, int]:
+    """
+    Read all rows from the worksheet once and return a set of dedup keys.
+
+    L-4: get_all_records() is called exactly once — never inside a loop.
+    Not in ingest_common.py — every ingest script defines its own thin wrapper
+    around build_dedup_key() since it needs a live worksheet handle.
+    """
+    existing_rows = worksheet.get_all_records()
+    return {build_dedup_key(r) for r in existing_rows}, len(existing_rows)
 
 # ---------------------------------------------------------------------------
 # Data — transcribed from 표 6-3-8, 2025 MFDS Food & Drug Statistical Yearbook
@@ -86,38 +97,16 @@ def main() -> None:
     print("ingest_mfds_annual.py — MFDS annual deer velvet import value")
     print(f"  dry-run: {args.dry_run}")
 
-    load_dotenv(REPO_ROOT / ".env")
-    sheet_id = os.environ.get("VKH_SHEET_ID", "").strip()
-    sa_json_raw = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
-
-    if not sheet_id or not sa_json_raw:
-        print("ERROR: VKH_SHEET_ID or GOOGLE_SERVICE_ACCOUNT_JSON not set.", file=sys.stderr)
-        sys.exit(1)
-
-    sa_info = json.loads(sa_json_raw)
-    creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
-    gc = gspread.authorize(creds)
-    sheet = gc.open_by_key(sheet_id)
+    sheet_id = resolve_sheet_id()
+    sheet = connect_sheets(sheet_id)
     ws = sheet.worksheet(TARGET_TAB)
 
     headers = ws.row_values(1)
-    existing = ws.get_all_records()
-    existing_keys = {
-        (str(r.get("date", "")), str(r.get("series", "")), str(r.get("hs_code", "")), str(r.get("country", "")))
-        for r in existing
-    }
-
-    print(f"  existing rows in tab: {len(existing)}")
+    existing_keys, existing_count = load_existing_keys(ws)
+    print(f"  existing rows in tab: {existing_count}")
 
     new_rows = build_rows()
-    to_write = []
-    skipped = 0
-    for row in new_rows:
-        key = (row["date"], row["series"], row["hs_code"], row["country"])
-        if key in existing_keys:
-            skipped += 1
-        else:
-            to_write.append([row.get(h, "") for h in headers])
+    to_write, skipped = rows_to_append(new_rows, existing_keys, headers)
 
     print(f"  rows to write: {len(to_write)} | skipped (already exist): {skipped}")
 

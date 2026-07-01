@@ -71,6 +71,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.sheets_auth import _load_config, connect_sheets, resolve_sheet_id  # noqa: E402
+from scripts.ingest_common import _normalise_hs_code, build_dedup_key, rows_to_append  # noqa: E402
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -451,35 +452,12 @@ def parse_kstat_historical(directory: Path) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Dedup helpers
 # ---------------------------------------------------------------------------
-
-# L-15: Sheets coerces "0507.90" → float 507.9 at write time; str(507.9) = "507.9" ≠ "0507.90".
-# Normalise before dedup comparison.
-_FLOAT_TO_DOT: dict = {507.9: "0507.90", 510.0: "0510.00"}
-
-
-def _normalise_hs_code(raw) -> str:
-    if isinstance(raw, (int, float)):
-        return _FLOAT_TO_DOT.get(float(raw), str(raw))
-    return str(raw)
-
-
-def build_dedup_key(row: dict) -> tuple:
-    """
-    Return the dedup key tuple for a VTW_Trade_Monthly row.
-
-    L-10: key is (date, series, hs_code, country, unit) — five fields.
-    Five fields are required because:
-      - country: each country has its own row in the API response
-      - unit: each period/country/hs_code produces two rows (KG + USD_thousands)
-    L-9: hs_code is TEXT dot notation. L-15: normalise before comparison.
-    """
-    return (
-        str(row.get("date", "")),
-        str(row.get("series", "")),
-        _normalise_hs_code(row.get("hs_code", "")),
-        str(row.get("country", "")),
-        str(row.get("unit", "")),
-    )
+#
+# _normalise_hs_code, build_dedup_key, rows_to_append imported from
+# scripts.ingest_common (see H-2 fix, VKH audit 2026-07-01) — kstat's own key
+# field order (date, series, hs_code, country, unit) differs from
+# ingest_common's (date, series, hs_code, unit, country), but both are 5-tuples
+# of the same five values so set-membership dedup is unaffected.
 
 
 def load_existing_keys(worksheet) -> tuple[set, int]:
@@ -490,30 +468,6 @@ def load_existing_keys(worksheet) -> tuple[set, int]:
     """
     existing_rows = worksheet.get_all_records()
     return {build_dedup_key(r) for r in existing_rows}, len(existing_rows)
-
-
-def rows_to_append(
-    new_rows: list[dict],
-    existing_keys: set,
-    headers: list[str],
-) -> tuple[list[list], int]:
-    """
-    Filter new_rows to those not in existing_keys.
-
-    Returns (list_of_lists_for_gspread, skipped_count).
-    Each row is converted to a list matching the headers order.
-    """
-    to_write: list[list] = []
-    skipped = 0
-
-    for row in new_rows:
-        key = build_dedup_key(row)
-        if key in existing_keys:
-            skipped += 1
-            continue
-        to_write.append([row.get(h, "") for h in headers])
-
-    return to_write, skipped
 
 
 # ---------------------------------------------------------------------------

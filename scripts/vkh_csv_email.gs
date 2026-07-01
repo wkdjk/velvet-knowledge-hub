@@ -51,7 +51,7 @@ function triggerIngest() {
 
 var SHEET_ID = '1idbPiaK_Scd8znktn2cPutWP5Lg4azo1XBfXNyt5K2U';
 var TAB_NAME = 'VFI_Import_Records';
-var DATE_COLUMN = 'notification_date';  // column used for 90-day filter
+var DATE_COLUMN = 'date';  // column used for 90-day filter
 
 function doGet(e) {
   return ContentService
