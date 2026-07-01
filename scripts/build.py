@@ -446,8 +446,8 @@ def compute_kpis(sections: dict) -> dict:
                         delta_pct = (latest_rolling_kg - prior_rolling_kg) / prior_rolling_kg * 100
                         symbol = "▲" if delta_pct >= 0 else "▼"
                         kpi["nz_export_delta"] = f"{symbol} {abs(delta_pct):.1f}%"
-        except (ValueError, TypeError, ZeroDivisionError):
-            pass
+        except (ValueError, TypeError, ZeroDivisionError) as exc:
+            print(f"WARNING: nz_export_delta KPI computation failed — {exc}", file=sys.stderr)
 
     # --- KPI 1b: QIA Korea imports rolling 12-month (P2-D: for Box 1 redesign) ---
     # Compute rolling 12-month sum of QIA korea_quarantine KG rows.
@@ -486,8 +486,8 @@ def compute_kpis(sections: dict) -> dict:
                         f"{symbol} {abs(delta_pct):.1f}% vs "
                         f"{_MONTH_ABBR[end_month]} {end_year - 1}"
                     )
-        except (ValueError, TypeError, ZeroDivisionError):
-            pass
+        except (ValueError, TypeError, ZeroDivisionError) as exc:
+            print(f"WARNING: qia_rolling12m KPI computation failed — {exc}", file=sys.stderr)
 
     # --- KPI 2: Articles past 90 days (C-5e: changed from 30 to 90) -----------
     # C-5g fix: articles_90d must use the SAME predicate as the article list —
