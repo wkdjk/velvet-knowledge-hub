@@ -120,7 +120,8 @@ function doPost(e) {
     var today    = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
     var filename = 'import-records-' + today + '.csv';
 
-    var blob = Utilities.newBlob(csvString, 'text/csv', filename);
+    // BOM prefix so Excel opens the Korean text as UTF-8 instead of garbling it.
+    var blob = Utilities.newBlob('﻿' + csvString, 'text/csv', filename);
 
     // Send email with CSV attachment.
     GmailApp.sendEmail(
@@ -129,7 +130,7 @@ function doPost(e) {
       'Please find attached the MFDS import records for New Zealand deer velvet ' +
       'products entering the Korean market over the past 90 days. ' +
       'The file contains ' + filtered.length + ' records.',
-      { attachments: [blob] }
+      { attachments: [blob], name: 'Velvet Knowledge Hub' }
     );
 
     Logger.log('CSV emailed to ' + email + ' — ' + filtered.length + ' rows');
