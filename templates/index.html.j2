@@ -413,6 +413,11 @@
       .import-records-table tbody tr {
         display: table-row !important;
       }
+
+      /* C-13: print shows all article rows, not just the JS-paginated 3. */
+      #news-article-list li.article-entry {
+        display: flex !important;
+      }
     }
   </style>
 </head>
@@ -677,15 +682,19 @@
           {% set _ = publishable.append(row) %}
         {% endif %}
       {% endfor %}
+      {# C-13: most-recent-first so the default 3-row view shows the latest articles. #}
+      {% set publishable = publishable | sort(attribute="published_date", reverse=true) %}
 
       {% if publishable %}
         <p class="article-list-header">{{ publishable | length }} relevant article{{ 's' if publishable | length != 1 else '' }} — last 90 days</p>
-        <ul class="article-list" aria-label="Korea deer velvet relevant articles — last 90 days">
+        <ul class="article-list" id="news-article-list" aria-label="Korea deer velvet relevant articles — last 90 days">
           {% for article in publishable %}
             {# Column-swap schema (C-6a): 'title' = URL (href), 'url' = Korean title (anchor text). #}
             {# english_title shown if available; fall back to Korean title (article.url col).        #}
             {# Language badge (D-19) removed per C-8 spec.                                          #}
-            <li class="article-entry">
+            {# C-13: default 3 rows visible, "show more" reveals last 30 days — mirrors Section D import records pattern (see importShowMore/newsShowMore JS). #}
+            <li class="article-entry" data-date="{{ article.published_date | default('') }}"
+                style="{% if loop.index > 3 %}display:none{% endif %}">
               <div class="article-body">
                 <a class="article-title"
                    href="{{ article.title | default('#') }}"
@@ -707,6 +716,16 @@
             </li>
           {% endfor %}
         </ul>
+
+        <div class="table-controls" id="news-list-controls">
+          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+            <button class="show-more-btn" id="news-show-more-btn" type="button"
+                    onclick="newsShowMore(this)">Show more (in recent 30 days)</button>
+            <button class="show-more-btn" id="news-show-fewer-btn" type="button"
+                    style="display:none;"
+                    onclick="newsShowFewer(this)">Show fewer</button>
+          </div>
+        </div>
       {% else %}
         <div class="placeholder-card">
           <p class="placeholder-title">No relevant articles in the last 90 days.</p>
@@ -1399,6 +1418,64 @@
 }());
 </script>
 {% endif %}
+
+{# ── SECTION 2 — NEWS PULSE JS ─────────────────────────────────────────
+   C-13: default-3 / show-more(30 days) / show-fewer — same pattern as
+   Section D's importShowMore/importShowFewer below, window narrowed to
+   30 days per Commander spec (news moves faster than import records). #}
+<script>
+(function () {
+  'use strict';
+
+  var visibleCount = 3;
+  var windowDays = 30;
+
+  function getRows() {
+    var list = document.getElementById('news-article-list');
+    return list ? Array.prototype.slice.call(list.querySelectorAll('li.article-entry')) : [];
+  }
+
+  function updateButtons(expanded) {
+    var showMore  = document.getElementById('news-show-more-btn');
+    var showFewer = document.getElementById('news-show-fewer-btn');
+    if (!showMore || !showFewer) return;
+    showMore.style.display  = expanded ? 'none' : '';
+    showFewer.style.display = expanded ? '' : 'none';
+  }
+
+  window.newsShowMore = function () {
+    /* Show articles within `windowDays` of the most recent article (not today) */
+    var allRows = getRows();
+    var maxDate = new Date(0);
+    allRows.forEach(function (r) {
+      var d = new Date(r.getAttribute('data-date') || '');
+      if (!isNaN(d.getTime()) && d > maxDate) maxDate = d;
+    });
+    var cutoff = new Date(maxDate);
+    cutoff.setDate(cutoff.getDate() - windowDays);
+    var rows = getRows();
+    rows.forEach(function (r, i) {
+      if (i < visibleCount) return; /* already visible */
+      var dateStr = r.getAttribute('data-date');
+      var d = dateStr ? new Date(dateStr) : null;
+      if (d && !isNaN(d.getTime()) && d >= cutoff) {
+        r.style.display = '';
+      }
+    });
+    updateButtons(true);
+  };
+
+  window.newsShowFewer = function () {
+    var rows = getRows();
+    rows.forEach(function (r, i) {
+      r.style.display = i < visibleCount ? '' : 'none';
+    });
+    updateButtons(false);
+    var list = document.getElementById('news-article-list');
+    if (list) list.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+}());
+</script>
 
 {# ── SECTION D — IMPORT RECORDS JS ──────────────────────────────────── #}
 <script>
