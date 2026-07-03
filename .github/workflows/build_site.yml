@@ -62,12 +62,18 @@ jobs:
         run: playwright install --with-deps chromium
 
       - name: Generate PDF
+        # A1 fix (2026-07-03): render the freshly-built local docs/index.html,
+        # not the live GitHub Pages URL. The live URL still serves the
+        # *previous* build at this point in the workflow — docs/ has not been
+        # committed and Pages has not redeployed yet — so every PDF was one
+        # build cycle behind the site it shipped alongside. generate_pdf.py
+        # already supports a file:// URL via --url (see its own --url help text).
         # L-12: continue-on-error so HTML publish is not blocked by PDF failure.
         # The HTML site remains live even if Playwright rendering fails.
         continue-on-error: true
         env:
           PYTHONPATH: "."    # L-1: PYTHONPATH on every step
-        run: python scripts/generate_pdf.py --url "https://wkdjk.github.io/velvet-knowledge-hub/"
+        run: python scripts/generate_pdf.py --url "file://${{ github.workspace }}/docs/index.html"
 
       - name: Verify PDF file size
         # Build step audit: confirm the PDF was written and exceeds the minimum

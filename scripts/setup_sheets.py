@@ -33,6 +33,8 @@ import gspread
 from dotenv import load_dotenv
 from google.oauth2.service_account import Credentials
 
+from scripts.schema import KVN_ARTICLES_HEADERS  # A3 fix: single source of truth
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -119,20 +121,9 @@ VFI_PRICE_ANNUAL_HEADERS = [
 ]
 # Dedup key: (year, rank, product_name)
 
-KVN_ARTICLES_HEADERS = [
-    "article_id",
-    "title",
-    "url",
-    "content_hash",
-    "published_date",
-    "source",
-    "category",
-    "english_summary",
-    "ai_processed_at",
-    "include_on_site",
-    "crawled_at",
-    "english_title",  # C-8 P0b: English headline ≤12 words, written by classifier
-]
+# KVN_ARTICLES_HEADERS moved to scripts/schema.py (A3 fix, 2026-07-03) — this
+# was one of three independent copies of the same header list that had
+# drifted out of sync with collect_naver.py and classify_articles.py.
 # content_hash: SHA-256 of URL+title for cross-publication dedup
 # ai_processed_at: empty until AI classification runs
 # include_on_site: TRUE/FALSE
