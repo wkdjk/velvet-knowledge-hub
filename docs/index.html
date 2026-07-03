@@ -413,6 +413,11 @@
       .import-records-table tbody tr {
         display: table-row !important;
       }
+
+      /* C-13: print shows all article rows, not just the JS-paginated 3. */
+      #news-article-list li.article-entry {
+        display: flex !important;
+      }
     }
   </style>
 </head>
@@ -423,7 +428,7 @@
   <div class="page-wrapper">
     <h1>Velvet Knowledge Hub</h1>
     <p class="tagline">Korea deer velvet market intelligence for the New Zealand deer industry</p>
-    <p class="last-built caption">Last built: 2026-07-03</p>
+    <p class="last-built caption">Last built: 2026-07-04</p>
     <a class="pdf-download-btn" href="velvet-knowledge-hub.pdf" download>Download PDF</a>
   </div>
 </header>
@@ -18206,33 +18211,19 @@
       
         
       
+      
+      
 
       
         <p class="article-list-header">60 relevant articles — last 90 days</p>
-        <ul class="article-list" aria-label="Korea deer velvet relevant articles — last 90 days">
+        <ul class="article-list" id="news-article-list" aria-label="Korea deer velvet relevant articles — last 90 days">
           
             
             
             
-            <li class="article-entry">
-              <div class="article-body">
-                <a class="article-title"
-                   href="http://www.lawissue.co.kr/view.php?ud=20260521190353785204ead0791_12"
-                   target="_blank" rel="noopener noreferrer">Cheong Kwan Jang: Sales of Hwa-ae-rak and RXGIN to 20-somethings rise during Family Month</a>
-                <p class="article-summary">Chong Kun Dang reports increased purchases of its deer velvet-containing products Hwaaelak and RXGIN among consumers in their 20s during the Family Month promotional period. RXGIN Hongcheon Woong product combines red ginseng concentrate with deer velvet extract and other traditional ingredients in a low-calorie formulation.</p>
-              </div>
-              <div class="article-meta">
-                <span class="article-meta-date">2026-05-21</span>
-                
-                  <span class="article-meta-category">업계소식</span>
-                
-              </div>
-            </li>
-          
             
-            
-            
-            <li class="article-entry">
+            <li class="article-entry" data-date="2026-07-01"
+                style="">
               <div class="article-body">
                 <a class="article-title"
                    href="https://biz.chosun.com/industry/business_info/2026/07/01/FOJOFSMWYRDRLIPOKIHNFZ45MM/?utm_source=naver&utm_medium=original&utm_campaign=biz"
@@ -18250,7 +18241,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-30"
+                style="">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.econovill.com/news/articleView.html?idxno=743888"
@@ -18268,7 +18261,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-30"
+                style="">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.starnewskorea.com/sports/2026/06/30/2026063015232082478"
@@ -18286,7 +18281,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-30"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://magazine.hankyung.com/business/article/202606305681b"
@@ -18304,7 +18301,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-30"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.mdtoday.co.kr/news/articleView.html?idxno=602940"
@@ -18322,7 +18321,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-29"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.lawissue.co.kr/view.php?ud=20260629213929919817d053b9_12"
@@ -18340,7 +18341,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-29"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.thevaluenews.co.kr/news/view.php?idx=199701"
@@ -18358,7 +18361,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-29"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.etnews.com/20260626000281"
@@ -18376,7 +18381,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-29"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.wowtv.co.kr/NewsCenter/News/Read?articleId=A202606260438&t=NN"
@@ -18394,7 +18401,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-29"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.etoday.co.kr/news/view/2597707"
@@ -18412,7 +18421,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-28"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.samdailbo.com/news/articleView.html?idxno=266658"
@@ -18430,7 +18441,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-26"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.edaily.co.kr/news/newspath.asp?newsid=04592006645485656"
@@ -18448,7 +18461,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-26"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.mjmedi.com/news/articleView.html?idxno=62743"
@@ -18466,7 +18481,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-24"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.mt.co.kr/living/2026/06/25/2026062316574787531"
@@ -18484,7 +18501,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-24"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.metroseoul.co.kr/article/20260624500206"
@@ -18502,7 +18521,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-23"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.bokuennews.com/news/article.html?no=280259"
@@ -18520,7 +18541,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-23"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.hemophilia.co.kr/news/articleView.html?idxno=42764"
@@ -18538,7 +18561,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-22"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.joongang.co.kr/article/25438639"
@@ -18556,7 +18581,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-21"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.hani.co.kr/arti/opinion/column/1264551.html"
@@ -18574,7 +18601,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-20"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.kpanews.co.kr/news/articleView.html?idxno=537083"
@@ -18592,7 +18621,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-19"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.lawissue.co.kr/view.php?ud=202606191414296998f4ab64559d_12"
@@ -18610,7 +18641,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-18"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://news.unn.net/news/articleView.html?idxno=593667"
@@ -18628,7 +18661,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-18"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.segyebiz.com/newsView/20260618513306?OutUrl=naver"
@@ -18646,7 +18681,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-18"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://biz.heraldcorp.com/article/10774658?ref=naver"
@@ -18664,7 +18701,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-18"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://biz.heraldcorp.com/article/10773244?ref=naver"
@@ -18682,7 +18721,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-14"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.mk.co.kr/article/12073501"
@@ -18700,7 +18741,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-14"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.pharmnews.com/news/articleView.html?idxno=304177"
@@ -18718,7 +18761,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-12"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.ekn.kr/web/view.php?key=20260612023092741"
@@ -18736,7 +18781,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-12"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.mjmedi.com/news/articleView.html?idxno=62650"
@@ -18754,7 +18801,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-11"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.ibabynews.com/news/articleView.html?idxno=151983"
@@ -18772,7 +18821,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-11"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.hankookilbo.com/news/article/A2026060816490004388?did=NA"
@@ -18790,7 +18841,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-10"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.donga.com/news/Society/article/all/20260610/134087063/1"
@@ -18808,7 +18861,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-10"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.beyondpost.co.kr/view.php?ud=2026061014131444426cf2d78c68_30"
@@ -18826,7 +18881,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-09"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.akomnews.com/bbs/board.php?bo_table=news&wr_id=67403"
@@ -18844,7 +18901,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-09"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.joongangenews.com/news/articleView.html?idxno=524555"
@@ -18862,7 +18921,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-08"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.jndn.com/article.php?aid=1780909751433914047"
@@ -18880,7 +18941,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-08"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.sportschosun.com/life/2026-06-08/202606080100047170002910"
@@ -18898,7 +18961,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-06"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.financialpost.co.kr/news/articleView.html?idxno=261669"
@@ -18916,7 +18981,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-06"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://ent.sbs.co.kr/news/article.do?article_id=E10010317539&plink=ORI&cooper=NAVER"
@@ -18934,7 +19001,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-05"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.agrinet.co.kr/news/articleView.html?idxno=404781"
@@ -18952,7 +19021,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-05"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.chosun.com/national/welfare-medical/2026/06/05/YVVWV4EYZFHOPGOBJEJBMNFBL4/?utm_source=naver&utm_medium=referral&utm_campaign=naver-news"
@@ -18970,7 +19041,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-05"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.bokuennews.com/news/article.html?no=279217"
@@ -18988,7 +19061,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-03"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.kyongbuk.co.kr/news/articleView.html?idxno=4074515"
@@ -19006,7 +19081,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-03"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.yna.co.kr/view/AKR20260529151700518?input=1195m"
@@ -19024,7 +19101,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-01"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://news.kbs.co.kr/news/pc/view/view.do?ncd=8575495&ref=A"
@@ -19042,7 +19121,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-01"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.kookje.co.kr/news2011/asp/newsbody.asp?code=0700&key=20260602.22013000341"
@@ -19060,7 +19141,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-01"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.stardailynews.co.kr/news/articleView.html?idxno=537926"
@@ -19078,7 +19161,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-01"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.etnews.com/20260601000073"
@@ -19096,7 +19181,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-06-01"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://health.chosun.com/site/data/html_dir/2026/05/31/2026053101942.html"
@@ -19114,7 +19201,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-05-29"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.agrinet.co.kr/news/articleView.html?idxno=404578"
@@ -19132,7 +19221,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-05-29"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://biz.heraldcorp.com/article/10759627?ref=naver"
@@ -19150,7 +19241,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-05-29"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://biz.chosun.com/industry/business_info/2026/05/29/IPMQVONKN5EYDAMQK6KOCA573I/?utm_source=naver&utm_medium=original&utm_campaign=biz"
@@ -19168,7 +19261,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-05-29"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.getnews.co.kr/news/articleView.html?idxno=871164"
@@ -19186,7 +19281,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-05-29"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.munhwa.com/article/11592025?ref=naver"
@@ -19204,7 +19301,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-05-28"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://daily.hankooki.com/news/articleView.html?idxno=1371579"
@@ -19222,7 +19321,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-05-28"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.metroseoul.co.kr/article/20260528500323"
@@ -19240,7 +19341,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-05-28"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.yna.co.kr/view/AKR20260528086500017?input=1195m"
@@ -19258,7 +19361,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-05-28"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="https://www.sedaily.com/article/20049129?ref=naver"
@@ -19276,7 +19381,9 @@
             
             
             
-            <li class="article-entry">
+            
+            <li class="article-entry" data-date="2026-05-28"
+                style="display:none">
               <div class="article-body">
                 <a class="article-title"
                    href="http://www.press9.kr/news/articleView.html?idxno=77126"
@@ -19291,7 +19398,37 @@
               </div>
             </li>
           
+            
+            
+            
+            
+            <li class="article-entry" data-date="2026-05-21"
+                style="display:none">
+              <div class="article-body">
+                <a class="article-title"
+                   href="http://www.lawissue.co.kr/view.php?ud=20260521190353785204ead0791_12"
+                   target="_blank" rel="noopener noreferrer">Cheong Kwan Jang: Sales of Hwa-ae-rak and RXGIN to 20-somethings rise during Family Month</a>
+                <p class="article-summary">Chong Kun Dang reports increased purchases of its deer velvet-containing products Hwaaelak and RXGIN among consumers in their 20s during the Family Month promotional period. RXGIN Hongcheon Woong product combines red ginseng concentrate with deer velvet extract and other traditional ingredients in a low-calorie formulation.</p>
+              </div>
+              <div class="article-meta">
+                <span class="article-meta-date">2026-05-21</span>
+                
+                  <span class="article-meta-category">업계소식</span>
+                
+              </div>
+            </li>
+          
         </ul>
+
+        <div class="table-controls" id="news-list-controls">
+          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+            <button class="show-more-btn" id="news-show-more-btn" type="button"
+                    onclick="newsShowMore(this)">Show more (in recent 30 days)</button>
+            <button class="show-more-btn" id="news-show-fewer-btn" type="button"
+                    style="display:none;"
+                    onclick="newsShowFewer(this)">Show fewer</button>
+          </div>
+        </div>
       
 
     
@@ -26458,6 +26595,61 @@
 }());
 </script>
 
+
+
+<script>
+(function () {
+  'use strict';
+
+  var visibleCount = 3;
+  var windowDays = 30;
+
+  function getRows() {
+    var list = document.getElementById('news-article-list');
+    return list ? Array.prototype.slice.call(list.querySelectorAll('li.article-entry')) : [];
+  }
+
+  function updateButtons(expanded) {
+    var showMore  = document.getElementById('news-show-more-btn');
+    var showFewer = document.getElementById('news-show-fewer-btn');
+    if (!showMore || !showFewer) return;
+    showMore.style.display  = expanded ? 'none' : '';
+    showFewer.style.display = expanded ? '' : 'none';
+  }
+
+  window.newsShowMore = function () {
+    /* Show articles within `windowDays` of the most recent article (not today) */
+    var allRows = getRows();
+    var maxDate = new Date(0);
+    allRows.forEach(function (r) {
+      var d = new Date(r.getAttribute('data-date') || '');
+      if (!isNaN(d.getTime()) && d > maxDate) maxDate = d;
+    });
+    var cutoff = new Date(maxDate);
+    cutoff.setDate(cutoff.getDate() - windowDays);
+    var rows = getRows();
+    rows.forEach(function (r, i) {
+      if (i < visibleCount) return; /* already visible */
+      var dateStr = r.getAttribute('data-date');
+      var d = dateStr ? new Date(dateStr) : null;
+      if (d && !isNaN(d.getTime()) && d >= cutoff) {
+        r.style.display = '';
+      }
+    });
+    updateButtons(true);
+  };
+
+  window.newsShowFewer = function () {
+    var rows = getRows();
+    rows.forEach(function (r, i) {
+      r.style.display = i < visibleCount ? '' : 'none';
+    });
+    updateButtons(false);
+    var list = document.getElementById('news-article-list');
+    if (list) list.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+}());
+</script>
 
 
 <script>
