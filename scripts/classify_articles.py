@@ -35,6 +35,7 @@ import os
 import sys
 import time
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from pathlib import Path
 
 import anthropic
@@ -48,6 +49,7 @@ from gspread.utils import rowcol_to_a1
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.sheets_auth import _load_config, connect_sheets, resolve_sheet_id  # noqa: E402
+from scripts.schema import KVN_ARTICLES_HEADERS, verify_header  # noqa: E402
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -67,19 +69,21 @@ TARGET_TAB = "KVN_Articles"
 # Haiku model ID as specified in the brief.
 _HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
-# KVN_Articles column indices (0-based, from actual live sheet schema).
-# C-5g fix: original constants assumed collect_naver.py schema (12 columns)
-# but the live sheet has 11 columns in a different order.
-# Verified 2026-06-05 by reading ws.row_values(1) directly from the sheet.
+# KVN_Articles column indices (0-based) — must match schema.py KVN_ARTICLES_HEADERS,
+# the single source of truth for this tab (A3 fix, 2026-07-03).
+# Verified 2026-06-05 by reading ws.row_values(1) directly from the sheet;
+# verify_header() re-checks this at every run startup and warns on drift.
 #
-# Actual header row (0-based):
+# Header row (0-based):
 #   article_id(0) | title(1) | url(2) | content_hash(3) | published_date(4) |
 #   source(5) | category(6) | english_summary(7) | ai_processed_at(8) |
-#   include_on_site(9) | crawled_at(10)
+#   include_on_site(9) | crawled_at(10) | english_title(11)
 #
-# Columns used to read input for classification:
-_COL_TITLE_KO = 1       # 'title' column (B)
-_COL_DESCRIPTION = None  # no separate description column; use title only
+# Note: input columns (title_ko, description) are read by header NAME, not
+# index, at each call site — see _classify_article_async() and the sync loop
+# in main(), which both read row.get("url") / row.get("content_hash").
+# A3 cleanup: removed unused _COL_TITLE_KO / _COL_DESCRIPTION index constants
+# — neither was referenced anywhere else in this file.
 # Columns written by the classifier (0-based, A=0):
 _COL_CATEGORY = 6        # 'category' (G)
 _COL_ENGLISH_SUMMARY = 7  # 'english_summary' (H)
@@ -96,6 +100,19 @@ _VALID_CATEGORIES = frozenset([
     "규제정책", "무역시장", "건강제품", "수입유통", "업계소식", "기타"
 ])
 
+# Near-duplicate clustering (Task 2, 2026-07-03): the same press release
+# covered by multiple outlets gets a different URL and content_hash per
+# collect_naver.py's exact-hash dedup — content_hash dedup cannot catch this
+# by design (see classifier_guidance.md §7: cluster_id was intentionally
+# dropped from KVN's design, but that assumed exact-hash dedup would catch
+# same-story republication, which it does not for multi-outlet coverage).
+# ponytail: difflib.SequenceMatcher title-ratio + date window is a rough
+# heuristic, not semantic dedup — upgrade to embeddings only if outlets with
+# very differently worded headlines for the same story are observed slipping
+# through.
+_CLUSTER_DATE_WINDOW_DAYS = 3
+_CLUSTER_TITLE_RATIO = 0.72
+
 # Rate limit pause between individual Claude API calls (brief specifies 0.5s).
 _API_SLEEP_SECONDS = 0.5
 
@@ -109,6 +126,11 @@ _ASYNC_CONCURRENCY = 3
 _ASYNC_RPM_LIMIT = 40
 
 # System prompt for Haiku classification.
+# A2b fix (2026-07-03): enriched with explicit include/exclude criteria and
+# worked examples from Domain_Knowledge/classifier_guidance.md §2 and §6.
+# Previously a one-line relevance instruction let celebrity-reminiscence and
+# clinic-treatment articles (녹용 mentioned only in passing) score as
+# include_on_site=true. CaptainQ-approved per classifier_guidance.md §8.
 _SYSTEM_PROMPT = (
     "You are a Korean deer velvet industry news classifier. "
     "Given a Korean news article title and description, return JSON with four fields:\n"
@@ -117,6 +139,25 @@ _SYSTEM_PROMPT = (
     "- english_summary: 1-2 sentence English summary of the article\n"
     "- include_on_site: true if this article is relevant to the NZ deer velvet "
     "trade/import/market in Korea; false if it is off-topic\n"
+    "\n"
+    "Relevance means Korean deer velvet (녹용) import, trade, price, market share, "
+    "regulation, or MFDS action is the PRIMARY subject — not a passing mention.\n"
+    "\n"
+    "Set include_on_site=true for:\n"
+    "- Deer velvet import/price/trade volume/market share/regulation/MFDS action as the central topic.\n"
+    "- Foreign-origin velvet (Russia, China, Kazakhstan) — affects NZ's competitive position.\n"
+    "- Animal-welfare/동물권 critique of deer velvet farming — regulatory and reputational risk.\n"
+    "- Product launches, health research, or traditional medicine where deer velvet is the primary subject.\n"
+    "\n"
+    "Set include_on_site=false for:\n"
+    "- 녹용 used only as a metaphor for energy/vitality (K-pop, celebrity reminiscence, political speech).\n"
+    "- Clinic/hospital treatment articles where 녹용 is one ingredient mentioned in passing, not the subject.\n"
+    "- 사슴뿔 (antlers) in décor, wildlife, museum, or café-interior contexts — 사슴뿔 is NOT 녹용, treat as a "
+    "distinct exclusion signal even though the words look related.\n"
+    "- 녹용 listed as one ingredient among many in a general 보양식 (health food) list, with no trade/import angle.\n"
+    "- If the headline mentions 녹용 but the body reveals it is a gimmick (product name, event name, unrelated "
+    "context) — score on the body's actual subject, not the headline.\n"
+    "\n"
     "Return ONLY valid JSON. No explanation."
 )
 
@@ -369,6 +410,141 @@ async def _classify_all_async(
 
 
 # ---------------------------------------------------------------------------
+# Near-duplicate clustering (Task 2, 2026-07-03)
+# ---------------------------------------------------------------------------
+
+def find_duplicate_clusters(
+    rows: list[tuple[int, dict]],
+) -> list[int]:
+    """
+    Group rows whose Korean title is a near-match within a short date window,
+    and return the sheet row numbers of every NON-canonical row in a cluster
+    (i.e. the rows that should be suppressed from display).
+
+    rows: list of (sheet_row_num, row_dict) — row_dict must have 'url'
+    (Korean title, per the live column-swap — see module header) and
+    'published_date'. Only rows with include_on_site already true are worth
+    clustering; the caller filters before calling this.
+
+    Clustering rule: two articles are the same story if their titles are
+    within _CLUSTER_DATE_WINDOW_DAYS of each other AND
+    difflib.SequenceMatcher(title_a, title_b).ratio() >= _CLUSTER_TITLE_RATIO.
+    Within a cluster, the earliest-published row is canonical (kept); every
+    other row's sheet_row_num is returned for suppression.
+
+    O(n^2) title comparison — acceptable at KVN_Articles' current few-hundred
+    rows/week scale (this only ever runs over include_on_site=true rows, a
+    small fraction of total rows). ponytail: revisit if the relevant-row
+    count per run grows past ~2,000.
+    """
+    # Sort by published_date so the date-window check can short-circuit.
+    def _date_key(item: tuple[int, dict]) -> str:
+        return str(item[1].get("published_date", ""))
+
+    sorted_rows = sorted(rows, key=_date_key)
+
+    duplicate_row_nums: list[int] = []
+    clustered: set[int] = set()  # sheet_row_num already assigned to a cluster
+
+    for i, (row_num_a, row_a) in enumerate(sorted_rows):
+        if row_num_a in clustered:
+            continue
+        title_a = str(row_a.get("url", "")).strip()
+        date_a = _parse_iso_date(str(row_a.get("published_date", "")))
+        if not title_a or date_a is None:
+            continue
+
+        cluster_members = [(row_num_a, row_a, date_a)]
+
+        for row_num_b, row_b in sorted_rows[i + 1:]:
+            if row_num_b in clustered:
+                continue
+            date_b = _parse_iso_date(str(row_b.get("published_date", "")))
+            if date_b is None:
+                continue
+            if (date_b - date_a).days > _CLUSTER_DATE_WINDOW_DAYS:
+                break  # sorted by date — no later row can be within window either
+            title_b = str(row_b.get("url", "")).strip()
+            if not title_b:
+                continue
+            ratio = SequenceMatcher(None, title_a, title_b).ratio()
+            if ratio >= _CLUSTER_TITLE_RATIO:
+                cluster_members.append((row_num_b, row_b, date_b))
+
+        if len(cluster_members) > 1:
+            # Canonical = earliest published (first to break the story).
+            cluster_members.sort(key=lambda m: m[2])
+            for row_num, _row, _date in cluster_members[1:]:
+                duplicate_row_nums.append(row_num)
+                clustered.add(row_num)
+            clustered.add(cluster_members[0][0])
+
+    return duplicate_row_nums
+
+
+def _parse_iso_date(raw: str):
+    """Parse a YYYY-MM-DD(-prefixed) string to a date object, or None."""
+    from datetime import date as _date  # ponytail: local import, single call site
+    try:
+        return _date.fromisoformat(raw[:10])
+    except ValueError:
+        return None
+
+
+def run_clustering_pass(ws, dry_run: bool) -> int:
+    """
+    Read all include_on_site=TRUE rows, cluster near-duplicate titles, and
+    flip include_on_site to FALSE for every non-canonical row in a cluster.
+
+    Runs over the whole tab (not just this run's newly classified rows) —
+    duplicate coverage can arrive in separate collect_naver.py runs days
+    apart, within the clustering date window. Does not touch category,
+    english_summary, ai_processed_at, or english_title: a suppressed row
+    keeps its AI classification, it is only hidden from the site's article
+    list (which filters on include_on_site — see templates/index.html.j2).
+    Underlying rows are never deleted (matches the one-row-per-article
+    sheet design collect_naver.py's dedup relies on).
+
+    Returns the number of rows suppressed (0 on dry_run — reports only).
+    """
+    all_rows = ws.get_all_records()
+    included: list[tuple[int, dict]] = [
+        (idx + 2, row)
+        for idx, row in enumerate(all_rows)
+        if str(row.get("include_on_site", "")).strip().upper() == "TRUE"
+    ]
+
+    duplicate_row_nums = find_duplicate_clusters(included)
+
+    if not duplicate_row_nums:
+        print("  clustering: no near-duplicate stories found")
+        return 0
+
+    print(f"  clustering: {len(duplicate_row_nums)} duplicate rows found across "
+          f"{len(included)} include_on_site=TRUE rows")
+
+    if dry_run:
+        print(f"  [dry-run] would suppress rows: {duplicate_row_nums[:20]}"
+              f"{' ...' if len(duplicate_row_nums) > 20 else ''}")
+        return 0
+
+    cell_updates = [
+        {"range": rowcol_to_a1(row_num, _COL_INCLUDE_ON_SITE + 1), "values": [["FALSE"]]}
+        for row_num in duplicate_row_nums
+    ]
+    # Reuse the same chunk size as _write_results_to_sheets for consistency.
+    chunk_size = 200
+    for i in range(0, len(cell_updates), chunk_size):
+        chunk = cell_updates[i: i + chunk_size]
+        ws.batch_update(chunk, value_input_option="USER_ENTERED")
+        if i + chunk_size < len(cell_updates):
+            time.sleep(1.1)
+
+    print(f"  clustering: suppressed {len(duplicate_row_nums)} duplicate rows")
+    return len(duplicate_row_nums)
+
+
+# ---------------------------------------------------------------------------
 # Shared write-back helper
 # ---------------------------------------------------------------------------
 
@@ -510,6 +686,10 @@ def main() -> None:
         )
         sys.exit(1)
 
+    # A3 fix: fail loudly (not silently) if the live header has drifted
+    # from schema.py's KVN_ARTICLES_HEADERS.
+    verify_header(ws)
+
     # --- Read all rows once (L-4) ---------------------------------------------
     # get_all_records() returns list of dicts keyed by header row.
     all_rows = ws.get_all_records()
@@ -550,7 +730,11 @@ def main() -> None:
 
     if not unprocessed:
         print("  All rows already classified — nothing to do.")
-        print("articles_processed: 0 | written_to_sheets: 0 | errors: 0")
+        # Task 2: still run clustering — duplicate coverage can arrive in a
+        # separate collect_naver.py run after the story was already classified.
+        suppressed = run_clustering_pass(ws, dry_run=args.dry_run)
+        print(f"articles_processed: 0 | written_to_sheets: 0 | "
+              f"duplicates_suppressed: {suppressed} | errors: 0")
         sys.exit(0)
 
     # Apply --limit if set.
@@ -594,11 +778,17 @@ def main() -> None:
 
         written_to_sheets = _write_results_to_sheets(ws, results, processed_at_ts)
 
+        # Task 2: cluster near-duplicate stories across outlets after fresh
+        # classifications land, so newly written include_on_site rows are
+        # included in the clustering pass.
+        suppressed = run_clustering_pass(ws, dry_run=False)
+
         print()
         print(f"  DONE: {written_to_sheets} rows updated in '{TARGET_TAB}'.")
         print(
             f"articles_processed: {articles_processed} | "
             f"written_to_sheets: {written_to_sheets} | "
+            f"duplicates_suppressed: {suppressed} | "
             f"errors: {errors}"
         )
         return
@@ -657,11 +847,15 @@ def main() -> None:
 
     written_to_sheets = _write_results_to_sheets(ws, sync_results, processed_at_ts)
 
+    # Task 2: cluster near-duplicate stories across outlets.
+    suppressed = run_clustering_pass(ws, dry_run=False)
+
     print()
     print(f"  DONE: {written_to_sheets} rows updated in '{TARGET_TAB}'.")
     print(
         f"articles_processed: {articles_processed} | "
         f"written_to_sheets: {written_to_sheets} | "
+        f"duplicates_suppressed: {suppressed} | "
         f"errors: {errors}"
     )
 

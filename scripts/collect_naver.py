@@ -26,7 +26,7 @@ import os
 import re
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -39,6 +39,7 @@ import requests
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.sheets_auth import FULL_SCOPES, _load_config, connect_sheets, resolve_sheet_id  # noqa: E402
+from scripts.schema import KVN_ARTICLES_HEADERS, verify_header  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -56,26 +57,12 @@ _HTML_ENTITIES = {
     "&#39;": "'",
 }
 
-# Schema for the KVN_Articles tab — column order must match the Sheets header row.
-# OI-3: added source_domain — publisher domain extracted from originallink
-# (e.g. "yna.co.kr", "hankyung.com"). Populated for all new rows; existing
-# rows are not backfilled. Do NOT backfill — the 5,586 existing rows keep
-# empty source_domain by design.
-KVN_ARTICLES_HEADER = [
-    "content_hash",
-    "url",
-    "title_ko",
-    "description",
-    "published_date",
-    "source_name",
-    "source_type",
-    "keyword_matched",
-    "source_domain",
-    "category",
-    "english_summary",
-    "ai_processed_at",
-    "include_on_site",
-]
+# A3 fix (2026-07-03): KVN_ARTICLES_HEADER used to be a second, independent
+# copy of the tab schema that had drifted from the live sheet (13 columns,
+# wrong order, columns with no home — source_type, keyword_matched,
+# source_domain). schema.py's KVN_ARTICLES_HEADERS is now the only copy;
+# imported below as KVN_ARTICLES_HEADER for this file's existing call sites.
+KVN_ARTICLES_HEADER = KVN_ARTICLES_HEADERS
 
 # Schema for the _keywords tab.
 KEYWORDS_HEADER = ["term", "type", "language"]
@@ -310,43 +297,72 @@ def dedup_against_sheet(
 
 def read_existing_hashes(sheet) -> set[str]:
     """
-    Read the KVN_Articles tab once (L-4). Extract all content_hash values.
+    Read the KVN_Articles tab once (L-4). Extract all known dedup-hash values.
+
+    Root-cause fix (A3, 2026-07-03): this used to read the 'content_hash'
+    column, but rows_to_write() below was writing the hash into 'article_id'
+    (a pre-existing bug — see that function's docstring). Reading the wrong
+    column meant dedup never matched a freshly computed hash against
+    anything, so every run re-added every article already in the sheet.
+    'article_id' is where the hash has actually landed for all 8,700+ live
+    rows; read from there.
     Returns an empty set if the tab is missing or has no rows.
     """
     articles_ws = _get_or_create_worksheet(sheet, "KVN_Articles", KVN_ARTICLES_HEADER)
 
     # L-4: single bulk read.
     rows = articles_ws.get_all_records()
-    hashes = {str(r.get("content_hash", "")) for r in rows if r.get("content_hash")}
+    hashes = {str(r.get("article_id", "")) for r in rows if r.get("article_id")}
     print(f"  existing KVN_Articles rows: {len(rows)} | known hashes: {len(hashes)}")
     return hashes
 
 
 def rows_to_write(articles: list[dict]) -> list[list]:
     """
-    Convert article dicts to ordered rows matching KVN_ARTICLES_HEADER.
-    AI columns (category, english_summary, ai_processed_at, include_on_site) are blank.
+    Convert article dicts to ordered rows matching KVN_ARTICLES_HEADERS
+    (schema.py) — the real live sheet column order.
 
-    OI-3: source_domain is populated from originallink domain (e.g. "yna.co.kr").
-    This identifies the publishing media company, not the search platform.
-    Only new rows receive source_domain — existing 5,586 rows are not backfilled.
+    Root-cause fix (A3, 2026-07-03): the previous version built rows in this
+    file's own (wrong, drifted) 13-column order and appended positionally.
+    gspread's append_rows() has no knowledge of header names — it just fills
+    columns left to right — so every column past 'source' silently landed
+    one or more columns off from where its name said it would. This is the
+    origin of the "column-swap" live-sheet state classify_articles.py has
+    been working around since C-5h (title=URL, url=Korean title,
+    content_hash=description are not the intended layout, they are this bug).
+
+    Fixed mapping (matches the real 12-column header, and matches what
+    classify_articles.py already reads from each of these columns):
+      article_id      <- content_hash (the computed dedup hash)
+      title           <- article URL
+      url             <- Korean title text
+      content_hash    <- description (classify_articles.py already reads
+                          this column as the description passed to Haiku)
+      published_date, source <- as collected
+      category / english_summary / ai_processed_at / include_on_site /
+        english_title <- blank, filled by classify_articles.py
+      crawled_at      <- ISO collection timestamp (previously never written)
+
+    'source_type', 'keyword_matched', 'source_domain' have no column in the
+    live schema and are no longer written — they were being silently
+    misplaced into other columns before this fix.
     """
+    crawled_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     output_rows = []
     for a in articles:
         row = [
-            a.get("content_hash", ""),
-            a.get("url", ""),
-            a.get("title_ko", ""),
-            a.get("description", ""),
+            a.get("content_hash", ""),   # article_id
+            a.get("url", ""),            # title
+            a.get("title_ko", ""),       # url
+            a.get("description", ""),    # content_hash
             a.get("published_date", ""),
-            a.get("source_name", ""),
-            "naver_api",          # source_type — fixed for this script
-            a.get("keyword_matched", ""),
-            a.get("source_domain", ""),  # OI-3: publisher domain from originallink
-            "",                   # category — filled by B-9
-            "",                   # english_summary — filled by B-9
-            "",                   # ai_processed_at — filled by B-9
-            "",                   # include_on_site — filled by B-9
+            a.get("source_name", ""),    # source
+            "",                          # category — filled by classify_articles.py
+            "",                          # english_summary
+            "",                          # ai_processed_at
+            "",                          # include_on_site
+            crawled_at,
+            "",                          # english_title
         ]
         output_rows.append(row)
     return output_rows
@@ -417,6 +433,11 @@ def main() -> None:
     sheet = connect_sheets(sheet_id, scopes=FULL_SCOPES)
     client_id, client_secret = get_naver_credentials()
     print(f"  sheet: {sheet.title} ({sheet_id})")
+
+    # A3 fix: fail loudly (not silently) if the live header has drifted
+    # from schema.py's KVN_ARTICLES_HEADERS.
+    articles_ws = _get_or_create_worksheet(sheet, "KVN_Articles", KVN_ARTICLES_HEADER)
+    verify_header(articles_ws)
 
     # --- Keywords -------------------------------------------------------------
     keywords = read_keywords(sheet, limit=args.limit)

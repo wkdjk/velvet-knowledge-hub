@@ -63,6 +63,35 @@ _IMPORT_INTELLIGENCE_CSV_HEADERS = [
 
 IMPORT_INTELLIGENCE_CSV = DOWNLOADS_DIR / "import_intelligence.csv"
 
+# Public display-name lookup (Task 1, 2026-07-03): importer_en carries
+# internal memo aliases inherited from the VFI predecessor project (e.g.
+# "WooSung (Mr Bang)") that were never meant to be public — they name the
+# importer's individual contact, visible to the importer themselves on a
+# public GitHub Pages site. Keyed by the raw importer_en value (including
+# both spelling variants seen in the live sheet); any value not listed here
+# falls through unchanged via _display_name() below — this only strips known
+# nicknames, it never hides a company with no entry.
+_IMPORTER_DISPLAY_NAMES: dict[str, str] = {
+    "WooSung (Mr Bang)": "WooSung",
+    "WooSung (Mr. Bang)": "WooSung",
+    "YongBo (Mr. Woljin Kim)": "YongBo",
+    "Taeahn (Mr. Ahn)": "Taeahn",
+    "MyungGa (Mr.Lee in Daegu)": "MyungGa",
+    "SamBo (Mr. Kang in Busan)": "SamBo",
+    "Su Food (Mr. Choi)": "Su Food",
+    "Bio Dot (Han Dong Herb)": "Bio Dot",
+    "KVIE (Alex, HanPure)": "KVIE",
+}
+
+
+def _display_name(raw: str) -> str:
+    """Return the public display name for an importer_en value.
+
+    Falls back to the raw value unchanged if it has no lookup entry —
+    strips known nicknames only, never hides unmapped data.
+    """
+    return _IMPORTER_DISPLAY_NAMES.get(raw, raw)
+
 # Column order for the news_pulse CSV export.
 # Column order for the news_pulse CSV export.
 # C-6a: updated to match the *actual* live KVN_Articles tab column names
@@ -601,7 +630,7 @@ def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date
         display_row["_display_origin"] = row.get("country_origin_en") or "—"
         display_row["_display_export_country"] = row.get("country_export_en") or "—"
         display_row["_display_exporter"] = row.get("exporter_en") or "—"
-        display_row["_display_importer"] = (
+        display_row["_display_importer"] = _display_name(
             row.get("importer_en") or row.get("importer") or row.get("importer_ko") or "—"
         )
         display_row["_display_product"] = (
@@ -1655,10 +1684,14 @@ def _write_import_intelligence_csv(sections: dict) -> None:
         )
         writer.writeheader()
         # Apply display fallbacks before writing so CSV matches dashboard.
+        # Task 1: strip internal nicknames from importer/importer_en — same
+        # lookup as the template's _display_importer, applied here too since
+        # the CSV is a separate export path with its own raw-value columns.
         rows_out = []
         for row in all_records:
             out = dict(row)
-            out["importer"] = row.get("importer") or row.get("importer_ko") or ""
+            out["importer"] = _display_name(row.get("importer") or row.get("importer_ko") or "")
+            out["importer_en"] = _display_name(row.get("importer_en") or "")
             out["product_en"] = row.get("product_en") or row.get("product_name") or ""
             rows_out.append(out)
         writer.writerows(rows_out)
