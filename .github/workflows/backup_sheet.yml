@@ -1,0 +1,57 @@
+name: Backup sheet
+
+on:
+  schedule:
+    - cron: '0 3 * * 0'   # Sunday 03:00 UTC (12:00 KST) — distinct from build_site.yml's Monday 02:00 UTC
+  workflow_dispatch:        # allow manual trigger
+
+permissions:
+  contents: write           # needed to commit CSVs to the backup branch
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # need full history to fetch/create the backup branch
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run sheet backup
+        env:
+          PYTHONPATH: "."    # L-1: PYTHONPATH on every step
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          VKH_SHEET_ID: ${{ secrets.VKH_SHEET_ID }}
+        run: python scripts/backup_sheet.py
+
+      - name: Commit CSVs to backup branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p /tmp/backup_csvs
+          cp backup/*.csv /tmp/backup_csvs/
+          git fetch origin backup 2>/dev/null || true
+          if git rev-parse --verify origin/backup >/dev/null 2>&1; then
+            git switch backup
+          else
+            git switch --orphan backup
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+          mkdir -p backup
+          cp /tmp/backup_csvs/*.csv backup/
+          git add -f backup/
+          if git diff --staged --quiet; then
+            echo "No changes to back up."
+            exit 0
+          fi
+          git commit -m "chore(backup): sheet snapshot $(date -u +%Y-%m-%d)"
+          git push origin backup
