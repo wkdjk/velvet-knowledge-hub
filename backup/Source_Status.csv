@@ -1,0 +1,7 @@
+source_id,owner_email,update_frequency,last_updated,freshness_days,public_source_note
+nz_export,seouldesk.help@gmail.com,monthly,2026-05-29,45,Stats NZ public data
+korea_quarantine,seouldesk.help@gmail.com,monthly,,60,QIA public data
+kstat_api,automated,monthly,,45,KSTAT API public data
+vfi_import_records,seouldesk.help@gmail.com,quarterly,,120,MFDS 수입식품 정보마루
+vfi_price_annual,seouldesk.help@gmail.com,annually,,365,MFDS annual price report
+kvn_articles,automated,weekly,,7,Naver News API
