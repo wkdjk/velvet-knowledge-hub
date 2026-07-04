@@ -701,13 +701,23 @@ def run_canonical_succession(ws, dry_run: bool) -> int:
     this script's OWN suppression decisions; it is unrelated to a human
     switching a canonical off by hand.
 
+    Bug fix (2026-07-04, first live run): pre-C-13 duplicate-insert debt
+    means multiple physical rows can share one article_id (collect_naver.py's
+    content_hash dedup was broken before the 2026-07-03 fix; existing
+    duplicate rows were never retroactively cleaned up — one group observed
+    live had 26 copies of the same story, only one of them TRUE). A single
+    arbitrary-row lookup by article_id could land on a stale FALSE decoy
+    copy instead of the genuine TRUE row, wrongly declaring a still-visible
+    canonical "manually suppressed" and promoting a mate that duplicated a
+    story already live on the site. Fixed by checking ALL rows sharing the
+    canonical's article_id for ANY currently-TRUE row, not one arbitrary row.
+
     Returns the number of rows promoted (0 on dry_run — reports only).
     """
     all_rows = ws.get_all_records()
-    by_article_id = {
-        str(row.get("article_id", "")): (idx + 2, row)
-        for idx, row in enumerate(all_rows)
-    }
+    rows_by_article_id: dict[str, list[tuple[int, dict]]] = {}
+    for idx, row in enumerate(all_rows):
+        rows_by_article_id.setdefault(str(row.get("article_id", "")), []).append((idx + 2, row))
 
     mates_by_canonical: dict[str, list[tuple[int, dict]]] = {}
     for idx, row in enumerate(all_rows):
@@ -720,12 +730,16 @@ def run_canonical_succession(ws, dry_run: bool) -> int:
     now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     for canonical_id, mates in mates_by_canonical.items():
-        canonical_entry = by_article_id.get(canonical_id)
-        if canonical_entry is None:
+        canonical_rows = rows_by_article_id.get(canonical_id, [])
+        if not canonical_rows:
             continue  # dangling pointer — canonical row missing; leave alone
-        canonical_row_num, canonical_row = canonical_entry
-        if str(canonical_row.get("include_on_site", "")).strip().upper() != "FALSE":
-            continue  # canonical still visible — nothing to do
+        canonical_row_num = canonical_rows[0][0]  # for logging only — may be any of several physical rows
+        still_visible = any(
+            str(row.get("include_on_site", "")).strip().upper() == "TRUE"
+            for _row_num, row in canonical_rows
+        )
+        if still_visible:
+            continue  # canonical still visible (via some physical row sharing this article_id) — nothing to do
 
         suppressed_mates = [
             (row_num, row) for row_num, row in mates

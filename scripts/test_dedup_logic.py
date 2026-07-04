@@ -14,7 +14,10 @@
 #   3. run_canonical_succession — full pass against a fake in-memory
 #      worksheet (no LLM involved in this function, so it's fully testable
 #      offline): manual-suppression promotion + multi-mate repointing.
-#   4. run_semantic_clustering_pass — full pass against a fake worksheet AND
+#   4. run_canonical_succession — duplicate-article_id regression (bug found
+#      on the first live run, 2026-07-04): multiple physical rows sharing
+#      one article_id must not cause a false "canonical was suppressed".
+#   5. run_semantic_clustering_pass — full pass against a fake worksheet AND
 #      a fake Anthropic client (always reports "match: 1"): same-batch
 #      matching (Task 1a) and manual_override protection (Task 1, Part B §c).
 
@@ -90,14 +93,14 @@ def demo() -> None:
     assert _within_cluster_window(date(2026, 5, 28), date(2026, 5, 31)) is True   # 3 days, inclusive
     assert _within_cluster_window(date(2026, 5, 28), date(2026, 6, 1)) is False   # 4 days
     assert _within_cluster_window(date(2026, 6, 1), date(2026, 5, 28)) is False   # order-independent
-    print("  [1/4] _within_cluster_window: PASS")
+    print("  [1/5] _within_cluster_window: PASS")
 
     # --- 2. fallback ratio match --------------------------------------------
     idx = _fallback_ratio_match("조아제약, 몽진환 마인 출시", ["조아제약, 몽진환 마인 신제품 출시"])
     assert idx == 0, "near-verbatim titles should match under the strict fallback threshold"
     idx = _fallback_ratio_match("조아제약 신제품 출시", ["완전히 다른 뉴스 헤드라인입니다"])
     assert idx is None, "unrelated titles should not match"
-    print("  [2/4] _fallback_ratio_match: PASS")
+    print("  [2/5] _fallback_ratio_match: PASS")
 
     # --- 3. canonical succession --------------------------------------------
     # Cluster: article_id "A" (canonical, manually suppressed by a human),
@@ -124,9 +127,35 @@ def demo() -> None:
     # Idempotency: running again with succession already applied must be a no-op.
     promotions_again = run_canonical_succession(ws, dry_run=False)
     assert promotions_again == 0, "succession must not re-fire once a mate has already been promoted"
-    print("  [3/4] run_canonical_succession: PASS")
+    print("  [3/5] run_canonical_succession: PASS")
 
-    # --- 4. semantic clustering pass -----------------------------------------
+    # --- 4. duplicate-article_id regression (2026-07-04 live bug) -----------
+    # "X" has TWO physical rows sharing article_id "X" — a decoy copy (FALSE,
+    # never touched by dedup, e.g. pre-C-13 duplicate-insert debt) and the
+    # genuine canonical (TRUE). "Y" is a real, distinct story wrongly judged
+    # a duplicate of "X" and correctly suppressed by clustering. Succession
+    # must see that SOME row with article_id "X" is still TRUE and do
+    # nothing — promoting "Y" here would surface a duplicate on the site.
+    rows_dup_id = [
+        {"article_id": "X", "url": "decoy copy, never live", "published_date": "2026-05-20",
+         "include_on_site": "FALSE", "duplicate_of_article_id": "", "dedup_judged_at": ""},
+        {"article_id": "X", "url": "genuine canonical, still live", "published_date": "2026-05-28",
+         "include_on_site": "TRUE", "duplicate_of_article_id": "none", "dedup_judged_at": "2026-05-28T00:00:00Z"},
+        {"article_id": "Y", "url": "distinct story, correctly suppressed", "published_date": "2026-05-29",
+         "include_on_site": "FALSE", "duplicate_of_article_id": "X", "dedup_judged_at": "2026-05-29T00:00:00Z"},
+    ]
+    ws_dup_id = _FakeWorksheet(rows_dup_id)
+    promotions_dup_id = run_canonical_succession(ws_dup_id, dry_run=False)
+    assert promotions_dup_id == 0, (
+        f"expected 0 promotions when the canonical is still TRUE via another "
+        f"physical row sharing its article_id, got {promotions_dup_id}"
+    )
+    result_dup_id = ws_dup_id.get_all_records()
+    y_row = next(r for r in result_dup_id if r["url"] == "distinct story, correctly suppressed")
+    assert y_row["include_on_site"] == "FALSE", "correctly-suppressed duplicate must not be resurrected"
+    print("  [4/5] run_canonical_succession (duplicate article_id): PASS")
+
+    # --- 5. semantic clustering pass -----------------------------------------
     # D (2026-05-28): arrives first in this pass, no candidates yet — becomes
     #   canonical (settled) before E or F are processed (Task 1a requires
     #   ascending published_date order to make this deterministic).
@@ -156,7 +185,7 @@ def demo() -> None:
     assert result["E"]["duplicate_of_article_id"] == "D"
     assert result["F"]["include_on_site"] == "TRUE", "manual_override=TRUE must block suppression"
     assert result["F"]["duplicate_of_article_id"] == "D", "verdict is still cached even when not applied"
-    print("  [4/4] run_semantic_clustering_pass (Task 1a + manual_override): PASS")
+    print("  [5/5] run_semantic_clustering_pass (Task 1a + manual_override): PASS")
 
     print("ALL CHECKS PASSED")
 
