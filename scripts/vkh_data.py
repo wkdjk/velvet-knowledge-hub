@@ -209,6 +209,18 @@ def load_all_tabs(sheet, config: dict) -> dict:
             ws = all_worksheets[tab_name]
             # L-4: single bulk read — never call the API inside a row loop.
             rows = ws.get_all_records()
+            # L-DATE-NORMALISE: normalise "date" once, for every row, at the
+            # single point all rows enter the pipeline. Historical ingest
+            # runs (pre-fix) wrote unpadded "YYYY-M" dates for some rows
+            # (VTW_Trade_Monthly); every date-keyed aggregation downstream
+            # (compute_kpis, prepare_chart_data helpers) sorts/keys by this
+            # string, so an unpadded stray sorts out of chronological order
+            # and corrupts "latest month" lookups. Previously patched in only
+            # one call site (_aggregate_nz_by_destination, "R-4") — fixing
+            # here covers every current and future consumer of tab_data.
+            for row in rows:
+                if row.get("date"):
+                    row["date"] = _normalise_date_str(str(row["date"]))
             tab_data[tab_name] = rows
         except gspread.exceptions.APIError as exc:
             print(
