@@ -109,7 +109,7 @@
       font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
     }
 
-    /* C-12f: Section 3 triangulation components */
+    /* C-12f: Section 3 triangulation components (renumbered to section 2 in C-14) */
     .triangulation-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -122,6 +122,22 @@
       border: 1px solid var(--border);
       border-left: 3px solid var(--accent);
       padding: 16px 18px;
+    }
+
+    /* C-14: headline card — promoted "NZ supply direct vs indirect" analysis,
+       full-width and visually heavier than the supporting grid cards below it. */
+    .triangulation-headline {
+      margin-top: 16px;
+      border-left-width: 5px;
+      padding: 20px 24px;
+    }
+
+    .triangulation-headline h3 {
+      font-size: 1.0625rem;
+    }
+
+    .triangulation-headline .triangulation-table {
+      max-width: 420px;
     }
 
     .triangulation-card h3 {
@@ -531,7 +547,7 @@
   <div class="page-wrapper">
     <h1>Velvet Knowledge Hub</h1>
     <p class="tagline">Korea deer velvet market intelligence for the New Zealand deer industry</p>
-    <p class="last-built caption">Last built: 2026-07-04</p>
+    <p class="last-built caption">Last built: 2026-07-05</p>
     <a class="pdf-download-btn" href="velvet-knowledge-hub.pdf" download>Download PDF</a>
   </div>
 </header>
@@ -577,8 +593,8 @@
 <nav class="page-wrapper section-nav" aria-label="Dashboard sections">
   <ul class="nav-list">
     <li><a href="#section-1">1. Basic trade statistics</a></li>
-    <li><a href="#section-2">2. News pulse</a></li>
-    <li><a href="#section-3">3. Trade triangulation</a></li>
+    <li><a href="#section-2">2. Trade triangulation</a></li>
+    <li><a href="#section-3">3. News pulse</a></li>
     <li><a href="#section-4">4. Import records</a></li>
     <li><a href="#section-5">5. Trade reference</a></li>
   </ul>
@@ -744,12 +760,131 @@
   </section>
 
   
-  
   <section id="section-2">
 
     <div class="section-header">
       <div class="section-header-left">
-        <h2>2. News pulse</h2>
+        <h2>2. Trade triangulation</h2>
+      </div>
+    </div>
+
+    <p class="source-footnote">The question only this site's combined sources can answer: how much NZ-origin velvet actually reaches Korea. Combines Korea customs (KSTAT), QIA quarantine, Stats NZ export, and a manually-maintained KPTA pharmaceutical estimate — an answer no single official source gives alone. Every derived figure below shows its formula and is labelled an estimate.</p>
+
+    
+    
+
+    
+
+    
+    <div class="triangulation-card triangulation-headline">
+      <h3>NZ supply to Korea — direct vs indirect<span class="estimate-badge">Estimate</span></h3>
+      
+      
+        <table class="triangulation-table" style="margin-top:2px;">
+          <tbody>
+            <tr><td style="text-align:left; font-family:inherit;">Direct to Korea</td><td>40.6 t</td></tr>
+            <tr><td style="text-align:left; font-family:inherit;">Via China (indirect route)</td><td>439.0 t</td></tr>
+            <tr><td style="text-align:left; font-family:inherit;">Via Hong Kong (indirect route)</td><td>5.8 t</td></tr>
+            <tr><td style="text-align:left; font-family:inherit;">Other destinations</td><td>5.5 t</td></tr>
+          </tbody>
+        </table>
+        <p class="triangulation-formula">NZ export volume by destination (Stats NZ, dried-equivalent, 2025 full calendar year). "Indirect" is NZ's recorded export destination only — the visible upper bound for China/Hong Kong re-export to Korea, not a confirmed re-export volume (no source currently confirms the Korea-bound share of China/Hong Kong-destined NZ velvet).</p>
+      
+    </div>
+
+    
+    
+    <div style="margin-top:24px;">
+      <h3 style="font-size:1rem; margin-bottom:8px;">Korea customs imports by country — 2025 (full calendar year)</h3>
+      
+        <div class="table-scroll-wrapper">
+          <table class="triangulation-table">
+            <caption class="table-footnote" style="text-align:left; margin-bottom:6px;">Aggregate view. Full row-level detail (all countries, all months) is available via the trade flows CSV download in section 1.</caption>
+            <thead>
+              <tr><th>Country</th><th>Dried-eq kg</th><th>USD</th><th>USD / kg</th></tr>
+            </thead>
+            <tbody>
+              
+                <tr>
+                  <td>New Zealand</td>
+                  <td>86,054</td>
+                  <td>21,822,000</td>
+                  <td>253.58</td>
+                </tr>
+              
+                <tr>
+                  <td>Russia</td>
+                  <td>15,132</td>
+                  <td>8,575,000</td>
+                  <td>566.69</td>
+                </tr>
+              
+                <tr>
+                  <td>Argentina</td>
+                  <td>1,055</td>
+                  <td>480,000</td>
+                  <td>454.83</td>
+                </tr>
+              
+                <tr>
+                  <td>Kazakhstan</td>
+                  <td>349</td>
+                  <td>140,000</td>
+                  <td>400.99</td>
+                </tr>
+              
+                <tr>
+                  <td>Australia</td>
+                  <td>11</td>
+                  <td>5,000</td>
+                  <td>454.55</td>
+                </tr>
+              
+                <tr>
+                  <td>China</td>
+                  <td>0</td>
+                  <td>90</td>
+                  <td>—</td>
+                </tr>
+              
+            </tbody>
+          </table>
+        </div>
+      
+    </div>
+
+    <div class="triangulation-grid">
+
+      
+      <div class="triangulation-card">
+        <h3>Purpose split — pharmaceutical vs food<span class="estimate-badge">Estimate</span></h3>
+        
+        
+          <p class="analysis-placeholder__body">Not available — the KPTA pharmaceutical estimate is a 2022 annual total, larger than the current live rolling QIA quarantine total — the two figures cover different reference periods and are not comparable. Will update once a KPTA figure for a period closer to the live rolling window is available.</p>
+        
+      </div>
+
+      
+      <div class="triangulation-card">
+        <h3>Unit value — NZ origin<span class="estimate-badge">Estimate</span></h3>
+        
+        
+          <div class="triangulation-stat">$281<span class="triangulation-stat-sub"> / dried-eq kg</span></div>
+          <p class="triangulation-formula">Customs value (USD, KSTAT) ÷ dried-equivalent quantity (kg), NZ-origin rows only, latest month (2026-05). Country-level breakdown added via the getNitemtradeList extension (C-12d).</p>
+        
+      </div>
+
+    </div>
+
+  </section>
+
+  
+  
+  <section id="section-3">
+
+    <div class="section-header">
+      <div class="section-header-left">
+        <h2>3. News pulse</h2>
         <span class="last-updated">Last updated: 2026-07-03</span>
       </div>
     </div>
@@ -19315,125 +19450,6 @@
       
 
     
-
-  </section>
-
-  
-  <section id="section-3">
-
-    <div class="section-header">
-      <div class="section-header-left">
-        <h2>3. Trade triangulation</h2>
-      </div>
-    </div>
-
-    <p class="source-footnote">Combines Korea customs (KSTAT), QIA quarantine, Stats NZ export, and a manually-maintained KPTA pharmaceutical estimate — an answer no single official source gives alone. Every derived figure below shows its formula and is labelled an estimate.</p>
-
-    
-    
-
-    
-
-    
-    
-    <div style="margin-top:8px;">
-      <h3 style="font-size:1rem; margin-bottom:8px;">Korea customs imports by country — 2025 (full calendar year)</h3>
-      
-        <div class="table-scroll-wrapper">
-          <table class="triangulation-table">
-            <caption class="table-footnote" style="text-align:left; margin-bottom:6px;">Aggregate view. Full row-level detail (all countries, all months) is available via the trade flows CSV download in section 1.</caption>
-            <thead>
-              <tr><th>Country</th><th>Dried-eq kg</th><th>USD</th><th>USD / kg</th></tr>
-            </thead>
-            <tbody>
-              
-                <tr>
-                  <td>New Zealand</td>
-                  <td>86,054</td>
-                  <td>21,822,000</td>
-                  <td>253.58</td>
-                </tr>
-              
-                <tr>
-                  <td>Russia</td>
-                  <td>15,132</td>
-                  <td>8,575,000</td>
-                  <td>566.69</td>
-                </tr>
-              
-                <tr>
-                  <td>Argentina</td>
-                  <td>1,055</td>
-                  <td>480,000</td>
-                  <td>454.83</td>
-                </tr>
-              
-                <tr>
-                  <td>Kazakhstan</td>
-                  <td>349</td>
-                  <td>140,000</td>
-                  <td>400.99</td>
-                </tr>
-              
-                <tr>
-                  <td>Australia</td>
-                  <td>11</td>
-                  <td>5,000</td>
-                  <td>454.55</td>
-                </tr>
-              
-                <tr>
-                  <td>China</td>
-                  <td>0</td>
-                  <td>90</td>
-                  <td>—</td>
-                </tr>
-              
-            </tbody>
-          </table>
-        </div>
-      
-    </div>
-
-    <div class="triangulation-grid">
-
-      
-      <div class="triangulation-card">
-        <h3>Purpose split — pharmaceutical vs food<span class="estimate-badge">Estimate</span></h3>
-        
-        
-          <p class="analysis-placeholder__body">Not available — the KPTA pharmaceutical estimate is a 2022 annual total, larger than the current live rolling QIA quarantine total — the two figures cover different reference periods and are not comparable. Will update once a KPTA figure for a period closer to the live rolling window is available.</p>
-        
-      </div>
-
-      
-      <div class="triangulation-card">
-        <h3>NZ supply — direct vs indirect<span class="estimate-badge">Estimate</span></h3>
-        
-        
-          <table class="triangulation-table" style="margin-top:2px;">
-            <tbody>
-              <tr><td style="text-align:left; font-family:inherit;">Direct to Korea</td><td>40.6 t</td></tr>
-              <tr><td style="text-align:left; font-family:inherit;">Via China (indirect route)</td><td>439.0 t</td></tr>
-              <tr><td style="text-align:left; font-family:inherit;">Via Hong Kong (indirect route)</td><td>5.8 t</td></tr>
-              <tr><td style="text-align:left; font-family:inherit;">Other destinations</td><td>5.5 t</td></tr>
-            </tbody>
-          </table>
-          <p class="triangulation-formula">NZ export volume by destination (Stats NZ, dried-equivalent, 2025 full calendar year). "Indirect" is NZ's recorded export destination only — the visible upper bound for China/Hong Kong re-export to Korea, not a confirmed re-export volume (no source currently confirms the Korea-bound share of China/Hong Kong-destined NZ velvet).</p>
-        
-      </div>
-
-      
-      <div class="triangulation-card">
-        <h3>Unit value — NZ origin<span class="estimate-badge">Estimate</span></h3>
-        
-        
-          <div class="triangulation-stat">$281<span class="triangulation-stat-sub"> / dried-eq kg</span></div>
-          <p class="triangulation-formula">Customs value (USD, KSTAT) ÷ dried-equivalent quantity (kg), NZ-origin rows only, latest month (2026-05). Country-level breakdown added via the getNitemtradeList extension (C-12d).</p>
-        
-      </div>
-
-    </div>
 
   </section>
 
