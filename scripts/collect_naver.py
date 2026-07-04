@@ -331,7 +331,7 @@ def rows_to_write(articles: list[dict]) -> list[list]:
     been working around since C-5h (title=URL, url=Korean title,
     content_hash=description are not the intended layout, they are this bug).
 
-    Fixed mapping (matches the real 12-column header, and matches what
+    Fixed mapping (matches the real 15-column header, and matches what
     classify_articles.py already reads from each of these columns):
       article_id      <- content_hash (the computed dedup hash)
       title           <- article URL
@@ -342,6 +342,9 @@ def rows_to_write(articles: list[dict]) -> list[list]:
       category / english_summary / ai_processed_at / include_on_site /
         english_title <- blank, filled by classify_articles.py
       crawled_at      <- ISO collection timestamp (previously never written)
+      duplicate_of_article_id / dedup_judged_at / manual_override <- blank,
+        filled (or left for a human) by classify_articles.py's semantic
+        clustering pass (C-13 Task 1, 2026-07-04)
 
     'source_type', 'keyword_matched', 'source_domain' have no column in the
     live schema and are no longer written — they were being silently
@@ -363,6 +366,9 @@ def rows_to_write(articles: list[dict]) -> list[list]:
             "",                          # include_on_site
             crawled_at,
             "",                          # english_title
+            "",                          # duplicate_of_article_id — C-13 Task 1, filled by classify_articles.py
+            "",                          # dedup_judged_at
+            "",                          # manual_override — human-only column, never written here
         ]
         output_rows.append(row)
     return output_rows
