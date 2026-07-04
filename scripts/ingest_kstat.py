@@ -1,11 +1,19 @@
-# Run as: PYTHONPATH=. python scripts/ingest_kstat.py [--recent N | --file PATH | --historical DIR] [--dry-run]
+# Run as: PYTHONPATH=. python scripts/ingest_kstat.py [--recent N | --file PATH | --historical DIR | --nitemtrade N] [--dry-run]
 #
 # ingest_kstat.py — KSTAT Korea Customs data ingestion for Velvet Knowledge Hub.
 #
-# Supports three input modes (mutually exclusive):
-#   --recent N        Fetch the last N months from the KSTAT API (requires KSTAT_API_KEY).
+# Supports four input modes (mutually exclusive):
+#   --recent N        Fetch the last N months from the KSTAT getItemtradeList API
+#                      (requires KSTAT_API_KEY).
 #   --file PATH       Parse a single KSTAT CSV file (offline / historical).
 #   --historical DIR  Parse all *.csv files in DIR (offline / historical bulk load).
+#   --nitemtrade N    C-12d: fetch the last N months from the country-aware
+#                      getNitemtradeList API for NZ/China/Hong Kong (requires
+#                      KSTAT_API_KEY — same key, already registered per the
+#                      C-12a spike). Writes to the same series (kstat_api),
+#                      same tab, same dedup key — genuinely new rows only
+#                      where a country/date/hs_code/unit combination is not
+#                      already present (e.g. from a manual CSV historical load).
 #
 # Upserts new rows into the VTW_Trade_Monthly tab of VKH_Data Google Sheet.
 #
@@ -15,6 +23,8 @@
 #   PYTHONPATH=. python scripts/ingest_kstat.py --file /path/to/CUSTOMS_2024.csv
 #   PYTHONPATH=. python scripts/ingest_kstat.py --historical /path/to/customs_dir/
 #   PYTHONPATH=. python scripts/ingest_kstat.py --file /path/to/CUSTOMS_2024.csv --dry-run
+#   PYTHONPATH=. python scripts/ingest_kstat.py --nitemtrade 12
+#   PYTHONPATH=. python scripts/ingest_kstat.py --nitemtrade 12 --dry-run
 #
 # CSV format (utf-8-sig BOM, comma-separated):
 #   기간,국가,HS코드,품목명,수출 중량,수출 금액,수입 중량,수입 금액,무역수지
@@ -44,10 +54,34 @@
 #     0507901190 → "dried"   (deer velvet, other = dried)
 #   The existing hs_code dot-notation column is preserved unchanged.
 #
+# C-12d (2026-07-04) — --nitemtrade mode:
+#   IntelQ's phase2_data_access_research found the country breakdown already
+#   in the live sheet came entirely from manually-downloaded historical CSVs
+#   (tradedata.go.kr portal exports), never from the automated --recent API
+#   path — getItemtradeList's live JSON response does not reliably carry a
+#   usable per-country dimension. getNitemtradeList (note the leading N) is
+#   the sibling operation that does, confirmed live in the C-12a spike:
+#     - cntyCd (2-char code) is mandatory; NZ/CN/HK all resolve correctly.
+#     - KSTAT_API_KEY is already registered for this operation — no new
+#       credential needed (resultCode=00 confirmed).
+#     - CN and HK return zero rows under both velvet HS codes across the
+#       full 2020-2025 history tested — a genuine data finding (the direct
+#       re-export channel is not visible under this HS-code series), not a
+#       bug. Included anyway so a future month with real CN/HK activity is
+#       captured automatically rather than silently assumed impossible.
+#     - strtYymm/endYymm span is capped at 1 year per call (resultCode=99,
+#       resultMsg="시작과 종료의 조회기간은 1년이내 기간만 가능합니다." if
+#       exceeded) — backfill loops year-by-year via _year_chunks().
+#     - Response is XML regardless of the type=json param (observed live in
+#       the spike) — parsed directly with xml.etree.ElementTree, not
+#       response.json().
+#
 # KSTAT_API_KEY: read from .env at repo root (API mode only).
 # Commander action: copy KSTAT_API_KEY from /Users/Qs/C/velvet-trade-watch/.env
 #
-# API endpoint: https://apis.data.go.kr/1220000/Itemtrade/getItemtradeList
+# API endpoints:
+#   https://apis.data.go.kr/1220000/Itemtrade/getItemtradeList        (--recent)
+#   http://apis.data.go.kr/1220000/nitemtrade/getNitemtradeList       (--nitemtrade, C-12d)
 # Velvet HS codes: 0507901110 (deer velvet, immature), 0507901190 (deer velvet, other)
 #
 # Security: no credentials or secrets in this file. All secrets from .env only.
@@ -58,6 +92,7 @@ import logging
 import os
 import sys
 import time
+import xml.etree.ElementTree as ET
 from datetime import date
 from pathlib import Path
 
@@ -110,6 +145,29 @@ _HS_CODE_DOT = "0507.90"
 _HS10_PRODUCT_TYPE: dict[str, str] = {
     "0507901110": "frozen",
     "0507901190": "dried",
+}
+
+# ---------------------------------------------------------------------------
+# C-12d: getNitemtradeList (country-aware) constants
+# ---------------------------------------------------------------------------
+
+_NITEMTRADE_API_ENDPOINT = "http://apis.data.go.kr/1220000/nitemtrade/getNitemtradeList"
+_NITEMTRADE_NUM_OF_ROWS = 100
+
+# Country codes to loop per the phase2 data-access research (NZ = origin of
+# interest; China/Hong Kong = re-export triangulation candidates). Both CN
+# and HK returned zero rows under both velvet HS codes for 2020-2025 in the
+# C-12a spike — kept in the loop regardless so a future month with real
+# direct-import activity is captured automatically.
+_NITEMTRADE_COUNTRIES: list[str] = ["NZ", "CN", "HK"]
+
+# Korean names data.go.kr's statCdCntnKor1 field returns, kept here only for
+# reference/logging — the ingested country value is taken directly from the
+# API response, never hardcoded, so any country resolves correctly.
+_NITEMTRADE_COUNTRY_LABELS: dict[str, str] = {
+    "NZ": "뉴질랜드",
+    "CN": "중국",
+    "HK": "홍콩",
 }
 
 
@@ -282,6 +340,205 @@ def api_records_to_sheet_rows(raw_records: list[dict]) -> list[dict]:
             "notes":           notes,
             "hs_code_10digit": hs10,            # GAP-5: full 10-digit code
             "product_type":    product_type,    # GAP-5: frozen | dried | other
+        })
+
+    return output
+
+
+# ---------------------------------------------------------------------------
+# C-12d: getNitemtradeList (country-aware) fetch + parse
+# ---------------------------------------------------------------------------
+
+def _year_chunks(months_back: int) -> list[tuple[str, str]]:
+    """
+    Split the last `months_back` calendar months into <=1-year (strtYymm,
+    endYymm) chunks, one per calendar year touched by the window.
+
+    getNitemtradeList rejects any single call spanning more than 1 year
+    (resultCode=99 — confirmed in the C-12a spike). A full calendar year
+    (YYYY01-YYYY12) is exactly 12 months, satisfying that limit.
+
+    Returns [(strt_yymm, end_yymm), ...] ordered oldest year first.
+    """
+    current = _current_ym()
+    start = _subtract_months(current, months_back - 1) if months_back > 0 else current
+    start_year = int(start[:4])
+    end_year = int(current[:4])
+
+    chunks: list[tuple[str, str]] = []
+    for year in range(start_year, end_year + 1):
+        chunk_start = start if year == start_year else f"{year}-01"
+        chunk_end = current if year == end_year else f"{year}-12"
+        chunks.append((chunk_start.replace("-", ""), chunk_end.replace("-", "")))
+    return chunks
+
+
+def _parse_nitemtrade_xml(raw_xml: str, cnty_cd: str, hs10: str) -> list[dict]:
+    """
+    Parse a getNitemtradeList XML response into raw record dicts.
+
+    Response is XML regardless of the `type=json` request param (observed
+    live in the C-12a spike) — parsed directly, never via response.json().
+    resultCode != "00" is treated as a failed call (logged, empty result),
+    not a silent empty page (per the spike's exact error signature check).
+
+    Skips the "총계" (grand total) summary row — only "YYYY.MM" period rows
+    are kept. Skips rows with zero weight and zero value (same rule as the
+    getItemtradeList path).
+    """
+    try:
+        root = ET.fromstring(raw_xml)
+    except ET.ParseError as exc:
+        logger.warning(
+            "getNitemtradeList XML parse error for cntyCd=%s hs=%s: %s",
+            cnty_cd, hs10, exc,
+        )
+        return []
+
+    result_code_el = root.find(".//resultCode")
+    result_code = result_code_el.text.strip() if result_code_el is not None and result_code_el.text else ""
+    if result_code != "00":
+        result_msg_el = root.find(".//resultMsg")
+        result_msg = result_msg_el.text.strip() if result_msg_el is not None and result_msg_el.text else "(no resultMsg)"
+        logger.warning(
+            "getNitemtradeList non-OK resultCode=%s for cntyCd=%s hs=%s: %s",
+            result_code, cnty_cd, hs10, result_msg,
+        )
+        return []
+
+    results: list[dict] = []
+    for item in root.findall(".//item"):
+        period_raw = (item.findtext("year") or "").strip()
+        if period_raw == "총계" or not period_raw:
+            continue
+        # "2024.01" -> "2024-01".
+        if "." not in period_raw:
+            continue
+        period_str = period_raw.replace(".", "-")
+
+        country_name = (item.findtext("statCdCntnKor1") or "").strip()
+
+        try:
+            imp_weight = int(float(item.findtext("impWgt") or "0"))
+            imp_value = int(float(item.findtext("impDlr") or "0"))
+        except (ValueError, TypeError):
+            logger.debug("Skipping malformed nitemtrade item for cntyCd=%s", cnty_cd)
+            continue
+
+        if imp_weight == 0 and imp_value == 0:
+            continue
+
+        results.append({
+            "period": period_str,
+            "hs10": hs10,
+            "country": country_name or _NITEMTRADE_COUNTRY_LABELS.get(cnty_cd, cnty_cd),
+            "imp_weight_kg": imp_weight,
+            "imp_value_usd_thousands": imp_value,
+        })
+
+    return results
+
+
+def _fetch_nitemtrade_chunk(
+    api_key: str, cnty_cd: str, hs10: str, strt_yymm: str, end_yymm: str,
+) -> list[dict]:
+    """Fetch one (country, hs_code, <=1yr window) chunk from getNitemtradeList."""
+    params = {
+        "serviceKey": api_key,
+        "strtYymm": strt_yymm,
+        "endYymm": end_yymm,
+        "cntyCd": cnty_cd,
+        "hsSgn": hs10,
+        "type": "json",
+        "numOfRows": str(_NITEMTRADE_NUM_OF_ROWS),
+        "pageNo": "1",
+    }
+    try:
+        resp = requests.get(_NITEMTRADE_API_ENDPOINT, params=params, timeout=30)
+        resp.raise_for_status()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "getNitemtradeList request error for cntyCd=%s hs=%s %s-%s: %s",
+            cnty_cd, hs10, strt_yymm, end_yymm, exc,
+        )
+        return []
+
+    return _parse_nitemtrade_xml(resp.text, cnty_cd, hs10)
+
+
+def fetch_nitemtrade_recent(api_key: str, months_back: int = 12) -> list[dict]:
+    """
+    Fetch getNitemtradeList records for the last N months, looping over
+    _NITEMTRADE_COUNTRIES x _VELVET_HS_CODES x _year_chunks(months_back).
+
+    Returns a combined list of raw records sorted by period -> country -> hs10.
+    """
+    results: list[dict] = []
+    chunks = _year_chunks(months_back)
+
+    for cnty_cd in _NITEMTRADE_COUNTRIES:
+        for hs10 in _VELVET_HS_CODES:
+            for strt_yymm, end_yymm in chunks:
+                rows = _fetch_nitemtrade_chunk(api_key, cnty_cd, hs10, strt_yymm, end_yymm)
+                results.extend(rows)
+                # L-19-style intra-loop pacing: this API is a different
+                # data.go.kr service quota to getItemtradeList's, but a
+                # small pause avoids bursting many calls in immediate
+                # succession (countries x hs_codes x year_chunks).
+                time.sleep(0.2)
+
+    results.sort(key=lambda r: (r["period"], r["country"], r["hs10"]))
+    logger.info(
+        "getNitemtradeList: %d records fetched across %d countries, %d hs codes, %d year chunk(s).",
+        len(results), len(_NITEMTRADE_COUNTRIES), len(_VELVET_HS_CODES), len(chunks),
+    )
+    return results
+
+
+def nitemtrade_records_to_sheet_rows(raw_records: list[dict]) -> list[dict]:
+    """
+    Convert raw getNitemtradeList records into VTW_Trade_Monthly schema rows.
+
+    Same schema and series_value ("kstat_api") as api_records_to_sheet_rows()
+    — this is the same logical source (KSTAT customs), extended with a real
+    per-country dimension. Rows for a (date, country, hs_code, unit) already
+    present from a manual CSV historical load are naturally skipped by the
+    existing dedup key (L-10) in _write_rows_to_sheets(), not duplicated.
+    """
+    output: list[dict] = []
+
+    for rec in raw_records:
+        hs10 = rec["hs10"]
+        hs_label = _HS10_LABEL_MAP.get(hs10, hs10)
+        notes = f"hs10={hs10} | source=getNitemtradeList"
+        period = rec["period"]
+        country = rec["country"]
+        product_type = _HS10_PRODUCT_TYPE.get(hs10, "other")
+
+        output.append({
+            "date":            period,
+            "series":          SERIES_VALUE,
+            "hs_code":         _HS_CODE_DOT,
+            "hs_label":        hs_label,
+            "value":           rec["imp_weight_kg"],
+            "unit":            "KG",
+            "country":         country,
+            "notes":           notes,
+            "hs_code_10digit": hs10,
+            "product_type":    product_type,
+        })
+
+        output.append({
+            "date":            period,
+            "series":          SERIES_VALUE,
+            "hs_code":         _HS_CODE_DOT,
+            "hs_label":        hs_label,
+            "value":           rec["imp_value_usd_thousands"],
+            "unit":            "USD_thousands",
+            "country":         country,
+            "notes":           notes,
+            "hs_code_10digit": hs10,
+            "product_type":    product_type,
         })
 
     return output
@@ -479,8 +736,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Ingest KSTAT Korea Customs data into the VTW_Trade_Monthly tab "
-            "of VKH_Data Google Sheet. Three input modes: --recent (API), "
-            "--file (single CSV), --historical (directory of CSVs)."
+            "of VKH_Data Google Sheet. Four input modes: --recent (API), "
+            "--file (single CSV), --historical (directory of CSVs), "
+            "--nitemtrade (country-aware API, C-12d)."
         )
     )
 
@@ -503,6 +761,16 @@ def main() -> None:
         metavar="DIR",
         help="Parse all *.csv files in DIR (offline / bulk historical load).",
     )
+    mode_group.add_argument(
+        "--nitemtrade",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "C-12d: fetch the last N calendar months from the country-aware "
+            "getNitemtradeList API for NZ/China/Hong Kong (requires KSTAT_API_KEY)."
+        ),
+    )
 
     parser.add_argument(
         "--dry-run",
@@ -512,7 +780,7 @@ def main() -> None:
     args = parser.parse_args()
 
     # Default to --recent 3 if no mode supplied.
-    if args.file is None and args.historical is None and args.recent is None:
+    if args.file is None and args.historical is None and args.recent is None and args.nitemtrade is None:
         args.recent = 3
 
     # L-2: load .env from repo root.
@@ -580,6 +848,47 @@ def main() -> None:
             sys.exit(0)
 
         _write_rows_to_sheets(sheet_rows, rows_parsed)
+        return
+
+    # ----- Mode: --nitemtrade (country-aware API, C-12d) ----------------------
+    if args.nitemtrade is not None:
+        months_back = args.nitemtrade
+        print("ingest_kstat.py — VKH getNitemtradeList (country-aware) ingestion")
+        print(f"  months_back: {months_back}")
+        print(f"  countries: {_NITEMTRADE_COUNTRIES}")
+        print(f"  dry-run: {args.dry_run}")
+
+        api_key = os.environ.get("KSTAT_API_KEY", "").strip()
+        if not api_key:
+            print(
+                "INFO: KSTAT_API_KEY is not set — skipping getNitemtradeList fetch.\n"
+                "  To enable: add KSTAT_API_KEY to .env at the repo root."
+            )
+            print("rows_fetched: 0 | new_rows: 0 | skipped_duplicates: 0")
+            sys.exit(0)
+
+        raw_records = fetch_nitemtrade_recent(api_key, months_back=months_back)
+        print(f"  raw API records: {len(raw_records)}")
+
+        sheet_rows = nitemtrade_records_to_sheet_rows(raw_records)
+        rows_fetched = len(sheet_rows)
+        print(f"  schema rows generated: {rows_fetched}")
+
+        if args.dry_run:
+            print()
+            print("[DRY RUN] Fetch complete — no Sheets write.")
+            print("  Sample rows (first 3):")
+            for row in sheet_rows[:3]:
+                print(f"    {row}")
+            print(f"rows_fetched: {rows_fetched} | new_rows: 0 | skipped_duplicates: 0")
+            sys.exit(0)
+
+        if rows_fetched == 0:
+            print("  No API records returned — nothing to write.")
+            print("rows_fetched: 0 | new_rows: 0 | skipped_duplicates: 0")
+            sys.exit(0)
+
+        _write_rows_to_sheets(sheet_rows, rows_fetched)
         return
 
     # ----- Mode: --recent (API) -----------------------------------------------
