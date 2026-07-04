@@ -38,6 +38,56 @@ KVN_ARTICLES_HEADERS = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Trust pipeline (C-15, 2026-07-05) — raw -> mapping -> master + needs_review
+# gate, per VKH_improvement_directive_2026-07-03.md §4. VFI_Import_Records is
+# the first source migrated to this pattern — see ingest_common.py for the
+# shared gate functions every ingest script should eventually adopt.
+# ---------------------------------------------------------------------------
+
+# raw_vfi: append-only, exactly-as-collected KR-language fields. Never
+# hand-edited. Bootstrap-seeded from the existing VFI_Import_Records tab
+# (scripts/bootstrap_raw_vfi.py) since original pre-ingest source files for
+# past batches were not retained (Downloads/ is transit-only, per fleet rule).
+RAW_VFI_HEADERS = [
+    "date",
+    "importer_ko",
+    "product_name",
+    "product_type_ko",
+    "country_origin_ko",
+    "country_export_ko",
+    "expiry_date",
+    "notes",
+    "ingested_at",
+]
+
+# map_companies: the ONLY tab a human (Commander) edits. Replaces the retired
+# manual VLOOKUP file. match_key is precomputed by
+# ingest_common.normalise_company_key() at seed/write time so lookups never
+# recompute it at read time.
+MAP_COMPANIES_HEADERS = [
+    "source_name_kr",
+    "match_key",
+    "canonical_name_en",
+    "public_display_name",
+    "country",
+    "notes",
+]
+
+# needs_review: build/backfill scripts only. Any row whose company name has
+# no map_companies match lands here instead of silently rendering "—" or
+# raw Korean text forever.
+NEEDS_REVIEW_HEADERS = [
+    "source_tab",
+    "row_ref",
+    "field",
+    "raw_value",
+    "match_key",
+    "reason",
+    "flagged_at",
+]
+
+
 def verify_header(worksheet, expected: list[str] = KVN_ARTICLES_HEADERS) -> None:
     """
     Read row 1 of worksheet and compare it to expected.

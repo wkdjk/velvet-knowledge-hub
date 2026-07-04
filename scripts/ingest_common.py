@@ -7,7 +7,81 @@
 #   build_dedup_key(row)    -> tuple
 #   rows_to_append(new_rows, existing_keys, headers) -> tuple[list[list], int]
 #
+# Trust-pipeline gate (C-15, 2026-07-05, directive §4 addendum — "no ingest
+# path may write directly to master"): every current and future ingest
+# script resolves company names through this shared gate rather than each
+# maintaining its own KR->EN lookup.
+#   normalise_company_key(name) -> str
+#   load_company_mapping(worksheet) -> dict[str, dict]
+#   resolve_company(source_name, mapping) -> tuple[str, bool]
+#
 # Security: no credentials in this file.
+
+import re
+
+# Legal-entity markers stripped before matching (directive §4.2): Korean
+# forms first (주식회사/(주)/㈜ all mean "Co., Ltd."), English forms mirror
+# the spec's own LTD/CO./LIMITED example. Order doesn't matter — each is
+# removed independently.
+_CORP_MARKERS = [
+    "주식회사", "(주)", "㈜", "유한회사", "(유)", "(사)",
+    "LTD.", "LTD", "CO.", "CO", "LIMITED", "INC.", "INC",
+]
+
+
+def normalise_company_key(name: str) -> str:
+    """
+    Return a normalised matching key for a company name.
+
+    Uppercases, strips whitespace/punctuation and common legal-entity
+    markers so minor source variants resolve to one key — e.g.
+    "주식회사 이룡제약" and "이룡제약(주)" both -> "이룡제약".
+    Directive §4.2. Empty input returns "".
+    """
+    if not name:
+        return ""
+    key = name.strip().upper()
+    for marker in _CORP_MARKERS:
+        key = key.replace(marker.upper(), "")
+    key = re.sub(r"[^\w가-힣]", "", key)
+    return key
+
+
+def load_company_mapping(worksheet) -> dict:
+    """
+    Read the map_companies tab once and return {match_key: row_dict}.
+
+    L-4: caller calls this once and caches the result — never inside a
+    per-row loop. Falls back to computing match_key from source_name_kr if
+    a seed row has an empty match_key cell (defensive — seed script always
+    fills it, but a hand-added row might not).
+    """
+    rows = worksheet.get_all_records()
+    mapping: dict = {}
+    for row in rows:
+        key = row.get("match_key", "") or normalise_company_key(
+            row.get("source_name_kr", "")
+        )
+        if key:
+            mapping[key] = row
+    return mapping
+
+
+def resolve_company(source_name: str, mapping: dict) -> tuple:
+    """
+    Resolve a raw company name to its canonical EN name via map_companies.
+
+    Returns (canonical_name_en_or_empty, matched). matched=False means the
+    caller routes this row's company field to needs_review (the exceptions
+    gate, directive §4.2) instead of writing a silent blank/"—".
+    """
+    key = normalise_company_key(source_name)
+    if not key:
+        return "", False
+    match = mapping.get(key)
+    if match is None:
+        return "", False
+    return match.get("canonical_name_en", ""), True
 
 
 def _normalise_hs_code(raw) -> str:
