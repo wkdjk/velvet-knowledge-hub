@@ -41,6 +41,7 @@ jobs:
         run: python scripts/collect_naver.py
 
       - name: Classify articles
+        id: classify
         continue-on-error: true   # API key issues must not block the site build
         env:
           PYTHONPATH: "."
@@ -101,6 +102,36 @@ jobs:
           git diff --staged --quiet || git commit -m "chore(build): update docs/ [skip ci]"
           git pull --rebase origin main
           git push
+
+      - name: Send succession notice email
+        # SurveyorQ revised instruction (c), 2026-07-04: a canonical succession
+        # (a manually-suppressed article's cluster mate auto-promoted to take
+        # its place) must be visible to the Commander, not only in this run's
+        # log — the manual suppression might have meant "hide the whole
+        # story," which succession would have just undone. Fires only when
+        # classify_articles.py's emit_succession_notice() wrote a non-zero
+        # count (see scripts/classify_articles.py).
+        if: steps.classify.outputs.succession_count > 0
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          secure: false
+          username: ${{ secrets.ALERT_EMAIL }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          to: ${{ secrets.ALERT_EMAIL }}
+          from: Velvet Knowledge Hub <${{ secrets.ALERT_EMAIL }}>
+          subject: "[VKH] News pulse: a suppressed article's cluster mate was promoted (build #${{ github.run_number }})"
+          body: |
+            The News pulse duplicate-detection system found that an article you (or something) had manually suppressed was the representative article for a cluster of near-duplicate stories. Because the site should not lose track of a real story just because one article covering it was suppressed, it automatically promoted the next-oldest article in that cluster to take its place.
+
+            ${{ steps.classify.outputs.succession_notice }}
+
+            If you suppressed that original article because you wanted to hide the whole story (not just that one write-up of it), please also suppress the newly-promoted article the same way — set its manual_override cell to TRUE and include_on_site to FALSE in the KVN_Articles sheet.
+
+            If you only meant to hide that one specific article (bad link, low quality, wrong outlet), no action is needed — this is working as intended.
+
+            Full run log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
       - name: Send error alert email
         if: failure()
