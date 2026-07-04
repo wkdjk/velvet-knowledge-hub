@@ -549,6 +549,15 @@ def run_semantic_clustering_pass(
     dedup_judged_at value written to the sheet. This is what catches
     same-day multi-outlet coverage collected in one scrape.
 
+    manual_override protection: if a pending row has manual_override=TRUE,
+    a duplicate verdict is still cached (duplicate_of_article_id gets set —
+    a human can see the LLM's opinion) but never applied — include_on_site
+    is left TRUE. A protected row does not join the settled pool either
+    (its duplicate_of_article_id is not "none"), so it is never offered as
+    a match target for later rows in the same pass — only a genuinely
+    confirmed-canonical row is. manual_override is never written by this
+    function, only read.
+
     Never touches category, english_summary, ai_processed_at, or
     english_title. Never deletes rows. Returns a stats dict:
     {"suppressed": int, "judged": int, "llm_calls": int, "llm_errors": int}
@@ -627,7 +636,9 @@ def run_semantic_clustering_pass(
 
             time.sleep(_API_SLEEP_SECONDS)  # reuse the existing inter-call rate-limit pause
 
-        if duplicate_of is not None:
+        is_protected = str(item["row"].get("manual_override", "")).strip().upper() == "TRUE"
+
+        if duplicate_of is not None and not is_protected:
             canonical_article_id = str(duplicate_of["row"].get("article_id", ""))
             cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_INCLUDE_ON_SITE + 1), "values": [["FALSE"]]})
             cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_DUPLICATE_OF + 1), "values": [[canonical_article_id]]})
@@ -635,6 +646,18 @@ def run_semantic_clustering_pass(
             suppressed += 1
             # A suppressed duplicate never joins `settled` — it must not
             # become someone else's "canonical" reference.
+        elif duplicate_of is not None and is_protected:
+            # manual_override=TRUE: the LLM's verdict is still cached (per
+            # Part B §6 of the design doc — a human reviewing the sheet can
+            # see the LLM's opinion) but never applied — include_on_site
+            # stays TRUE. Does not join `settled` (duplicate_of_article_id
+            # != "none"): this row is protected, not confirmed-canonical,
+            # so it isn't offered as a match target for later rows either.
+            canonical_article_id = str(duplicate_of["row"].get("article_id", ""))
+            cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_DUPLICATE_OF + 1), "values": [[canonical_article_id]]})
+            cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_DEDUP_JUDGED_AT + 1), "values": [[now_ts]]})
+            print(f"  semantic clustering: row {item['row_num']} judged a duplicate of "
+                  f"article_id={canonical_article_id} but manual_override=TRUE — not suppressed")
         else:
             cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_DUPLICATE_OF + 1), "values": [[_DEDUP_SENTINEL_NONE]]})
             cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_DEDUP_JUDGED_AT + 1), "values": [[now_ts]]})
