@@ -109,7 +109,7 @@
       font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
     }
 
-    /* C-12f: Section 3 triangulation components */
+    /* C-12f: Section 3 triangulation components (renumbered to section 2 in C-14) */
     .triangulation-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -122,6 +122,22 @@
       border: 1px solid var(--border);
       border-left: 3px solid var(--accent);
       padding: 16px 18px;
+    }
+
+    /* C-14: headline card — promoted "NZ supply direct vs indirect" analysis,
+       full-width and visually heavier than the supporting grid cards below it. */
+    .triangulation-headline {
+      margin-top: 16px;
+      border-left-width: 5px;
+      padding: 20px 24px;
+    }
+
+    .triangulation-headline h3 {
+      font-size: 1.0625rem;
+    }
+
+    .triangulation-headline .triangulation-table {
+      max-width: 420px;
     }
 
     .triangulation-card h3 {
@@ -583,8 +599,8 @@
 <nav class="page-wrapper section-nav" aria-label="Dashboard sections">
   <ul class="nav-list">
     <li><a href="#section-1">1. Basic trade statistics</a></li>
-    <li><a href="#section-2">2. News pulse</a></li>
-    <li><a href="#section-3">3. Trade triangulation</a></li>
+    <li><a href="#section-2">2. Trade triangulation</a></li>
+    <li><a href="#section-3">3. News pulse</a></li>
     <li><a href="#section-4">4. Import records</a></li>
     <li><a href="#section-5">5. Trade reference</a></li>
   </ul>
@@ -764,13 +780,114 @@
 
   </section>
 
-  {# ── SECTION 2 — NEWS PULSE ───────────────────────────────────────────── #}
-  {% set news_pulse = sections.news_pulse if sections is defined and sections.news_pulse is defined else {} %}
+  {# ── SECTION 2 — TRADE TRIANGULATION (C-14: headline reframed to "how much NZ velvet actually reaches Korea") ── #}
   <section id="section-2">
 
     <div class="section-header">
       <div class="section-header-left">
-        <h2>2. News pulse</h2>
+        <h2>2. Trade triangulation</h2>
+      </div>
+    </div>
+
+    <p class="source-footnote">The question only this site's combined sources can answer: how much NZ-origin velvet actually reaches Korea. Combines Korea customs (KSTAT), QIA quarantine, Stats NZ export, and a manually-maintained KPTA pharmaceutical estimate — an answer no single official source gives alone. Every derived figure below shows its formula and is labelled an estimate.</p>
+
+    {% set triangulation = chart_data.triangulation if chart_data is defined and chart_data.triangulation is defined else {} %}
+    {% set kpta_estimate = chart_data.kpta_estimate if chart_data is defined and chart_data.kpta_estimate is defined else {"available": false} %}
+
+    {% if kpta_estimate.available and kpta_estimate.is_stale %}
+      <div class="kpta-staleness-warning">
+        ⚠ KPTA pharmaceutical estimate is {{ kpta_estimate.age_days }} days old (as of {{ kpta_estimate.as_of_date }}) — over 12 months since last refreshed. Figures below relying on this constant may not reflect current volumes.
+      </div>
+    {% endif %}
+
+    {# ── Headline — NZ supply direct vs indirect (C-14: promoted from the derived-analysis grid; this is the figure that answers the section headline question) ── #}
+    <div class="triangulation-card triangulation-headline">
+      <h3>NZ supply to Korea — direct vs indirect<span class="estimate-badge">Estimate</span></h3>
+      {% set ns = triangulation.nz_supply if triangulation.nz_supply is defined else {} %}
+      {% if ns.year %}
+        <table class="triangulation-table" style="margin-top:2px;">
+          <tbody>
+            <tr><td style="text-align:left; font-family:inherit;">Direct to Korea</td><td>{{ ns.display.Korea }} t</td></tr>
+            <tr><td style="text-align:left; font-family:inherit;">Via China (indirect route)</td><td>{{ ns.display.China }} t</td></tr>
+            <tr><td style="text-align:left; font-family:inherit;">Via Hong Kong (indirect route)</td><td>{{ ns.display["Hong Kong"] }} t</td></tr>
+            <tr><td style="text-align:left; font-family:inherit;">Other destinations</td><td>{{ ns.display.Other }} t</td></tr>
+          </tbody>
+        </table>
+        <p class="triangulation-formula">NZ export volume by destination (Stats NZ, dried-equivalent, {{ ns.year }} full calendar year). "Indirect" is NZ's recorded export destination only — the visible upper bound for China/Hong Kong re-export to Korea, not a confirmed re-export volume (no source currently confirms the Korea-bound share of China/Hong Kong-destined NZ velvet).</p>
+      {% else %}
+        <p class="analysis-placeholder__body">Not available — requires at least one complete calendar year of NZ export destination data.</p>
+      {% endif %}
+    </div>
+
+    {# ── Aggregate view — Korea customs imports by country ─────────────────── #}
+    {% set ccs = triangulation.customs_country_summary if triangulation.customs_country_summary is defined else {} %}
+    <div style="margin-top:24px;">
+      <h3 style="font-size:1rem; margin-bottom:8px;">Korea customs imports by country{% if ccs.year %} — {{ ccs.year }} (full calendar year){% endif %}</h3>
+      {% if ccs.year and ccs.rows %}
+        <div class="table-scroll-wrapper">
+          <table class="triangulation-table">
+            <caption class="table-footnote" style="text-align:left; margin-bottom:6px;">Aggregate view. Full row-level detail (all countries, all months) is available via the trade flows CSV download in section 1.</caption>
+            <thead>
+              <tr><th>Country</th><th>Dried-eq kg</th><th>USD</th><th>USD / kg</th></tr>
+            </thead>
+            <tbody>
+              {% for row in ccs.rows %}
+                <tr>
+                  <td>{{ row.country }}</td>
+                  <td>{{ row.dried_eq_kg_display }}</td>
+                  <td>{{ row.usd_display }}</td>
+                  <td>{{ row.unit_price_display }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="placeholder-card">
+          <p class="placeholder-title">Country-level customs summary not yet available</p>
+          <p class="placeholder-body">Requires at least one complete calendar year (10+ months) of country-level KSTAT data.</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="triangulation-grid">
+
+      {# ── Derived analysis 1 — purpose split ─────────────────────────────── #}
+      <div class="triangulation-card">
+        <h3>Purpose split — pharmaceutical vs food<span class="estimate-badge">Estimate</span></h3>
+        {% set ps = triangulation.purpose_split if triangulation.purpose_split is defined else {} %}
+        {% if ps.available %}
+          <div class="triangulation-stat">{{ ps.pharma_pct }}%<span class="triangulation-stat-sub"> pharmaceutical</span></div>
+          <div class="triangulation-stat" style="font-size:1.0625rem; margin-top:4px;">{{ ps.food_pct }}%<span class="triangulation-stat-sub"> food channel</span></div>
+          <p class="triangulation-formula">Food channel = QIA quarantine total (dried-equivalent, rolling 12 months to {{ ps.as_of_date }}: {{ ps.quarantine_total_display }} t) − KPTA pharmaceutical estimate ({{ ps.pharma_display }} t) = {{ ps.food_display }} t.</p>
+        {% else %}
+          <p class="analysis-placeholder__body">Not available{% if ps.reason %} — {{ ps.reason }}{% else %} — requires both a live QIA total and a KPTA pharmaceutical estimate (see section header above).{% endif %}</p>
+        {% endif %}
+      </div>
+
+      {# ── Derived analysis 2 — unit value by origin ───────────────────────── #}
+      <div class="triangulation-card">
+        <h3>Unit value — NZ origin<span class="estimate-badge">Estimate</span></h3>
+        {% set uv = triangulation.unit_value_nz_origin if triangulation.unit_value_nz_origin is defined else {} %}
+        {% if uv.available %}
+          <div class="triangulation-stat">${{ uv.latest_price_display }}<span class="triangulation-stat-sub"> / dried-eq kg</span></div>
+          <p class="triangulation-formula">Customs value (USD, KSTAT) ÷ dried-equivalent quantity (kg), NZ-origin rows only, latest month ({{ uv.as_of_date }}). Country-level breakdown added via the getNitemtradeList extension (C-12d).</p>
+        {% else %}
+          <p class="analysis-placeholder__body">Not available — requires NZ-origin rows with both weight and value in the same month.</p>
+        {% endif %}
+      </div>
+
+    </div>{# /triangulation-grid #}
+
+  </section>
+
+  {# ── SECTION 3 — NEWS PULSE ───────────────────────────────────────────── #}
+  {% set news_pulse = sections.news_pulse if sections is defined and sections.news_pulse is defined else {} %}
+  <section id="section-3">
+
+    <div class="section-header">
+      <div class="section-header-left">
+        <h2>3. News pulse</h2>
         <span class="last-updated">Last updated: {{ news_pulse.last_updated | default("—") }}</span>
       </div>
     </div>
@@ -842,107 +959,6 @@
         <p class="placeholder-body">Articles will appear after the next scheduled update.</p>
       </div>
     {% endif %}
-
-  </section>
-
-  {# ── SECTION 3 — IMPORT INTELLIGENCE ─────────────────────────────────── #}
-  <section id="section-3">
-
-    <div class="section-header">
-      <div class="section-header-left">
-        <h2>3. Trade triangulation</h2>
-      </div>
-    </div>
-
-    <p class="source-footnote">Combines Korea customs (KSTAT), QIA quarantine, Stats NZ export, and a manually-maintained KPTA pharmaceutical estimate — an answer no single official source gives alone. Every derived figure below shows its formula and is labelled an estimate.</p>
-
-    {% set triangulation = chart_data.triangulation if chart_data is defined and chart_data.triangulation is defined else {} %}
-    {% set kpta_estimate = chart_data.kpta_estimate if chart_data is defined and chart_data.kpta_estimate is defined else {"available": false} %}
-
-    {% if kpta_estimate.available and kpta_estimate.is_stale %}
-      <div class="kpta-staleness-warning">
-        ⚠ KPTA pharmaceutical estimate is {{ kpta_estimate.age_days }} days old (as of {{ kpta_estimate.as_of_date }}) — over 12 months since last refreshed. Figures below relying on this constant may not reflect current volumes.
-      </div>
-    {% endif %}
-
-    {# ── Aggregate view — Korea customs imports by country ─────────────────── #}
-    {% set ccs = triangulation.customs_country_summary if triangulation.customs_country_summary is defined else {} %}
-    <div style="margin-top:8px;">
-      <h3 style="font-size:1rem; margin-bottom:8px;">Korea customs imports by country{% if ccs.year %} — {{ ccs.year }} (full calendar year){% endif %}</h3>
-      {% if ccs.year and ccs.rows %}
-        <div class="table-scroll-wrapper">
-          <table class="triangulation-table">
-            <caption class="table-footnote" style="text-align:left; margin-bottom:6px;">Aggregate view. Full row-level detail (all countries, all months) is available via the trade flows CSV download in section 1.</caption>
-            <thead>
-              <tr><th>Country</th><th>Dried-eq kg</th><th>USD</th><th>USD / kg</th></tr>
-            </thead>
-            <tbody>
-              {% for row in ccs.rows %}
-                <tr>
-                  <td>{{ row.country }}</td>
-                  <td>{{ row.dried_eq_kg_display }}</td>
-                  <td>{{ row.usd_display }}</td>
-                  <td>{{ row.unit_price_display }}</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      {% else %}
-        <div class="placeholder-card">
-          <p class="placeholder-title">Country-level customs summary not yet available</p>
-          <p class="placeholder-body">Requires at least one complete calendar year (10+ months) of country-level KSTAT data.</p>
-        </div>
-      {% endif %}
-    </div>
-
-    <div class="triangulation-grid">
-
-      {# ── Derived analysis 1 — purpose split ─────────────────────────────── #}
-      <div class="triangulation-card">
-        <h3>Purpose split — pharmaceutical vs food<span class="estimate-badge">Estimate</span></h3>
-        {% set ps = triangulation.purpose_split if triangulation.purpose_split is defined else {} %}
-        {% if ps.available %}
-          <div class="triangulation-stat">{{ ps.pharma_pct }}%<span class="triangulation-stat-sub"> pharmaceutical</span></div>
-          <div class="triangulation-stat" style="font-size:1.0625rem; margin-top:4px;">{{ ps.food_pct }}%<span class="triangulation-stat-sub"> food channel</span></div>
-          <p class="triangulation-formula">Food channel = QIA quarantine total (dried-equivalent, rolling 12 months to {{ ps.as_of_date }}: {{ ps.quarantine_total_display }} t) − KPTA pharmaceutical estimate ({{ ps.pharma_display }} t) = {{ ps.food_display }} t.</p>
-        {% else %}
-          <p class="analysis-placeholder__body">Not available{% if ps.reason %} — {{ ps.reason }}{% else %} — requires both a live QIA total and a KPTA pharmaceutical estimate (see section header above).{% endif %}</p>
-        {% endif %}
-      </div>
-
-      {# ── Derived analysis 2 — direct vs indirect NZ supply ───────────────── #}
-      <div class="triangulation-card">
-        <h3>NZ supply — direct vs indirect<span class="estimate-badge">Estimate</span></h3>
-        {% set ns = triangulation.nz_supply if triangulation.nz_supply is defined else {} %}
-        {% if ns.year %}
-          <table class="triangulation-table" style="margin-top:2px;">
-            <tbody>
-              <tr><td style="text-align:left; font-family:inherit;">Direct to Korea</td><td>{{ ns.display.Korea }} t</td></tr>
-              <tr><td style="text-align:left; font-family:inherit;">Via China (indirect route)</td><td>{{ ns.display.China }} t</td></tr>
-              <tr><td style="text-align:left; font-family:inherit;">Via Hong Kong (indirect route)</td><td>{{ ns.display["Hong Kong"] }} t</td></tr>
-              <tr><td style="text-align:left; font-family:inherit;">Other destinations</td><td>{{ ns.display.Other }} t</td></tr>
-            </tbody>
-          </table>
-          <p class="triangulation-formula">NZ export volume by destination (Stats NZ, dried-equivalent, {{ ns.year }} full calendar year). "Indirect" is NZ's recorded export destination only — the visible upper bound for China/Hong Kong re-export to Korea, not a confirmed re-export volume (no source currently confirms the Korea-bound share of China/Hong Kong-destined NZ velvet).</p>
-        {% else %}
-          <p class="analysis-placeholder__body">Not available — requires at least one complete calendar year of NZ export destination data.</p>
-        {% endif %}
-      </div>
-
-      {# ── Derived analysis 3 — unit value by origin ───────────────────────── #}
-      <div class="triangulation-card">
-        <h3>Unit value — NZ origin<span class="estimate-badge">Estimate</span></h3>
-        {% set uv = triangulation.unit_value_nz_origin if triangulation.unit_value_nz_origin is defined else {} %}
-        {% if uv.available %}
-          <div class="triangulation-stat">${{ uv.latest_price_display }}<span class="triangulation-stat-sub"> / dried-eq kg</span></div>
-          <p class="triangulation-formula">Customs value (USD, KSTAT) ÷ dried-equivalent quantity (kg), NZ-origin rows only, latest month ({{ uv.as_of_date }}). Country-level breakdown added via the getNitemtradeList extension (C-12d).</p>
-        {% else %}
-          <p class="analysis-placeholder__body">Not available — requires NZ-origin rows with both weight and value in the same month.</p>
-        {% endif %}
-      </div>
-
-    </div>{# /triangulation-grid #}
 
   </section>
 
@@ -1605,7 +1621,7 @@
 </script>
 {% endif %}
 
-{# ── SECTION 2 — NEWS PULSE JS ─────────────────────────────────────────
+{# ── SECTION 3 — NEWS PULSE JS ─────────────────────────────────────────
    C-13: default-3 / show-more(30 days) / show-fewer — same pattern as
    Section D's importShowMore/importShowFewer below, window narrowed to
    30 days per Commander spec (news moves faster than import records). #}
