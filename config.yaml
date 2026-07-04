@@ -1,9 +1,20 @@
 # config.yaml — Velvet Knowledge Hub source registry
 #
-# Design principle (Objective 2): adding a new data source requires only:
+# Design principle (Objective 2): adding a new data source that reuses an
+# existing dashboard section's display shape requires only:
 #   1. A new Google Sheets tab, and
 #   2. One new source block below.
-# No Python edits. build.py iterates sources generically via the fields here.
+# scripts/vkh_data.py's assemble_sections() iterates sources generically via
+# the fields here — no edit needed for that case.
+#
+# Correction (C-12b, 2026-07-04): this promise does not hold for a source
+# needing new derived analysis (unit conversions, triangulation, a new chart
+# shape) — that requires new functions in scripts/vkh_charts.py, per the
+# code review addendum's C1 finding that build.py had accreted 20+
+# source-specific functions despite this comment. build.py itself is now a
+# thin orchestrator only (see its docstring); source-specific logic lives in
+# scripts/vkh_data.py (loading), scripts/vkh_kpi.py (KPIs), or
+# scripts/vkh_charts.py (chart prep / derived analysis).
 #
 # Security: no credentials or secrets in this file. All credentials live in
 # GitHub Secrets (CI/CD) or a git-ignored .env file at the repo root.
