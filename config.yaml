@@ -1,9 +1,20 @@
 # config.yaml — Velvet Knowledge Hub source registry
 #
-# Design principle (Objective 2): adding a new data source requires only:
+# Design principle (Objective 2): adding a new data source that reuses an
+# existing dashboard section's display shape requires only:
 #   1. A new Google Sheets tab, and
 #   2. One new source block below.
-# No Python edits. build.py iterates sources generically via the fields here.
+# scripts/vkh_data.py's assemble_sections() iterates sources generically via
+# the fields here — no edit needed for that case.
+#
+# Correction (C-12b, 2026-07-04): this promise does not hold for a source
+# needing new derived analysis (unit conversions, triangulation, a new chart
+# shape) — that requires new functions in scripts/vkh_charts.py, per the
+# code review addendum's C1 finding that build.py had accreted 20+
+# source-specific functions despite this comment. build.py itself is now a
+# thin orchestrator only (see its docstring); source-specific logic lives in
+# scripts/vkh_data.py (loading), scripts/vkh_kpi.py (KPIs), or
+# scripts/vkh_charts.py (chart prep / derived analysis).
 #
 # Security: no credentials or secrets in this file. All credentials live in
 # GitHub Secrets (CI/CD) or a git-ignored .env file at the repo root.
@@ -155,6 +166,40 @@ sources:
 # After deployment: paste the web app URL here and rebuild.
 # ---------------------------------------------------------------------------
 csv_endpoint_url: "https://script.google.com/macros/s/AKfycbxHQO5CkfaWiWV3ZxYByuoFq9B8KW7ElY46rp-sn8DiI6fH5FOi9qKqCYReJz5mRHT26w/exec"  # set after deploying scripts/vkh_csv_email.gs
+
+# ---------------------------------------------------------------------------
+# KPTA pharmaceutical estimate — Phase 2 triangulation (C-12e).
+#
+# Not automatable: IntelQ's phase2_data_access_research (2026-07-03) found
+# KPTA's public page (kpta.or.kr/information/income_nation) is category-level
+# only (no 녹용/velvet HS-code filter), static HTML, stale to 2021, with no
+# download or API. The Appendix B figures below come from a non-public /
+# purchased / direct-enquiry KPTA source — the Commander, not a pipeline.
+#
+# Handled as a single editable constant, VMV-style (see
+# Projects/Velvet_Market_Value/Domain_Knowledge/vmv_processing_constant_change.md
+# for the precedent: one editable value + a reference date, not a live feed).
+#
+# Maintenance: update pharma_total_dmt / pharma_nz_origin_dmt / as_of_date
+# by hand whenever the Commander obtains a fresher KPTA figure (annual, at
+# best). The dashboard (C-12f) shows a visible staleness warning — not just
+# a footnote, per the 잠망경 pre-mortem's DINZ-reader finding — once
+# as_of_date is more than 12 months old. See scripts/vkh_charts.py's
+# _kpta_estimate_context() for the staleness calculation.
+# ---------------------------------------------------------------------------
+kpta_pharma_estimate:
+  pharma_total_dmt: 181.8
+  pharma_nz_origin_dmt: 127.6
+  as_of_date: "2026-07-03"
+  reference_period: "2022"  # the figures describe calendar-year 2022 quarantine/import
+                             # statistics (source spreadsheet confirmed, 2026-07-04) — NOT
+                             # current data. as_of_date above is only when the Commander
+                             # supplied it. This is why _purpose_split() degrades to
+                             # "not available": a 2022 annual total (237.4 DMT) no longer
+                             # matches the live rolling-12m QIA total (153.7 DMT) — Korea's
+                             # quarantine volume has declined since 2022. Recalibrate at
+                             # C-12g CDR once a more current KPTA figure is available.
+  source: "KPTA (한국의약품수출입협회) report / direct enquiry — Commander-sourced, not a public API or download"
 
 # ---------------------------------------------------------------------------
 # Markets — Phase 3 cross-market expansion placeholder.

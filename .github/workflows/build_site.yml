@@ -31,6 +31,15 @@ jobs:
           PYTHONPATH: "."    # L-1: PYTHONPATH on every step
         run: python scripts/validate_config.py
 
+      - name: Smoke test (parsers + dedup + derived-analysis maths)
+        # C-12c / addendum C2: no network, no Sheets, no credentials — pure
+        # fixture-based checks. Runs on every push, unlike a session-only
+        # manual check, so parser or maths regressions fail the build here
+        # instead of shipping silently (would have caught L-9/L-15 earlier).
+        env:
+          PYTHONPATH: "."
+        run: python scripts/test_smoke.py
+
       - name: Collect Naver news
         env:
           PYTHONPATH: "."
