@@ -26,7 +26,7 @@
 
     .segmented-control button {
       padding: 5px 14px;
-      font-size: 0.8125rem;
+      font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
       font-weight: 500;
       font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
       background: var(--toggle-bg);
@@ -56,7 +56,7 @@
     }
 
     .chart-toggle-row label {
-      font-size: 0.8125rem;
+      font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
       font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
       color: var(--text-muted);
       white-space: nowrap;
@@ -64,7 +64,7 @@
 
     .chart-toggle-row select,
     .chart-toggle-row input[type="month"] {
-      font-size: 0.8125rem;
+      font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
       font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
       padding: 4px 8px;
       border: 1px solid var(--border);
@@ -103,7 +103,7 @@
     }
 
     .analysis-placeholder__body {
-      font-size: 0.8125rem;
+      font-size: var(--fs-body);   /* was 0.8125rem (13px) — this is placeholder prose the reader reads, readability floor fix */
       color: var(--text-muted);
       line-height: 1.6;
       font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
@@ -138,7 +138,7 @@
     }
 
     .triangulation-stat-sub {
-      font-size: 0.8125rem;
+      font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
       color: var(--text-muted);
       font-weight: 400;
       font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
@@ -148,7 +148,7 @@
        per the 잠망경 pre-mortem's Appendix B caveat requirement. */
     .estimate-badge {
       display: inline-block;
-      font-size: 0.6875rem;
+      font-size: var(--fs-caption);   /* was 0.6875rem (11px) — readability floor fix */
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -160,7 +160,7 @@
     }
 
     .triangulation-formula {
-      font-size: 0.75rem;
+      font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
       color: var(--text-muted);
       line-height: 1.5;
       margin-top: 10px;
@@ -170,11 +170,11 @@
       width: 100%;
       border-collapse: collapse;
       font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
-      font-size: 0.8125rem;
+      font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
     }
 
     .triangulation-table th {
-      font-size: 0.75rem;
+      font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.06em;
@@ -205,7 +205,7 @@
       border: 1px solid var(--border-heavy);
       border-left: 4px solid var(--accent);
       padding: 10px 14px;
-      font-size: 0.8125rem;
+      font-size: var(--fs-body);   /* was 0.8125rem (13px) — visible warning box meant to be read in full, readability floor fix */
       font-weight: 600;
       color: var(--text-primary);
       margin-bottom: 16px;
@@ -238,7 +238,7 @@
 
     .reference-accordion summary::after {
       content: "\25B6";
-      font-size: 0.7rem;
+      font-size: var(--fs-caption);   /* was 0.7rem (11.2px) — readability floor fix */
       color: var(--text-muted);
       transition: transform 0.15s ease;
     }
@@ -301,7 +301,7 @@
     }
 
     .csv-email-input {
-      font-size: 0.8125rem;
+      font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
       padding: 5px 10px;
       border: 1px solid var(--border);
       color: var(--text-primary);
@@ -316,7 +316,7 @@
     }
 
     .csv-send-btn {
-      font-size: 0.8125rem;
+      font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
       font-weight: 500;
       padding: 5px 14px;
       background: var(--accent);
@@ -331,7 +331,7 @@
     }
 
     .csv-cancel-btn {
-      font-size: 0.8125rem;
+      font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
       color: var(--text-muted);
       background: transparent;
       border: none;
@@ -343,7 +343,7 @@
 
     .csv-confirmation {
       display: none;
-      font-size: 0.8125rem;
+      font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
       color: var(--text-secondary);
       font-style: italic;
       font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
@@ -355,7 +355,7 @@
 
     .csv-error {
       display: none;
-      font-size: 0.8125rem;
+      font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
       color: var(--delta-negative);
       font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
       margin-top: 4px;
@@ -417,7 +417,7 @@
 
     /* Date range note */
     .date-range-note {
-      font-size: 0.75rem;
+      font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
       color: var(--text-muted);
       margin-left: 4px;
     }
@@ -445,7 +445,7 @@
       align-items: center;
       gap: 8px;
       margin-bottom: 8px;
-      font-size: 0.8125rem;
+      font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
       color: var(--text-muted);
       font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
     }
