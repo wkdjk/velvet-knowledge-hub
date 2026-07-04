@@ -719,6 +719,283 @@ def _build_mfds_annual_series(all_trade_rows: list[dict]) -> list[dict]:
     }
 
 
+# ---------------------------------------------------------------------------
+# C-12f — Phase 2 triangulation (Section 3): Appendix B derived analyses 1-3
+# (purpose split, direct/indirect NZ supply, unit value by origin) plus a
+# country-level customs aggregate summary.
+#
+# Every function here degrades independently (L-12): a missing input (no
+# KPTA constant, no full calendar year of data yet) returns {"available":
+# False} for that piece only, never raises, and never blanks the rest of
+# the section. Reuses the existing dried-eq conversion, _compute_unit_price,
+# and destination-bucket helpers above rather than re-deriving the maths —
+# these are the same formulas Appendix B's reference figures use.
+# ---------------------------------------------------------------------------
+
+# Korean -> English country labels for KSTAT customs rows. Kept separate
+# from _QIA_COUNTRY_MAP: KSTAT source data uses different Korean forms for
+# some of the same countries (e.g. "러시아 연방" not QIA's "러시아"). Unmapped
+# values are kept as-is (never silently collapsed to "Other") — this feeds a
+# small named-country summary table, not a stacked chart.
+_KSTAT_COUNTRY_LABELS: dict[str, str] = {
+    "뉴질랜드": "New Zealand",
+    "중국": "China",
+    "홍콩": "Hong Kong",
+    "러시아 연방": "Russia",
+    "러시아": "Russia",
+    "카자흐스탄": "Kazakhstan",
+    "호주": "Australia",
+    "미국": "United States",
+    "아르헨티나": "Argentina",
+}
+
+
+def _kstat_country_summary_latest_year(kstat_rows: list[dict]) -> dict:
+    """
+    Korea customs imports by country for the latest full calendar year
+    (>=10 months of KG data present), dried-equivalent KG + USD + blended
+    unit price. This is the aggregate view sitting above the row-level
+    customs data (downloadable in full via trade_flows.csv).
+
+    Returns {"year": YYYY, "rows": [{"country", "dried_eq_kg", "usd",
+    "unit_price_usd_per_kg"}, ...]} sorted by dried_eq_kg descending, or
+    {"year": None, "rows": []} if no complete year is available yet.
+    """
+    kg_rows = [r for r in kstat_rows if str(r.get("unit", "")) == "KG"]
+    usd_rows = [r for r in kstat_rows if str(r.get("unit", "")) == "USD_thousands"]
+
+    months_per_year: dict[str, set] = defaultdict(set)
+    for row in kg_rows:
+        date_str = str(row.get("date", ""))
+        if date_str and len(date_str) >= 7:
+            months_per_year[date_str[:4]].add(date_str[5:7])
+
+    full_years = sorted(
+        [yr for yr, months in months_per_year.items() if len(months) >= 10],
+        reverse=True,
+    )
+    if not full_years:
+        return {"year": None, "rows": []}
+    latest_year = full_years[0]
+
+    kg_by_country: dict[str, float] = defaultdict(float)
+    for row in kg_rows:
+        date_str = str(row.get("date", ""))
+        if not date_str or date_str[:4] != latest_year:
+            continue
+        try:
+            raw_val = float(row.get("value", 0) or 0)
+        except (ValueError, TypeError):
+            continue
+        pt = str(row.get("product_type", "")).strip().lower()
+        converted = raw_val * 0.33 if pt == "frozen" else raw_val
+        country_en = _KSTAT_COUNTRY_LABELS.get(str(row.get("country", "")).strip(),
+                                                str(row.get("country", "")).strip())
+        kg_by_country[country_en] += converted
+
+    usd_by_country: dict[str, float] = defaultdict(float)
+    for row in usd_rows:
+        date_str = str(row.get("date", ""))
+        if not date_str or date_str[:4] != latest_year:
+            continue
+        try:
+            raw_val = float(row.get("value", 0) or 0) * 1000.0  # USD_thousands -> USD
+        except (ValueError, TypeError):
+            continue
+        country_en = _KSTAT_COUNTRY_LABELS.get(str(row.get("country", "")).strip(),
+                                                str(row.get("country", "")).strip())
+        usd_by_country[country_en] += raw_val
+
+    rows = []
+    for country_en, kg in sorted(kg_by_country.items(), key=lambda kv: kv[1], reverse=True):
+        usd = usd_by_country.get(country_en, 0.0)
+        unit_price = round(usd / kg, 2) if kg > 0 else None
+        rows.append({
+            "country": country_en,
+            "dried_eq_kg": round(kg, 1),
+            "usd": round(usd, 0),
+            "unit_price_usd_per_kg": unit_price,
+            # Pre-formatted display strings — this repo's convention is to
+            # format thousands-separators in Python, not in the Jinja2
+            # template (see vkh_render.py's b7_price_subtitle comment).
+            "dried_eq_kg_display": f"{kg:,.0f}",
+            "usd_display": f"{usd:,.0f}",
+            "unit_price_display": f"{unit_price:,.2f}" if unit_price is not None else "—",
+        })
+
+    return {"year": int(latest_year), "rows": rows}
+
+
+def _nz_dried_eq_by_destination_latest_year(nz_rows: list[dict]) -> dict:
+    """
+    Derived analysis 2 prep — NZ export volume by destination for the latest
+    full calendar year, dried-equivalent KG. Same destination buckets as
+    _latest_full_year_kg_by_destination (China/Korea/Hong Kong/Other) but
+    with the 0.33 frozen conversion applied — Appendix B states the direct-
+    vs-indirect NZ supply analysis in dried-equivalent tonnes, not raw KG.
+
+    Returns {"year": YYYY, "China": kg, "Korea": kg, "Hong Kong": kg,
+    "Other": kg} or {"year": None} if no complete year is available yet.
+    """
+    kg_rows = [r for r in nz_rows if str(r.get("unit", "")) == "KG"]
+
+    months_per_year: dict[str, set] = defaultdict(set)
+    for row in kg_rows:
+        date_str = str(row.get("date", ""))
+        if date_str and len(date_str) >= 7:
+            months_per_year[date_str[:4]].add(date_str[5:7])
+
+    full_years = sorted(
+        [yr for yr, months in months_per_year.items() if len(months) >= 10],
+        reverse=True,
+    )
+    if not full_years:
+        return {"year": None}
+    latest_year = full_years[0]
+
+    dried_eq_by_dest: dict[str, float] = {c: 0.0 for c in _DEST_COUNTRIES + ["Other"]}
+    for row in kg_rows:
+        date_str = str(row.get("date", ""))
+        if not date_str or date_str[:4] != latest_year:
+            continue
+        try:
+            raw_val = float(row.get("value", 0) or 0)
+        except (ValueError, TypeError):
+            continue
+        pt = str(row.get("product_type", "")).strip().lower()
+        converted = raw_val * 0.33 if pt == "frozen" else raw_val
+        country = _normalise_dest_country(str(row.get("country", "")))
+        dried_eq_by_dest[country] += converted
+
+    dried_eq_by_dest = {k: round(v, 1) for k, v in dried_eq_by_dest.items()}
+    dried_eq_by_dest["year"] = int(latest_year)
+    # Pre-formatted tonnes display strings (KG -> t, comma-formatted).
+    dried_eq_by_dest["display"] = {
+        k: f"{v / 1000:,.1f}" for k, v in dried_eq_by_dest.items() if k != "year"
+    }
+    return dried_eq_by_dest
+
+
+def _purpose_split(qia_rolling_dried_eq_kg: dict[str, float], kpta_estimate: dict) -> dict:
+    """
+    Derived analysis 1 — QIA quarantine total (dried-eq, latest rolling
+    12-month figure) minus the KPTA pharmaceutical estimate (C-12e manual
+    constant) = the food channel.
+
+    Returns {"available": False} if either input is missing, or if the split
+    would be non-sensical (quarantine total <= 0, or the pharma estimate
+    exceeds the live quarantine total, producing a negative food channel and
+    a >100% pharma share) — never fabricates or displays an implausible
+    split from mismatched-period data (L-12 + accuracy-first: a wrong number
+    is worse than a missing one).
+    """
+    if not qia_rolling_dried_eq_kg or not kpta_estimate.get("available"):
+        return {"available": False}
+
+    latest_date = max(qia_rolling_dried_eq_kg.keys())
+    quarantine_total_dmt = round(qia_rolling_dried_eq_kg[latest_date] / 1000.0, 1)
+    pharma_dmt = kpta_estimate.get("pharma_total_dmt")
+    if pharma_dmt is None or quarantine_total_dmt <= 0:
+        return {"available": False}
+
+    # Sanity guard (found live, 2026-07-04): the KPTA constant is Appendix
+    # B's reference figure and may cover a different period/scope than the
+    # live QIA rolling-12-month window (e.g. a full calendar year vs a
+    # rolling window, or an earlier year with materially different volumes).
+    # If the pharma estimate alone exceeds the current quarantine total, the
+    # two numbers are not comparable right now — showing a negative "food"
+    # figure and a >100% pharma share would be actively misleading, not a
+    # true derived analysis. Flag as unavailable rather than display it;
+    # this needs a Commander decision on the KPTA figure's actual reference
+    # period, not a silent Python fix.
+    if pharma_dmt >= quarantine_total_dmt:
+        return {
+            "available": False,
+            "reason": (
+                "the KPTA pharmaceutical estimate is currently larger than "
+                "the live QIA quarantine total — the two figures likely "
+                "cover different reference periods and are not yet "
+                "comparable. Awaiting Commander confirmation of the KPTA "
+                "figure's reference period."
+            ),
+        }
+
+    food_dmt = round(quarantine_total_dmt - pharma_dmt, 1)
+    pharma_pct = round(pharma_dmt / quarantine_total_dmt * 100, 1)
+    food_pct = round(100 - pharma_pct, 1)
+
+    return {
+        "available": True,
+        "as_of_date": latest_date,
+        "quarantine_total_dmt": quarantine_total_dmt,
+        "pharma_dmt": pharma_dmt,
+        "food_dmt": food_dmt,
+        "pharma_pct": pharma_pct,
+        "food_pct": food_pct,
+        # Pre-formatted display strings (Python, not Jinja2 — repo convention).
+        "quarantine_total_display": f"{quarantine_total_dmt:,.1f}",
+        "pharma_display": f"{pharma_dmt:,.1f}",
+        "food_display": f"{food_dmt:,.1f}",
+    }
+
+
+def _unit_value_by_origin(kstat_all_rows: list[dict]) -> dict:
+    """
+    Derived analysis 3 — blended unit price (customs USD value / dried-
+    equivalent kg) for NZ-origin rows specifically. Reuses
+    _compute_unit_price on a country-filtered subset — the same maths
+    already used for the section-1 KSTAT blended price series, just
+    pre-filtered to country == NZ so the price reflects NZ-origin trade
+    only rather than the all-country blend.
+
+    Returns {"available": False} if no NZ-origin rows have both KG and
+    USD_thousands values in the same month (L-12).
+    """
+    # L-CSV-EXPORT-style fix: normalise dates before aggregation. Historical
+    # CSV loads store some months unpadded ("2026-3"); _compute_unit_price
+    # keys its internal dict on the raw date string, so an unpadded and a
+    # padded entry for the same month would otherwise sum as two separate
+    # months instead of merging — caught while building this function,
+    # since (unlike the section-1 chart call sites) this result is not
+    # subsequently passed through align_to_window's own re-keying step.
+    nz_only = [
+        dict(r, date=_normalise_date_str(str(r.get("date", ""))))
+        for r in kstat_all_rows
+        if str(r.get("country", "")).strip() == "뉴질랜드"
+    ]
+    prices = _compute_unit_price(nz_only, "USD_thousands", value_multiplier=1000.0)
+    if not prices:
+        return {"available": False}
+
+    latest_date = max(prices.keys())
+    return {
+        "available": True,
+        "as_of_date": latest_date,
+        "latest_price_usd_per_kg": prices[latest_date],
+        "latest_price_display": f"{prices[latest_date]:,.0f}",
+        "series": [{"x": d, "y": v} for d, v in prices.items()],
+    }
+
+
+def build_triangulation(
+    qia_rolling: dict[str, float],
+    kstat_all_rows: list[dict],
+    nz_rows: list[dict],
+    kpta_estimate: dict,
+) -> dict:
+    """
+    Assemble Section 3 (Appendix B derived analyses 1-3) + the country-level
+    customs aggregate summary table. Called from prepare_chart_data() with
+    values it has already computed — no re-fetching, no re-deriving.
+    """
+    return {
+        "customs_country_summary": _kstat_country_summary_latest_year(kstat_all_rows),
+        "purpose_split": _purpose_split(qia_rolling, kpta_estimate),
+        "nz_supply": _nz_dried_eq_by_destination_latest_year(nz_rows),
+        "unit_value_nz_origin": _unit_value_by_origin(kstat_all_rows),
+    }
+
+
 def prepare_chart_data(sections: dict, tab_data: dict | None = None, config: dict | None = None) -> dict:
     """
     Build pre-aggregated chart datasets for the trade_flows section and
@@ -795,6 +1072,9 @@ def prepare_chart_data(sections: dict, tab_data: dict | None = None, config: dic
     nz_rolling = _compute_rolling_12m(nz_dried_eq)
     qia_rolling = _compute_rolling_12m(qia_dried_eq)
     kstat_rolling = _compute_rolling_12m(kstat_dried_eq)
+
+    # ── C-12e: KPTA manual constant (computed once, reused by C-12f below) ───
+    kpta_estimate = _kpta_estimate_context(config or {})
 
     # ── YoY % per rolling series ──────────────────────────────────────────────
     nz_yoy = _compute_yoy_pct(nz_rolling)
@@ -936,5 +1216,8 @@ def prepare_chart_data(sections: dict, tab_data: dict | None = None, config: dic
         "nz_raw_rows":  nz_raw_for_toggle,
 
         # ── C-12e: KPTA manual pharma estimate (config.yaml constant) ────────
-        "kpta_estimate": _kpta_estimate_context(config or {}),
+        "kpta_estimate": kpta_estimate,
+
+        # ── C-12f: Section 3 triangulation (Appendix B derived analyses) ────
+        "triangulation": build_triangulation(qia_rolling, kstat_all_rows, nz_rows, kpta_estimate),
     }

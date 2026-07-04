@@ -35,6 +35,7 @@ from scripts.vkh_charts import (  # noqa: E402
     _compute_rolling_12m,
     _compute_unit_price,
     _kpta_estimate_context,
+    _purpose_split,
 )
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
@@ -191,6 +192,23 @@ def test_kpta_estimate_context() -> None:
            malformed == {"available": False})
 
 
+def test_purpose_split_sanity_guard() -> None:
+    print("test_purpose_split_sanity_guard (C-12f — pharma estimate vs live quarantine total)")
+    kpta_ok = {"available": True, "pharma_total_dmt": 30.0}
+    kpta_too_big = {"available": True, "pharma_total_dmt": 181.8}
+
+    normal = _purpose_split({"2026-03": 61200.0}, kpta_ok)
+    _check("plausible split: available=True", normal["available"] is True)
+    _check("plausible split: food_dmt > 0", normal["food_dmt"] > 0)
+
+    mismatched = _purpose_split({"2026-03": 61200.0}, kpta_too_big)
+    _check("pharma estimate exceeding live total: available=False, not a negative number",
+           mismatched["available"] is False and "reason" in mismatched)
+
+    missing_kpta = _purpose_split({"2026-03": 61200.0}, {"available": False})
+    _check("no KPTA constant: available=False", missing_kpta == {"available": False})
+
+
 def test_compute_unit_price() -> None:
     print("test_compute_unit_price (customs value / dried-eq kg — Appendix B derived analysis 3)")
     rows = [
@@ -218,6 +236,7 @@ def main() -> None:
     test_compute_rolling_12m()
     test_compute_unit_price()
     test_kpta_estimate_context()
+    test_purpose_split_sanity_guard()
 
     print(f"\n{_checks_run} checks run, {_checks_failed} failed.")
     if _checks_failed:

@@ -420,12 +420,22 @@ def _parse_nitemtrade_xml(raw_xml: str, cnty_cd: str, hs10: str) -> list[dict]:
 
         try:
             imp_weight = int(float(item.findtext("impWgt") or "0"))
-            imp_value = int(float(item.findtext("impDlr") or "0"))
+            # BUGFIX (found during C-12f build, 2026-07-04): impDlr is plain
+            # USD, not thousands — getItemtradeList's imp_cur_mon_usd field
+            # (used elsewhere in this file) already returns thousands, but
+            # getNitemtradeList does not. Confirmed by cross-checking against
+            # the manually-downloaded CSV for the same period (NZ 2024-01,
+            # HS 0507901110): CSV value=2880 (USD_thousands, i.e. $2.88M) for
+            # 20,336 kg; this API's raw impDlr for the same period is
+            # 2,879,659 (plain USD) — dividing by 1000 gives 2879.7, matching
+            # the CSV within rounding. Storing the raw value unconverted
+            # inflated every nitemtrade-sourced USD_thousands row by 1000x.
+            imp_value_usd_thousands = float(item.findtext("impDlr") or "0") / 1000.0
         except (ValueError, TypeError):
             logger.debug("Skipping malformed nitemtrade item for cntyCd=%s", cnty_cd)
             continue
 
-        if imp_weight == 0 and imp_value == 0:
+        if imp_weight == 0 and imp_value_usd_thousands == 0:
             continue
 
         results.append({
@@ -433,7 +443,7 @@ def _parse_nitemtrade_xml(raw_xml: str, cnty_cd: str, hs10: str) -> list[dict]:
             "hs10": hs10,
             "country": country_name or _NITEMTRADE_COUNTRY_LABELS.get(cnty_cd, cnty_cd),
             "imp_weight_kg": imp_weight,
-            "imp_value_usd_thousands": imp_value,
+            "imp_value_usd_thousands": round(imp_value_usd_thousands, 3),
         })
 
     return results

@@ -109,6 +109,109 @@
       font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
     }
 
+    /* C-12f: Section 3 triangulation components */
+    .triangulation-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+      margin-top: 16px;
+    }
+
+    .triangulation-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      padding: 16px 18px;
+    }
+
+    .triangulation-card h3 {
+      font-size: 0.9375rem;
+      margin: 0 0 10px 0;
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+    }
+
+    .triangulation-stat {
+      font-family: "SF Mono", "Cascadia Code", "Fira Mono", "Courier New", monospace;
+      font-size: 1.375rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .triangulation-stat-sub {
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      font-weight: 400;
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+    }
+
+    /* "Estimate" badge — every derived figure in this section carries one,
+       per the 잠망경 pre-mortem's Appendix B caveat requirement. */
+    .estimate-badge {
+      display: inline-block;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      padding: 1px 6px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    .triangulation-formula {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-top: 10px;
+    }
+
+    .triangulation-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+      font-size: 0.8125rem;
+    }
+
+    .triangulation-table th {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      padding: 6px 8px;
+      border-bottom: 2px solid var(--border);
+      text-align: right;
+    }
+
+    .triangulation-table th:first-child,
+    .triangulation-table td:first-child {
+      text-align: left;
+    }
+
+    .triangulation-table td {
+      padding: 7px 8px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-secondary);
+      text-align: right;
+      font-family: "SF Mono", "Cascadia Code", "Fira Mono", "Courier New", monospace;
+    }
+
+    /* Staleness warning — visible box, not a footnote (pre-mortem DINZ-reader
+       finding). Bordered + bold, no new colour beyond the existing gold
+       accent token, per the B&W/gold DINZ design constraint. */
+    .kpta-staleness-warning {
+      background: var(--surface);
+      border: 1px solid var(--border-heavy);
+      border-left: 4px solid var(--accent);
+      padding: 10px 14px;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+    }
+
     /* Section C reference accordion */
     .reference-accordion {
       border: 1px solid var(--border);
@@ -481,7 +584,7 @@
   <ul class="nav-list">
     <li><a href="#section-1">1. Basic trade statistics</a></li>
     <li><a href="#section-2">2. News pulse</a></li>
-    <li><a href="#section-3">3. Import intelligence</a></li>
+    <li><a href="#section-3">3. Trade triangulation</a></li>
     <li><a href="#section-4">4. Import records</a></li>
     <li><a href="#section-5">5. Trade reference</a></li>
   </ul>
@@ -747,16 +850,99 @@
 
     <div class="section-header">
       <div class="section-header-left">
-        <h2>3. Import intelligence</h2>
+        <h2>3. Trade triangulation</h2>
       </div>
     </div>
 
-    <p class="source-footnote">Planned: time-lag analysis comparing NZ export records (Stats NZ) with Korea import records (QIA). See sections 1 and 2 for the underlying data.</p>
+    <p class="source-footnote">Combines Korea customs (KSTAT), QIA quarantine, Stats NZ export, and a manually-maintained KPTA pharmaceutical estimate — an answer no single official source gives alone. Every derived figure below shows its formula and is labelled an estimate.</p>
 
-    <div class="analysis-placeholder" style="margin-top:16px;">
-      <p class="analysis-placeholder__title">Analysis in progress</p>
-      <p class="analysis-placeholder__body">Time-lag and correlation analysis between NZ export shipments and Korea import arrivals is planned for a future update. The data shown in sections A1 and A2 provides the underlying series.</p>
+    {% set triangulation = chart_data.triangulation if chart_data is defined and chart_data.triangulation is defined else {} %}
+    {% set kpta_estimate = chart_data.kpta_estimate if chart_data is defined and chart_data.kpta_estimate is defined else {"available": false} %}
+
+    {% if kpta_estimate.available and kpta_estimate.is_stale %}
+      <div class="kpta-staleness-warning">
+        ⚠ KPTA pharmaceutical estimate is {{ kpta_estimate.age_days }} days old (as of {{ kpta_estimate.as_of_date }}) — over 12 months since last refreshed. Figures below relying on this constant may not reflect current volumes.
+      </div>
+    {% endif %}
+
+    {# ── Aggregate view — Korea customs imports by country ─────────────────── #}
+    {% set ccs = triangulation.customs_country_summary if triangulation.customs_country_summary is defined else {} %}
+    <div style="margin-top:8px;">
+      <h3 style="font-size:1rem; margin-bottom:8px;">Korea customs imports by country{% if ccs.year %} — {{ ccs.year }} (full calendar year){% endif %}</h3>
+      {% if ccs.year and ccs.rows %}
+        <div class="table-scroll-wrapper">
+          <table class="triangulation-table">
+            <caption class="table-footnote" style="text-align:left; margin-bottom:6px;">Aggregate view. Full row-level detail (all countries, all months) is available via the trade flows CSV download in section 1.</caption>
+            <thead>
+              <tr><th>Country</th><th>Dried-eq kg</th><th>USD</th><th>USD / kg</th></tr>
+            </thead>
+            <tbody>
+              {% for row in ccs.rows %}
+                <tr>
+                  <td>{{ row.country }}</td>
+                  <td>{{ row.dried_eq_kg_display }}</td>
+                  <td>{{ row.usd_display }}</td>
+                  <td>{{ row.unit_price_display }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="placeholder-card">
+          <p class="placeholder-title">Country-level customs summary not yet available</p>
+          <p class="placeholder-body">Requires at least one complete calendar year (10+ months) of country-level KSTAT data.</p>
+        </div>
+      {% endif %}
     </div>
+
+    <div class="triangulation-grid">
+
+      {# ── Derived analysis 1 — purpose split ─────────────────────────────── #}
+      <div class="triangulation-card">
+        <h3>Purpose split — pharmaceutical vs food<span class="estimate-badge">Estimate</span></h3>
+        {% set ps = triangulation.purpose_split if triangulation.purpose_split is defined else {} %}
+        {% if ps.available %}
+          <div class="triangulation-stat">{{ ps.pharma_pct }}%<span class="triangulation-stat-sub"> pharmaceutical</span></div>
+          <div class="triangulation-stat" style="font-size:1.0625rem; margin-top:4px;">{{ ps.food_pct }}%<span class="triangulation-stat-sub"> food channel</span></div>
+          <p class="triangulation-formula">Food channel = QIA quarantine total (dried-equivalent, rolling 12 months to {{ ps.as_of_date }}: {{ ps.quarantine_total_display }} t) − KPTA pharmaceutical estimate ({{ ps.pharma_display }} t) = {{ ps.food_display }} t.</p>
+        {% else %}
+          <p class="analysis-placeholder__body">Not available{% if ps.reason %} — {{ ps.reason }}{% else %} — requires both a live QIA total and a KPTA pharmaceutical estimate (see section header above).{% endif %}</p>
+        {% endif %}
+      </div>
+
+      {# ── Derived analysis 2 — direct vs indirect NZ supply ───────────────── #}
+      <div class="triangulation-card">
+        <h3>NZ supply — direct vs indirect<span class="estimate-badge">Estimate</span></h3>
+        {% set ns = triangulation.nz_supply if triangulation.nz_supply is defined else {} %}
+        {% if ns.year %}
+          <table class="triangulation-table" style="margin-top:2px;">
+            <tbody>
+              <tr><td style="text-align:left; font-family:inherit;">Direct to Korea</td><td>{{ ns.display.Korea }} t</td></tr>
+              <tr><td style="text-align:left; font-family:inherit;">Via China (indirect route)</td><td>{{ ns.display.China }} t</td></tr>
+              <tr><td style="text-align:left; font-family:inherit;">Via Hong Kong (indirect route)</td><td>{{ ns.display["Hong Kong"] }} t</td></tr>
+              <tr><td style="text-align:left; font-family:inherit;">Other destinations</td><td>{{ ns.display.Other }} t</td></tr>
+            </tbody>
+          </table>
+          <p class="triangulation-formula">NZ export volume by destination (Stats NZ, dried-equivalent, {{ ns.year }} full calendar year). "Indirect" is NZ's recorded export destination only — the visible upper bound for China/Hong Kong re-export to Korea, not a confirmed re-export volume (no source currently confirms the Korea-bound share of China/Hong Kong-destined NZ velvet).</p>
+        {% else %}
+          <p class="analysis-placeholder__body">Not available — requires at least one complete calendar year of NZ export destination data.</p>
+        {% endif %}
+      </div>
+
+      {# ── Derived analysis 3 — unit value by origin ───────────────────────── #}
+      <div class="triangulation-card">
+        <h3>Unit value — NZ origin<span class="estimate-badge">Estimate</span></h3>
+        {% set uv = triangulation.unit_value_nz_origin if triangulation.unit_value_nz_origin is defined else {} %}
+        {% if uv.available %}
+          <div class="triangulation-stat">${{ uv.latest_price_display }}<span class="triangulation-stat-sub"> / dried-eq kg</span></div>
+          <p class="triangulation-formula">Customs value (USD, KSTAT) ÷ dried-equivalent quantity (kg), NZ-origin rows only, latest month ({{ uv.as_of_date }}). Country-level breakdown added via the getNitemtradeList extension (C-12d).</p>
+        {% else %}
+          <p class="analysis-placeholder__body">Not available — requires NZ-origin rows with both weight and value in the same month.</p>
+        {% endif %}
+      </div>
+
+    </div>{# /triangulation-grid #}
 
   </section>
 
