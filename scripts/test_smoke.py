@@ -155,9 +155,15 @@ def test_compute_rolling_12m() -> None:
 
 def test_kpta_estimate_context() -> None:
     print("test_kpta_estimate_context (C-12e — manual constant + staleness flag)")
-    from datetime import date, timedelta
+    from datetime import timedelta
 
-    today_iso = date.today().isoformat()
+    from scripts.vkh_data import _today_kst
+
+    # _kpta_estimate_context() computes age against _today_kst(), not the
+    # system/UTC date — a CI runner (UTC) crossing the UTC/KST day boundary
+    # would otherwise see age_days==1 instead of 0 here. Use the same clock
+    # the function under test uses.
+    today_iso = _today_kst().isoformat()
     fresh = _kpta_estimate_context({
         "kpta_pharma_estimate": {
             "pharma_total_dmt": 181.8,
@@ -170,7 +176,7 @@ def test_kpta_estimate_context() -> None:
     _check("fresh estimate: is_stale=False", fresh["is_stale"] is False)
     _check("fresh estimate: age_days == 0", fresh["age_days"] == 0)
 
-    old_date = (date.today() - timedelta(days=400)).isoformat()
+    old_date = (_today_kst() - timedelta(days=400)).isoformat()
     stale = _kpta_estimate_context({
         "kpta_pharma_estimate": {
             "pharma_total_dmt": 181.8,
