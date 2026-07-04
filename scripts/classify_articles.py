@@ -839,8 +839,6 @@ def emit_succession_notice(promotions: list[dict]) -> None:
                 )
             f.write("SUCCESSION_EOF\n")
 
-    return promotions
-
 
 # ---------------------------------------------------------------------------
 # Shared write-back helper
