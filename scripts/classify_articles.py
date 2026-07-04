@@ -577,7 +577,10 @@ def run_semantic_clustering_pass(
         if date is None or not title:
             continue  # can't window- or title-compare an unparseable row — leave untouched
         parsed.append({"row_num": row_num, "row": row, "date": date, "title": title})
-    parsed.sort(key=lambda item: item["date"])  # deterministic order — required for Task 1a
+    # SurveyorQ F3 (2026-07-04): same published_date is not itself a tie-break —
+    # sort by article_id too so processing order (and therefore which row
+    # settles first and becomes canonical) is identical across runs.
+    parsed.sort(key=lambda item: (item["date"], str(item["row"].get("article_id", ""))))
 
     settled = [
         item for item in parsed
@@ -680,7 +683,7 @@ def run_semantic_clustering_pass(
     return {"suppressed": suppressed, "judged": len(pending), "llm_calls": llm_calls, "llm_errors": llm_errors}
 
 
-def run_canonical_succession(ws, dry_run: bool) -> int:
+def run_canonical_succession(ws, dry_run: bool) -> list[dict]:
     """
     Task 1b (2026-07-04): if a human manually flips a cluster's canonical
     row (duplicate_of_article_id == "none") to include_on_site=FALSE
@@ -697,9 +700,13 @@ def run_canonical_succession(ws, dry_run: bool) -> int:
     never revives a row a human suppressed on its own merits — only a
     canonical whose suppression orphaned at least one still-suppressed mate.
 
-    Does not consult manual_override — that column protects a row from
-    this script's OWN suppression decisions; it is unrelated to a human
-    switching a canonical off by hand.
+    SurveyorQ revised instruction (2026-07-04), point (a): a mate with
+    manual_override=TRUE is excluded from succession candidacy — if a human
+    protected that specific row and it is nonetheless FALSE, that reads as
+    "I want this one suppressed regardless," not "promote me." Note this is
+    a different use of manual_override than run_semantic_clustering_pass's
+    (which protects a row from THIS SCRIPT's own suppression); here it is
+    read, not written, as a signal not to auto-revive.
 
     Bug fix (2026-07-04, first live run): pre-C-13 duplicate-insert debt
     means multiple physical rows can share one article_id (collect_naver.py's
@@ -712,7 +719,11 @@ def run_canonical_succession(ws, dry_run: bool) -> int:
     story already live on the site. Fixed by checking ALL rows sharing the
     canonical's article_id for ANY currently-TRUE row, not one arbitrary row.
 
-    Returns the number of rows promoted (0 on dry_run — reports only).
+    Returns a list of promotion-event dicts (empty if none), each with
+    old_canonical_id/title, new_canonical_id/title, row numbers — used by
+    main() to build the Commander-visible succession notice (SurveyorQ
+    point (c)). Cell writes are skipped on dry_run but the list still
+    reports what *would* happen.
     """
     all_rows = ws.get_all_records()
     rows_by_article_id: dict[str, list[tuple[int, dict]]] = {}
@@ -726,14 +737,14 @@ def run_canonical_succession(ws, dry_run: bool) -> int:
             mates_by_canonical.setdefault(dup_of, []).append((idx + 2, row))
 
     cell_updates: list[dict] = []
-    promotions = 0
+    promotions: list[dict] = []
     now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     for canonical_id, mates in mates_by_canonical.items():
         canonical_rows = rows_by_article_id.get(canonical_id, [])
         if not canonical_rows:
             continue  # dangling pointer — canonical row missing; leave alone
-        canonical_row_num = canonical_rows[0][0]  # for logging only — may be any of several physical rows
+        canonical_row_num, canonical_row = canonical_rows[0]  # for logging/title only — may be any of several physical rows
         still_visible = any(
             str(row.get("include_on_site", "")).strip().upper() == "TRUE"
             for _row_num, row in canonical_rows
@@ -741,38 +752,92 @@ def run_canonical_succession(ws, dry_run: bool) -> int:
         if still_visible:
             continue  # canonical still visible (via some physical row sharing this article_id) — nothing to do
 
+        # (a) manual_override rows are never succession candidates — a human
+        # protecting a specific row and it still being FALSE means "leave it
+        # suppressed," not "eligible to become canonical."
         suppressed_mates = [
             (row_num, row) for row_num, row in mates
             if str(row.get("include_on_site", "")).strip().upper() == "FALSE"
+            and str(row.get("manual_override", "")).strip().upper() != "TRUE"
         ]
         if not suppressed_mates:
-            continue  # succession already happened, or no mates left to promote
+            continue  # succession already happened, no eligible mates, or all remaining are protected
 
-        suppressed_mates.sort(key=lambda item: str(item[1].get("published_date", "")))
+        # Same tie-break principle as Task 1a's sort (SurveyorQ F3): article_id
+        # as secondary key so the promoted mate is identical across re-runs.
+        suppressed_mates.sort(key=lambda item: (str(item[1].get("published_date", "")), str(item[1].get("article_id", ""))))
         promote_row_num, promote_row = suppressed_mates[0]
         new_canonical_id = str(promote_row.get("article_id", ""))
 
         print(f"  succession: canonical article_id={canonical_id} (row {canonical_row_num}) "
               f"was manually suppressed — promoting article_id={new_canonical_id} (row {promote_row_num})")
-        promotions += 1
+        promotions.append({
+            "old_canonical_id": canonical_id,
+            "old_canonical_title": str(canonical_row.get("url", "")).strip(),
+            "old_canonical_row": canonical_row_num,
+            "new_canonical_id": new_canonical_id,
+            "new_canonical_title": str(promote_row.get("url", "")).strip(),
+            "new_canonical_row": promote_row_num,
+        })
 
         if not dry_run:
             cell_updates.append({"range": rowcol_to_a1(promote_row_num, _COL_INCLUDE_ON_SITE + 1), "values": [["TRUE"]]})
             cell_updates.append({"range": rowcol_to_a1(promote_row_num, _COL_DUPLICATE_OF + 1), "values": [[_DEDUP_SENTINEL_NONE]]})
             cell_updates.append({"range": rowcol_to_a1(promote_row_num, _COL_DEDUP_JUDGED_AT + 1), "values": [[now_ts]]})
-            # Repoint any remaining suppressed mates to the newly-promoted canonical.
+            # (b) Repoint EVERY other cluster member — the remaining suppressed
+            # mates AND the old (now-superseded) canonical row itself — to the
+            # newly-promoted canonical, so no row is left pointing at a
+            # no-longer-canonical article_id. Only touch physical rows that
+            # were actually tracked as this cluster's canonical (dup_of ==
+            # "none") — NOT every decoy row that merely shares the same
+            # article_id from pre-C-13 duplicate-insert debt (those were
+            # never part of this cluster's tracked membership and repointing
+            # them would conflate "same hash" with "cluster member").
             for row_num, _row in suppressed_mates[1:]:
                 cell_updates.append({"range": rowcol_to_a1(row_num, _COL_DUPLICATE_OF + 1), "values": [[new_canonical_id]]})
+            for row_num, row in canonical_rows:
+                if str(row.get("duplicate_of_article_id", "")).strip() == _DEDUP_SENTINEL_NONE:
+                    cell_updates.append({"range": rowcol_to_a1(row_num, _COL_DUPLICATE_OF + 1), "values": [[new_canonical_id]]})
 
     if cell_updates:
         ws.batch_update(cell_updates, value_input_option="USER_ENTERED")
 
     if promotions:
-        print(f"  succession: promoted {promotions} row(s)" + (" [dry-run]" if dry_run else ""))
+        print(f"  succession: promoted {len(promotions)} row(s)" + (" [dry-run]" if dry_run else ""))
     else:
         print("  succession: no manually-suppressed canonicals found")
 
     return promotions
+
+
+def emit_succession_notice(promotions: list[dict]) -> None:
+    """
+    SurveyorQ revised instruction (c): a succession event must be visible to
+    the Commander, not only in the CI run log — because a manual suppression
+    can mean either "hide this one bad article" (succession is right) or
+    "hide the whole story" (succession just undid that intent, and the
+    promoted successor should probably be suppressed too). This writes a
+    GitHub Actions step output (a no-op if GITHUB_OUTPUT isn't set, e.g. when
+    running locally) that a workflow step turns into an email — see
+    "Send succession notice email" in .github/workflows/build_site.yml.
+    """
+    github_output = os.environ.get("GITHUB_OUTPUT")
+    if not github_output:
+        return  # local run — nothing to wire up
+
+    with open(github_output, "a", encoding="utf-8") as f:
+        f.write(f"succession_count={len(promotions)}\n")
+        if promotions:
+            f.write("succession_notice<<SUCCESSION_EOF\n")
+            for p in promotions:
+                f.write(
+                    f"- Row {p['old_canonical_row']} ({p['old_canonical_title'][:80]}) was manually "
+                    f"suppressed. Promoted row {p['new_canonical_row']} "
+                    f"({p['new_canonical_title'][:80]}) to take its place.\n"
+                    f"  If your intent was to hide the whole story (not just that one article), "
+                    f"also set manual_override=TRUE and include_on_site=FALSE on the promoted row.\n"
+                )
+            f.write("SUCCESSION_EOF\n")
 
 
 # ---------------------------------------------------------------------------
@@ -981,9 +1046,10 @@ def main() -> None:
         # collect_naver.py run after the story was already classified.
         cluster_stats = run_semantic_clustering_pass(ws, dedup_client, dry_run=args.dry_run, force=args.force_cluster)
         promotions = run_canonical_succession(ws, dry_run=args.dry_run)
+        emit_succession_notice(promotions)
         print(f"articles_processed: 0 | written_to_sheets: 0 | "
               f"duplicates_suppressed: {cluster_stats['suppressed']} | "
-              f"canonical_promotions: {promotions} | errors: 0")
+              f"canonical_promotions: {len(promotions)} | errors: 0")
         sys.exit(0)
 
     # Apply --limit if set.
@@ -1033,6 +1099,7 @@ def main() -> None:
         # match each other, see run_semantic_clustering_pass docstring).
         cluster_stats = run_semantic_clustering_pass(ws, dedup_client, dry_run=False, force=args.force_cluster)
         promotions = run_canonical_succession(ws, dry_run=False)
+        emit_succession_notice(promotions)
 
         print()
         print(f"  DONE: {written_to_sheets} rows updated in '{TARGET_TAB}'.")
@@ -1040,7 +1107,7 @@ def main() -> None:
             f"articles_processed: {articles_processed} | "
             f"written_to_sheets: {written_to_sheets} | "
             f"duplicates_suppressed: {cluster_stats['suppressed']} | "
-            f"canonical_promotions: {promotions} | "
+            f"canonical_promotions: {len(promotions)} | "
             f"errors: {errors}"
         )
         return
@@ -1103,6 +1170,7 @@ def main() -> None:
     # rows can match each other, see run_semantic_clustering_pass docstring).
     cluster_stats = run_semantic_clustering_pass(ws, dedup_client, dry_run=False, force=args.force_cluster)
     promotions = run_canonical_succession(ws, dry_run=False)
+    emit_succession_notice(promotions)
 
     print()
     print(f"  DONE: {written_to_sheets} rows updated in '{TARGET_TAB}'.")
@@ -1110,7 +1178,7 @@ def main() -> None:
         f"articles_processed: {articles_processed} | "
         f"written_to_sheets: {written_to_sheets} | "
         f"duplicates_suppressed: {cluster_stats['suppressed']} | "
-        f"canonical_promotions: {promotions} | "
+        f"canonical_promotions: {len(promotions)} | "
         f"errors: {errors}"
     )
 

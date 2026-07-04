@@ -17,7 +17,11 @@
 #   4. run_canonical_succession — duplicate-article_id regression (bug found
 #      on the first live run, 2026-07-04): multiple physical rows sharing
 #      one article_id must not cause a false "canonical was suppressed".
-#   5. run_semantic_clustering_pass — full pass against a fake worksheet AND
+#   5. run_canonical_succession — SurveyorQ (a): a manual_override=TRUE mate
+#      must never be promoted; the next eligible mate is promoted instead.
+#   6. run_canonical_succession — SurveyorQ F3: same-published_date mates
+#      must resolve deterministically via an article_id tie-break.
+#   7. run_semantic_clustering_pass — full pass against a fake worksheet AND
 #      a fake Anthropic client (always reports "match: 1"): same-batch
 #      matching (Task 1a) and manual_override protection (Task 1, Part B §c).
 
@@ -93,14 +97,14 @@ def demo() -> None:
     assert _within_cluster_window(date(2026, 5, 28), date(2026, 5, 31)) is True   # 3 days, inclusive
     assert _within_cluster_window(date(2026, 5, 28), date(2026, 6, 1)) is False   # 4 days
     assert _within_cluster_window(date(2026, 6, 1), date(2026, 5, 28)) is False   # order-independent
-    print("  [1/5] _within_cluster_window: PASS")
+    print("  [1/7] _within_cluster_window: PASS")
 
     # --- 2. fallback ratio match --------------------------------------------
     idx = _fallback_ratio_match("조아제약, 몽진환 마인 출시", ["조아제약, 몽진환 마인 신제품 출시"])
     assert idx == 0, "near-verbatim titles should match under the strict fallback threshold"
     idx = _fallback_ratio_match("조아제약 신제품 출시", ["완전히 다른 뉴스 헤드라인입니다"])
     assert idx is None, "unrelated titles should not match"
-    print("  [2/5] _fallback_ratio_match: PASS")
+    print("  [2/7] _fallback_ratio_match: PASS")
 
     # --- 3. canonical succession --------------------------------------------
     # Cluster: article_id "A" (canonical, manually suppressed by a human),
@@ -116,18 +120,21 @@ def demo() -> None:
     ]
     ws = _FakeWorksheet(rows)
     promotions = run_canonical_succession(ws, dry_run=False)
-    assert promotions == 1, f"expected 1 promotion, got {promotions}"
+    assert len(promotions) == 1, f"expected 1 promotion, got {len(promotions)}"
 
     result = {r["article_id"]: r for r in ws.get_all_records()}
     assert result["B"]["include_on_site"] == "TRUE", "earliest surviving mate must be promoted"
     assert result["B"]["duplicate_of_article_id"] == "none", "promoted mate becomes its own canonical"
     assert result["C"]["duplicate_of_article_id"] == "B", "remaining mate must be repointed to the new canonical"
     assert result["A"]["include_on_site"] == "FALSE", "the manually-suppressed row is never auto-revived"
+    assert result["A"]["duplicate_of_article_id"] == "B", (
+        "SurveyorQ (b): the old canonical itself must also be repointed to the new one"
+    )
 
     # Idempotency: running again with succession already applied must be a no-op.
     promotions_again = run_canonical_succession(ws, dry_run=False)
-    assert promotions_again == 0, "succession must not re-fire once a mate has already been promoted"
-    print("  [3/5] run_canonical_succession: PASS")
+    assert len(promotions_again) == 0, "succession must not re-fire once a mate has already been promoted"
+    print("  [3/7] run_canonical_succession: PASS")
 
     # --- 4. duplicate-article_id regression (2026-07-04 live bug) -----------
     # "X" has TWO physical rows sharing article_id "X" — a decoy copy (FALSE,
@@ -146,16 +153,59 @@ def demo() -> None:
     ]
     ws_dup_id = _FakeWorksheet(rows_dup_id)
     promotions_dup_id = run_canonical_succession(ws_dup_id, dry_run=False)
-    assert promotions_dup_id == 0, (
+    assert len(promotions_dup_id) == 0, (
         f"expected 0 promotions when the canonical is still TRUE via another "
-        f"physical row sharing its article_id, got {promotions_dup_id}"
+        f"physical row sharing its article_id, got {len(promotions_dup_id)}"
     )
     result_dup_id = ws_dup_id.get_all_records()
     y_row = next(r for r in result_dup_id if r["url"] == "distinct story, correctly suppressed")
     assert y_row["include_on_site"] == "FALSE", "correctly-suppressed duplicate must not be resurrected"
-    print("  [4/5] run_canonical_succession (duplicate article_id): PASS")
+    print("  [4/7] run_canonical_succession (duplicate article_id): PASS")
 
-    # --- 5. semantic clustering pass -----------------------------------------
+    # --- 5. SurveyorQ (a): manual_override excludes a mate from succession ---
+    # Cluster: "P" (canonical, manually suppressed), "Q" (earliest mate, but
+    # manual_override=TRUE — a human specifically wants THIS one to stay
+    # suppressed, not to become the new canonical), "R" (later mate, no
+    # override — must be promoted instead, skipping over Q).
+    rows_override = [
+        {"article_id": "P", "url": "canonical, manually suppressed", "published_date": "2026-05-28",
+         "include_on_site": "FALSE", "duplicate_of_article_id": "none", "dedup_judged_at": "2026-05-28T00:00:00Z"},
+        {"article_id": "Q", "url": "protected mate, must stay suppressed", "published_date": "2026-05-29",
+         "include_on_site": "FALSE", "duplicate_of_article_id": "P", "dedup_judged_at": "2026-05-29T00:00:00Z",
+         "manual_override": "TRUE"},
+        {"article_id": "R", "url": "unprotected mate, eligible", "published_date": "2026-05-30",
+         "include_on_site": "FALSE", "duplicate_of_article_id": "P", "dedup_judged_at": "2026-05-30T00:00:00Z"},
+    ]
+    ws_override = _FakeWorksheet(rows_override)
+    promotions_override = run_canonical_succession(ws_override, dry_run=False)
+    assert len(promotions_override) == 1, f"expected 1 promotion, got {len(promotions_override)}"
+    result_override = {r["article_id"]: r for r in ws_override.get_all_records()}
+    assert result_override["Q"]["include_on_site"] == "FALSE", "manual_override=TRUE mate must never be promoted"
+    assert result_override["R"]["include_on_site"] == "TRUE", "next-eligible (unprotected) mate must be promoted instead"
+    print("  [5/7] run_canonical_succession (manual_override excluded): PASS")
+
+    # --- 6. SurveyorQ F3: same-date tie-break is deterministic ---------------
+    # "S" and "T" share the exact same published_date; only article_id order
+    # (S < T) should decide which one is promoted, both directions.
+    def _build_same_date_cluster():
+        return _FakeWorksheet([
+            {"article_id": "M", "url": "canonical, manually suppressed", "published_date": "2026-05-28",
+             "include_on_site": "FALSE", "duplicate_of_article_id": "none", "dedup_judged_at": "2026-05-28T00:00:00Z"},
+            {"article_id": "T", "url": "same-date mate T", "published_date": "2026-05-29",
+             "include_on_site": "FALSE", "duplicate_of_article_id": "M", "dedup_judged_at": "2026-05-29T00:00:00Z"},
+            {"article_id": "S", "url": "same-date mate S", "published_date": "2026-05-29",
+             "include_on_site": "FALSE", "duplicate_of_article_id": "M", "dedup_judged_at": "2026-05-29T00:00:00Z"},
+        ])
+
+    for _ in range(3):  # repeat — a flaky tie-break would show up as run-to-run variance
+        ws_tie = _build_same_date_cluster()
+        run_canonical_succession(ws_tie, dry_run=False)
+        result_tie = {r["article_id"]: r for r in ws_tie.get_all_records()}
+        assert result_tie["S"]["include_on_site"] == "TRUE", "article_id-ascending tie-break must always pick S over T"
+        assert result_tie["T"]["include_on_site"] == "FALSE"
+    print("  [6/7] run_canonical_succession (same-date tie-break): PASS")
+
+    # --- 7. semantic clustering pass -----------------------------------------
     # D (2026-05-28): arrives first in this pass, no candidates yet — becomes
     #   canonical (settled) before E or F are processed (Task 1a requires
     #   ascending published_date order to make this deterministic).
@@ -185,7 +235,7 @@ def demo() -> None:
     assert result["E"]["duplicate_of_article_id"] == "D"
     assert result["F"]["include_on_site"] == "TRUE", "manual_override=TRUE must block suppression"
     assert result["F"]["duplicate_of_article_id"] == "D", "verdict is still cached even when not applied"
-    print("  [5/5] run_semantic_clustering_pass (Task 1a + manual_override): PASS")
+    print("  [7/7] run_semantic_clustering_pass (Task 1a + manual_override): PASS")
 
     print("ALL CHECKS PASSED")
 
