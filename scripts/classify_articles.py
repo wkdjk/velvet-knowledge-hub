@@ -32,6 +32,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -77,7 +78,8 @@ _HAIKU_MODEL = "claude-haiku-4-5-20251001"
 # Header row (0-based):
 #   article_id(0) | title(1) | url(2) | content_hash(3) | published_date(4) |
 #   source(5) | category(6) | english_summary(7) | ai_processed_at(8) |
-#   include_on_site(9) | crawled_at(10) | english_title(11)
+#   include_on_site(9) | crawled_at(10) | english_title(11) |
+#   duplicate_of_article_id(12) | dedup_judged_at(13) | manual_override(14)
 #
 # Note: input columns (title_ko, description) are read by header NAME, not
 # index, at each call site — see _classify_article_async() and the sync loop
@@ -95,23 +97,41 @@ _COL_INCLUDE_ON_SITE = 9  # 'include_on_site' (J)
 # 'english_title' to cell L1 of KVN_Articles) before running the classifier.
 _COL_ENGLISH_TITLE = 11   # 'english_title' (L) — added C-8 P0b
 
+# C-13 Task 1 (2026-07-04): semantic dedup cache + manual-protection columns.
+# Prerequisite: run scripts/add_dedup_columns_header.py once against the live
+# sheet before running the semantic clustering pass (mirrors C-8 P0b's
+# add_english_title_header.py migration pattern).
+_COL_DUPLICATE_OF = 12         # 'duplicate_of_article_id' (M)
+_COL_DEDUP_JUDGED_AT = 13      # 'dedup_judged_at' (N)
+_COL_MANUAL_OVERRIDE = 14      # 'manual_override' (O) — written only by a human, never by this script.
+
 # Valid category values — classifier must return one of these.
 _VALID_CATEGORIES = frozenset([
     "규제정책", "무역시장", "건강제품", "수입유통", "업계소식", "기타"
 ])
 
-# Near-duplicate clustering (Task 2, 2026-07-03): the same press release
-# covered by multiple outlets gets a different URL and content_hash per
-# collect_naver.py's exact-hash dedup — content_hash dedup cannot catch this
-# by design (see classifier_guidance.md §7: cluster_id was intentionally
-# dropped from KVN's design, but that assumed exact-hash dedup would catch
-# same-story republication, which it does not for multi-outlet coverage).
-# ponytail: difflib.SequenceMatcher title-ratio + date window is a rough
-# heuristic, not semantic dedup — upgrade to embeddings only if outlets with
-# very differently worded headlines for the same story are observed slipping
-# through.
+# Near-duplicate clustering (Task 2, 2026-07-03; superseded by semantic
+# matching Task 1, 2026-07-04): the same press release covered by multiple
+# outlets gets a different URL and content_hash per collect_naver.py's
+# exact-hash dedup — content_hash dedup cannot catch this by design (see
+# classifier_guidance.md §7: cluster_id was intentionally dropped from KVN's
+# design, but that assumed exact-hash dedup would catch same-story
+# republication, which it does not for multi-outlet coverage).
+#
+# Task 1 root-cause fix (2026-07-04): pure difflib.SequenceMatcher ratio
+# (Task 2) only caught near-verbatim headlines (ratio >= 0.72) — confirmed
+# live it misses the same press release written up with structurally
+# different headlines by different outlets (measured ratios 0.46-0.68 for
+# the Joa Pharma / 몽진환마인 cluster). Haiku 4.5 (the model already wired
+# into this file for classification) now makes the match decision;
+# SequenceMatcher stays only as (a) a loose pre-filter to cap how many
+# candidate headlines go into one LLM prompt, and (b) the fallback match
+# rule if an individual LLM call errors — see run_semantic_clustering_pass().
 _CLUSTER_DATE_WINDOW_DAYS = 3
-_CLUSTER_TITLE_RATIO = 0.72
+_CLUSTER_TITLE_RATIO = 0.72          # fallback-only strict threshold (was the sole rule pre-Task-1).
+_CLUSTER_LLM_LOOSE_RATIO = 0.3       # pre-filter floor — well below the 0.46 lowest confirmed real duplicate, so it only trims obviously-unrelated headlines, never the ones Task 1 exists to catch.
+_CLUSTER_LLM_MAX_CANDIDATES = 20     # ponytail: caps one prompt's candidate list; revisit if a 3-day window regularly exceeds this (today's live max is 10).
+_DEDUP_SENTINEL_NONE = "none"        # duplicate_of_article_id value meaning "judged, not a duplicate of anything".
 
 # Rate limit pause between individual Claude API calls (brief specifies 0.5s).
 _API_SLEEP_SECONDS = 0.5
@@ -410,76 +430,23 @@ async def _classify_all_async(
 
 
 # ---------------------------------------------------------------------------
-# Near-duplicate clustering (Task 2, 2026-07-03)
+# Near-duplicate clustering — semantic (Task 1, 2026-07-04; supersedes the
+# difflib-only Task 2, 2026-07-03 implementation)
 # ---------------------------------------------------------------------------
 
-def find_duplicate_clusters(
-    rows: list[tuple[int, dict]],
-) -> list[int]:
-    """
-    Group rows whose Korean title is a near-match within a short date window,
-    and return the sheet row numbers of every NON-canonical row in a cluster
-    (i.e. the rows that should be suppressed from display).
-
-    rows: list of (sheet_row_num, row_dict) — row_dict must have 'url'
-    (Korean title, per the live column-swap — see module header) and
-    'published_date'. Only rows with include_on_site already true are worth
-    clustering; the caller filters before calling this.
-
-    Clustering rule: two articles are the same story if their titles are
-    within _CLUSTER_DATE_WINDOW_DAYS of each other AND
-    difflib.SequenceMatcher(title_a, title_b).ratio() >= _CLUSTER_TITLE_RATIO.
-    Within a cluster, the earliest-published row is canonical (kept); every
-    other row's sheet_row_num is returned for suppression.
-
-    O(n^2) title comparison — acceptable at KVN_Articles' current few-hundred
-    rows/week scale (this only ever runs over include_on_site=true rows, a
-    small fraction of total rows). ponytail: revisit if the relevant-row
-    count per run grows past ~2,000.
-    """
-    # Sort by published_date so the date-window check can short-circuit.
-    def _date_key(item: tuple[int, dict]) -> str:
-        return str(item[1].get("published_date", ""))
-
-    sorted_rows = sorted(rows, key=_date_key)
-
-    duplicate_row_nums: list[int] = []
-    clustered: set[int] = set()  # sheet_row_num already assigned to a cluster
-
-    for i, (row_num_a, row_a) in enumerate(sorted_rows):
-        if row_num_a in clustered:
-            continue
-        title_a = str(row_a.get("url", "")).strip()
-        date_a = _parse_iso_date(str(row_a.get("published_date", "")))
-        if not title_a or date_a is None:
-            continue
-
-        cluster_members = [(row_num_a, row_a, date_a)]
-
-        for row_num_b, row_b in sorted_rows[i + 1:]:
-            if row_num_b in clustered:
-                continue
-            date_b = _parse_iso_date(str(row_b.get("published_date", "")))
-            if date_b is None:
-                continue
-            if (date_b - date_a).days > _CLUSTER_DATE_WINDOW_DAYS:
-                break  # sorted by date — no later row can be within window either
-            title_b = str(row_b.get("url", "")).strip()
-            if not title_b:
-                continue
-            ratio = SequenceMatcher(None, title_a, title_b).ratio()
-            if ratio >= _CLUSTER_TITLE_RATIO:
-                cluster_members.append((row_num_b, row_b, date_b))
-
-        if len(cluster_members) > 1:
-            # Canonical = earliest published (first to break the story).
-            cluster_members.sort(key=lambda m: m[2])
-            for row_num, _row, _date in cluster_members[1:]:
-                duplicate_row_nums.append(row_num)
-                clustered.add(row_num)
-            clustered.add(cluster_members[0][0])
-
-    return duplicate_row_nums
+_DEDUP_MATCH_SYSTEM_PROMPT = (
+    "You compare ONE Korean news headline against a numbered list of other "
+    "Korean headlines published within a few days of it, to decide whether "
+    "any of them cover the SAME underlying news event (e.g. the same press "
+    "release, product launch, or regulatory action reported by a different "
+    "outlet with different wording). Headlines about a similar topic but a "
+    "different event are NOT a match.\n"
+    "\n"
+    "Input: the new headline, then a numbered list of candidate headlines.\n"
+    "Output: ONLY valid JSON — {\"match\": N} where N is the candidate number "
+    "(an integer, 1-based) that describes the same event, or "
+    "{\"match\": null} if none of them do. No explanation."
+)
 
 
 def _parse_iso_date(raw: str):
@@ -491,21 +458,101 @@ def _parse_iso_date(raw: str):
         return None
 
 
-def run_clustering_pass(ws, dry_run: bool) -> int:
+def _within_cluster_window(date_a, date_b) -> bool:
+    """True if two dates are within _CLUSTER_DATE_WINDOW_DAYS of each other, either direction."""
+    return abs((date_a - date_b).days) <= _CLUSTER_DATE_WINDOW_DAYS
+
+
+def _match_duplicate_with_llm(
+    client: anthropic.Anthropic,
+    new_title: str,
+    candidate_titles: list[str],
+) -> int | None:
     """
-    Read all include_on_site=TRUE rows, cluster near-duplicate titles, and
-    flip include_on_site to FALSE for every non-canonical row in a cluster.
+    Ask Haiku whether `new_title` describes the same news event as any of
+    `candidate_titles`. Returns the 0-based index of the matching candidate,
+    or None if no match. Raises on API/parse error — caller decides the
+    fallback (see run_semantic_clustering_pass).
+    """
+    numbered = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(candidate_titles))
+    user_msg = f"New headline: {new_title}\n\nCandidates:\n{numbered}"
 
-    Runs over the whole tab (not just this run's newly classified rows) —
-    duplicate coverage can arrive in separate collect_naver.py runs days
-    apart, within the clustering date window. Does not touch category,
-    english_summary, ai_processed_at, or english_title: a suppressed row
-    keeps its AI classification, it is only hidden from the site's article
-    list (which filters on include_on_site — see templates/index.html.j2).
-    Underlying rows are never deleted (matches the one-row-per-article
-    sheet design collect_naver.py's dedup relies on).
+    message = client.messages.create(
+        model=_HAIKU_MODEL,
+        max_tokens=100,
+        system=_DEDUP_MATCH_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_msg}],
+    )
+    raw_text = message.content[0].text.strip()
 
-    Returns the number of rows suppressed (0 on dry_run — reports only).
+    # Haiku sometimes wraps the JSON in a fence and/or adds explanatory
+    # prose after it despite "No explanation" — confirmed live (2026-07-04):
+    # ```json\n{"match": null}\n```\n\nThe new headline discusses... Simple
+    # prefix/suffix stripping isn't reliable once there's trailing prose, so
+    # pull out the first flat {...} object directly instead of trusting the
+    # response to be ONLY that object.
+    json_match = re.search(r"\{[^{}]*\}", raw_text)
+    if not json_match:
+        raise json.JSONDecodeError("no JSON object found in LLM response", raw_text, 0)
+    result = json.loads(json_match.group(0))
+    match = result.get("match")
+    if match is None:
+        return None
+    idx = int(match) - 1
+    if idx < 0 or idx >= len(candidate_titles):
+        logger.warning("LLM returned out-of-range match index %r for %d candidates — treating as no match.",
+                        match, len(candidate_titles))
+        return None
+    return idx
+
+
+def _fallback_ratio_match(new_title: str, candidate_titles: list[str]) -> int | None:
+    """
+    difflib fallback used only when an individual _match_duplicate_with_llm
+    call errors (fail loud via logger.warning, don't crash the run — same
+    posture as the rest of this file). Reapplies Task 2's original strict
+    threshold (_CLUSTER_TITLE_RATIO) so a transient API failure degrades to
+    "at least catch verbatim duplicates", not "catch nothing this run".
+    """
+    for i, candidate in enumerate(candidate_titles):
+        if SequenceMatcher(None, new_title, candidate).ratio() >= _CLUSTER_TITLE_RATIO:
+            return i
+    return None
+
+
+def run_semantic_clustering_pass(
+    ws,
+    client: anthropic.Anthropic,
+    dry_run: bool,
+    force: bool = False,
+) -> dict:
+    """
+    Incrementally judge every unjudged (dedup_judged_at empty, or all rows if
+    force) include_on_site=TRUE row against already-settled rows in its
+    _CLUSTER_DATE_WINDOW_DAYS window, using Haiku to decide same-story
+    matches (see module header for the difflib-only Task 2 ceiling this
+    replaces).
+
+    Incremental strategy (Task 1, chosen over full-recompute — see
+    Domain_Knowledge/C13_news_pulse_dedup_pagination_fix_2026-07-04.md Part
+    B §5): only rows with no cached verdict trigger an LLM call. A row
+    already judged 'not a duplicate' (duplicate_of_article_id == "none")
+    joins the "settled" candidate pool other rows get compared against;
+    a row judged a duplicate is suppressed and never becomes a candidate
+    itself.
+
+    Task 1a same-batch handling: rows are processed in ascending
+    published_date order within this single pass, and each row judged
+    'not a duplicate' is appended to the settled pool immediately — so a
+    row classified earlier in the SAME run can become the canonical match
+    for a row processed later in the same run, before either one has a
+    dedup_judged_at value written to the sheet. This is what catches
+    same-day multi-outlet coverage collected in one scrape.
+
+    Never touches category, english_summary, ai_processed_at, or
+    english_title. Never deletes rows. Returns a stats dict:
+    {"suppressed": int, "judged": int, "llm_calls": int, "llm_errors": int}
+    (all zero if there was nothing to judge).
     """
     all_rows = ws.get_all_records()
     included: list[tuple[int, dict]] = [
@@ -514,34 +561,181 @@ def run_clustering_pass(ws, dry_run: bool) -> int:
         if str(row.get("include_on_site", "")).strip().upper() == "TRUE"
     ]
 
-    duplicate_row_nums = find_duplicate_clusters(included)
+    parsed = []
+    for row_num, row in included:
+        date = _parse_iso_date(str(row.get("published_date", "")))
+        title = str(row.get("url", "")).strip()
+        if date is None or not title:
+            continue  # can't window- or title-compare an unparseable row — leave untouched
+        parsed.append({"row_num": row_num, "row": row, "date": date, "title": title})
+    parsed.sort(key=lambda item: item["date"])  # deterministic order — required for Task 1a
 
-    if not duplicate_row_nums:
-        print("  clustering: no near-duplicate stories found")
-        return 0
+    settled = [
+        item for item in parsed
+        if not force
+        and str(item["row"].get("dedup_judged_at", "")).strip()
+        and str(item["row"].get("duplicate_of_article_id", "")).strip() == _DEDUP_SENTINEL_NONE
+    ]
+    pending = [
+        item for item in parsed
+        if force or not str(item["row"].get("dedup_judged_at", "")).strip()
+    ]
 
-    print(f"  clustering: {len(duplicate_row_nums)} duplicate rows found across "
-          f"{len(included)} include_on_site=TRUE rows")
+    if not pending:
+        print("  semantic clustering: no unjudged rows — nothing to do")
+        return {"suppressed": 0, "judged": 0, "llm_calls": 0, "llm_errors": 0}
+
+    print(f"  semantic clustering: {len(pending)} unjudged row(s) to check "
+          f"against {len(settled)} already-settled row(s){' (--force-cluster)' if force else ''}")
+
+    now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cell_updates: list[dict] = []
+    suppressed = 0
+    llm_calls = 0
+    llm_errors = 0
+
+    for item in pending:
+        window_candidates = [
+            s for s in settled
+            if s["row_num"] != item["row_num"] and _within_cluster_window(item["date"], s["date"])
+        ]
+
+        duplicate_of = None
+        if window_candidates:
+            # Cheap pre-filter (rung 2 of the ladder — SequenceMatcher is
+            # already imported and used elsewhere in this file): bounds the
+            # LLM prompt size, does NOT make the match decision — the loose
+            # ratio is well below the confirmed real-duplicate floor (0.46).
+            loose = [
+                c for c in window_candidates
+                if SequenceMatcher(None, item["title"], c["title"]).ratio() >= _CLUSTER_LLM_LOOSE_RATIO
+            ]
+            candidates = (loose or window_candidates)[:_CLUSTER_LLM_MAX_CANDIDATES]
+
+            llm_calls += 1
+            try:
+                match_idx = _match_duplicate_with_llm(client, item["title"], [c["title"] for c in candidates])
+            except Exception as exc:  # noqa: BLE001 — fail loud, don't crash a scheduled run
+                llm_errors += 1
+                logger.warning(
+                    "Semantic dedup LLM call failed for '%s': %s — falling back to strict "
+                    "difflib ratio (%.2f) for this row.",
+                    item["title"][:60], exc, _CLUSTER_TITLE_RATIO,
+                )
+                match_idx = _fallback_ratio_match(item["title"], [c["title"] for c in candidates])
+            duplicate_of = candidates[match_idx] if match_idx is not None else None
+
+            time.sleep(_API_SLEEP_SECONDS)  # reuse the existing inter-call rate-limit pause
+
+        if duplicate_of is not None:
+            canonical_article_id = str(duplicate_of["row"].get("article_id", ""))
+            cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_INCLUDE_ON_SITE + 1), "values": [["FALSE"]]})
+            cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_DUPLICATE_OF + 1), "values": [[canonical_article_id]]})
+            cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_DEDUP_JUDGED_AT + 1), "values": [[now_ts]]})
+            suppressed += 1
+            # A suppressed duplicate never joins `settled` — it must not
+            # become someone else's "canonical" reference.
+        else:
+            cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_DUPLICATE_OF + 1), "values": [[_DEDUP_SENTINEL_NONE]]})
+            cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_DEDUP_JUDGED_AT + 1), "values": [[now_ts]]})
+            settled.append(item)  # Task 1a: available to later pending rows in this same pass.
+
+    print(f"  semantic clustering: {llm_calls} LLM call(s) ({llm_errors} fell back to difflib), "
+          f"{suppressed} row(s) suppressed as duplicates")
 
     if dry_run:
-        print(f"  [dry-run] would suppress rows: {duplicate_row_nums[:20]}"
-              f"{' ...' if len(duplicate_row_nums) > 20 else ''}")
-        return 0
+        print(f"  [dry-run] would write {len(cell_updates)} cell update(s) — no Sheets write")
+        return {"suppressed": suppressed, "judged": len(pending), "llm_calls": llm_calls, "llm_errors": llm_errors}
 
-    cell_updates = [
-        {"range": rowcol_to_a1(row_num, _COL_INCLUDE_ON_SITE + 1), "values": [["FALSE"]]}
-        for row_num in duplicate_row_nums
-    ]
-    # Reuse the same chunk size as _write_results_to_sheets for consistency.
-    chunk_size = 200
+    chunk_size = 200 * 3  # 3 cells per judged row (mirrors _write_results_to_sheets' chunking approach)
     for i in range(0, len(cell_updates), chunk_size):
         chunk = cell_updates[i: i + chunk_size]
         ws.batch_update(chunk, value_input_option="USER_ENTERED")
         if i + chunk_size < len(cell_updates):
             time.sleep(1.1)
 
-    print(f"  clustering: suppressed {len(duplicate_row_nums)} duplicate rows")
-    return len(duplicate_row_nums)
+    return {"suppressed": suppressed, "judged": len(pending), "llm_calls": llm_calls, "llm_errors": llm_errors}
+
+
+def run_canonical_succession(ws, dry_run: bool) -> int:
+    """
+    Task 1b (2026-07-04): if a human manually flips a cluster's canonical
+    row (duplicate_of_article_id == "none") to include_on_site=FALSE
+    directly in the Sheet — bypassing this script entirely — promote that
+    cluster's earliest-published still-suppressed mate back to
+    include_on_site=TRUE, so a real story doesn't silently vanish from the
+    site because of one manual edit elsewhere in the cluster (Commander
+    directive: succession over cluster death — see design rationale in
+    Domain_Knowledge/C13_news_pulse_dedup_pagination_fix_2026-07-04.md Part C).
+
+    Only acts on rows this system's dedup columns actually describe (a
+    non-empty duplicate_of_article_id pointing FROM a suppressed mate TO a
+    canonical row). Never touches rows with no cluster relationship, and
+    never revives a row a human suppressed on its own merits — only a
+    canonical whose suppression orphaned at least one still-suppressed mate.
+
+    Does not consult manual_override — that column protects a row from
+    this script's OWN suppression decisions; it is unrelated to a human
+    switching a canonical off by hand.
+
+    Returns the number of rows promoted (0 on dry_run — reports only).
+    """
+    all_rows = ws.get_all_records()
+    by_article_id = {
+        str(row.get("article_id", "")): (idx + 2, row)
+        for idx, row in enumerate(all_rows)
+    }
+
+    mates_by_canonical: dict[str, list[tuple[int, dict]]] = {}
+    for idx, row in enumerate(all_rows):
+        dup_of = str(row.get("duplicate_of_article_id", "")).strip()
+        if dup_of and dup_of != _DEDUP_SENTINEL_NONE:
+            mates_by_canonical.setdefault(dup_of, []).append((idx + 2, row))
+
+    cell_updates: list[dict] = []
+    promotions = 0
+    now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    for canonical_id, mates in mates_by_canonical.items():
+        canonical_entry = by_article_id.get(canonical_id)
+        if canonical_entry is None:
+            continue  # dangling pointer — canonical row missing; leave alone
+        canonical_row_num, canonical_row = canonical_entry
+        if str(canonical_row.get("include_on_site", "")).strip().upper() != "FALSE":
+            continue  # canonical still visible — nothing to do
+
+        suppressed_mates = [
+            (row_num, row) for row_num, row in mates
+            if str(row.get("include_on_site", "")).strip().upper() == "FALSE"
+        ]
+        if not suppressed_mates:
+            continue  # succession already happened, or no mates left to promote
+
+        suppressed_mates.sort(key=lambda item: str(item[1].get("published_date", "")))
+        promote_row_num, promote_row = suppressed_mates[0]
+        new_canonical_id = str(promote_row.get("article_id", ""))
+
+        print(f"  succession: canonical article_id={canonical_id} (row {canonical_row_num}) "
+              f"was manually suppressed — promoting article_id={new_canonical_id} (row {promote_row_num})")
+        promotions += 1
+
+        if not dry_run:
+            cell_updates.append({"range": rowcol_to_a1(promote_row_num, _COL_INCLUDE_ON_SITE + 1), "values": [["TRUE"]]})
+            cell_updates.append({"range": rowcol_to_a1(promote_row_num, _COL_DUPLICATE_OF + 1), "values": [[_DEDUP_SENTINEL_NONE]]})
+            cell_updates.append({"range": rowcol_to_a1(promote_row_num, _COL_DEDUP_JUDGED_AT + 1), "values": [[now_ts]]})
+            # Repoint any remaining suppressed mates to the newly-promoted canonical.
+            for row_num, _row in suppressed_mates[1:]:
+                cell_updates.append({"range": rowcol_to_a1(row_num, _COL_DUPLICATE_OF + 1), "values": [[new_canonical_id]]})
+
+    if cell_updates:
+        ws.batch_update(cell_updates, value_input_option="USER_ENTERED")
+
+    if promotions:
+        print(f"  succession: promoted {promotions} row(s)" + (" [dry-run]" if dry_run else ""))
+    else:
+        print("  succession: no manually-suppressed canonicals found")
+
+    return promotions
 
 
 # ---------------------------------------------------------------------------
@@ -643,6 +837,16 @@ def main() -> None:
             "Use after a failed run where rows were written with error defaults."
         ),
     )
+    parser.add_argument(
+        "--force-cluster",
+        dest="force_cluster",
+        action="store_true",
+        help=(
+            "Ignore the dedup_judged_at cache and re-run semantic clustering "
+            "on every include_on_site=TRUE row, not just unjudged ones. "
+            "Mirrors --force but scoped to Task 1 dedup, not classification."
+        ),
+    )
     args = parser.parse_args()
 
     print("classify_articles.py — VKH article AI classification")
@@ -650,6 +854,7 @@ def main() -> None:
     print(f"  mode: {'async (Semaphore 3, 40 RPM bucket)' if args.async_mode else 'sync (0.5s sleep)'}")
     print(f"  dry-run: {args.dry_run}")
     print(f"  force: {args.force}")
+    print(f"  force-cluster: {args.force_cluster}")
     if args.limit:
         print(f"  limit: {args.limit}")
 
@@ -728,13 +933,20 @@ def main() -> None:
     label = "all rows (--force)" if args.force else "unprocessed rows (empty ai_processed_at)"
     print(f"  {label}: {len(unprocessed)}")
 
+    # C-13 Task 1 (2026-07-04): one sync client for semantic clustering,
+    # shared by every call site below regardless of --async classification
+    # mode — clustering call volume is small (incremental), sync is enough.
+    dedup_client = anthropic.Anthropic(api_key=anthropic_key)
+
     if not unprocessed:
         print("  All rows already classified — nothing to do.")
-        # Task 2: still run clustering — duplicate coverage can arrive in a
-        # separate collect_naver.py run after the story was already classified.
-        suppressed = run_clustering_pass(ws, dry_run=args.dry_run)
+        # Still run clustering — duplicate coverage can arrive in a separate
+        # collect_naver.py run after the story was already classified.
+        cluster_stats = run_semantic_clustering_pass(ws, dedup_client, dry_run=args.dry_run, force=args.force_cluster)
+        promotions = run_canonical_succession(ws, dry_run=args.dry_run)
         print(f"articles_processed: 0 | written_to_sheets: 0 | "
-              f"duplicates_suppressed: {suppressed} | errors: 0")
+              f"duplicates_suppressed: {cluster_stats['suppressed']} | "
+              f"canonical_promotions: {promotions} | errors: 0")
         sys.exit(0)
 
     # Apply --limit if set.
@@ -778,17 +990,20 @@ def main() -> None:
 
         written_to_sheets = _write_results_to_sheets(ws, results, processed_at_ts)
 
-        # Task 2: cluster near-duplicate stories across outlets after fresh
+        # Cluster near-duplicate stories across outlets after fresh
         # classifications land, so newly written include_on_site rows are
-        # included in the clustering pass.
-        suppressed = run_clustering_pass(ws, dry_run=False)
+        # included in the clustering pass (Task 1a: same-run new rows can
+        # match each other, see run_semantic_clustering_pass docstring).
+        cluster_stats = run_semantic_clustering_pass(ws, dedup_client, dry_run=False, force=args.force_cluster)
+        promotions = run_canonical_succession(ws, dry_run=False)
 
         print()
         print(f"  DONE: {written_to_sheets} rows updated in '{TARGET_TAB}'.")
         print(
             f"articles_processed: {articles_processed} | "
             f"written_to_sheets: {written_to_sheets} | "
-            f"duplicates_suppressed: {suppressed} | "
+            f"duplicates_suppressed: {cluster_stats['suppressed']} | "
+            f"canonical_promotions: {promotions} | "
             f"errors: {errors}"
         )
         return
@@ -847,15 +1062,18 @@ def main() -> None:
 
     written_to_sheets = _write_results_to_sheets(ws, sync_results, processed_at_ts)
 
-    # Task 2: cluster near-duplicate stories across outlets.
-    suppressed = run_clustering_pass(ws, dry_run=False)
+    # Cluster near-duplicate stories across outlets (Task 1a: same-run new
+    # rows can match each other, see run_semantic_clustering_pass docstring).
+    cluster_stats = run_semantic_clustering_pass(ws, dedup_client, dry_run=False, force=args.force_cluster)
+    promotions = run_canonical_succession(ws, dry_run=False)
 
     print()
     print(f"  DONE: {written_to_sheets} rows updated in '{TARGET_TAB}'.")
     print(
         f"articles_processed: {articles_processed} | "
         f"written_to_sheets: {written_to_sheets} | "
-        f"duplicates_suppressed: {suppressed} | "
+        f"duplicates_suppressed: {cluster_stats['suppressed']} | "
+        f"canonical_promotions: {promotions} | "
         f"errors: {errors}"
     )
 
