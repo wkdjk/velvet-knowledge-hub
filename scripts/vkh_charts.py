@@ -37,6 +37,8 @@ def _kpta_estimate_context(config: dict) -> dict:
         "pharma_total_dmt": float,
         "pharma_nz_origin_dmt": float,
         "as_of_date": "YYYY-MM-DD",
+        "reference_period": str,  # e.g. "2022" — the period the figures describe,
+                                  # distinct from as_of_date (when supplied)
         "source": str,
         "age_days": int,
         "is_stale": bool,   # True once >365 days old (C-12f shows a warning)
@@ -62,6 +64,7 @@ def _kpta_estimate_context(config: dict) -> dict:
         "pharma_total_dmt": block.get("pharma_total_dmt"),
         "pharma_nz_origin_dmt": block.get("pharma_nz_origin_dmt"),
         "as_of_date": as_of_raw,
+        "reference_period": str(block.get("reference_period", "")),
         "source": str(block.get("source", "")),
         "age_days": age_days,
         "is_stale": age_days > _KPTA_STALE_AFTER_DAYS,

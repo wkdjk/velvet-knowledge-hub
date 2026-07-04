@@ -191,6 +191,14 @@ kpta_pharma_estimate:
   pharma_total_dmt: 181.8
   pharma_nz_origin_dmt: 127.6
   as_of_date: "2026-07-03"
+  reference_period: "2022"  # the figures describe calendar-year 2022 quarantine/import
+                             # statistics (source spreadsheet confirmed, 2026-07-04) — NOT
+                             # current data. as_of_date above is only when the Commander
+                             # supplied it. This is why _purpose_split() degrades to
+                             # "not available": a 2022 annual total (237.4 DMT) no longer
+                             # matches the live rolling-12m QIA total (153.7 DMT) — Korea's
+                             # quarantine volume has declined since 2022. Recalibrate at
+                             # C-12g CDR once a more current KPTA figure is available.
   source: "KPTA (한국의약품수출입협회) report / direct enquiry — Commander-sourced, not a public API or download"
 
 # ---------------------------------------------------------------------------
