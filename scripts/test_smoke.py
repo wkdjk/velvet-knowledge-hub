@@ -34,6 +34,7 @@ from scripts.vkh_charts import (  # noqa: E402
     _compute_dried_eq_kg,
     _compute_rolling_12m,
     _compute_unit_price,
+    _kpta_estimate_context,
 )
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
@@ -151,6 +152,45 @@ def test_compute_rolling_12m() -> None:
     _check("month 1 rolling sum = 100 (only 1 month available)", rolling["2024-01"] == 100.0)
 
 
+def test_kpta_estimate_context() -> None:
+    print("test_kpta_estimate_context (C-12e — manual constant + staleness flag)")
+    from datetime import date, timedelta
+
+    today_iso = date.today().isoformat()
+    fresh = _kpta_estimate_context({
+        "kpta_pharma_estimate": {
+            "pharma_total_dmt": 181.8,
+            "pharma_nz_origin_dmt": 127.6,
+            "as_of_date": today_iso,
+            "source": "test fixture",
+        }
+    })
+    _check("fresh estimate: available=True", fresh["available"] is True)
+    _check("fresh estimate: is_stale=False", fresh["is_stale"] is False)
+    _check("fresh estimate: age_days == 0", fresh["age_days"] == 0)
+
+    old_date = (date.today() - timedelta(days=400)).isoformat()
+    stale = _kpta_estimate_context({
+        "kpta_pharma_estimate": {
+            "pharma_total_dmt": 181.8,
+            "pharma_nz_origin_dmt": 127.6,
+            "as_of_date": old_date,
+            "source": "test fixture",
+        }
+    })
+    _check("400-day-old estimate: is_stale=True", stale["is_stale"] is True)
+
+    missing = _kpta_estimate_context({})
+    _check("missing block: available=False (graceful degradation)",
+           missing == {"available": False})
+
+    malformed = _kpta_estimate_context({
+        "kpta_pharma_estimate": {"as_of_date": "not-a-date"}
+    })
+    _check("malformed as_of_date: available=False, no exception raised",
+           malformed == {"available": False})
+
+
 def test_compute_unit_price() -> None:
     print("test_compute_unit_price (customs value / dried-eq kg — Appendix B derived analysis 3)")
     rows = [
@@ -177,6 +217,7 @@ def main() -> None:
     test_compute_dried_eq_kg()
     test_compute_rolling_12m()
     test_compute_unit_price()
+    test_kpta_estimate_context()
 
     print(f"\n{_checks_run} checks run, {_checks_failed} failed.")
     if _checks_failed:

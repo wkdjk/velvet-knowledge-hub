@@ -70,7 +70,9 @@ def main() -> None:
 
     # --- Step 5b: Prepare chart datasets (pre-aggregated for Jinja2) ----------
     # Pass tab_data so mfds_annual series can be read from the unfiltered tab.
-    chart_data = prepare_chart_data(sections, tab_data=tab_data)
+    # Pass config so the C-12e KPTA manual constant can be read (config.yaml,
+    # not Sheets — see prepare_chart_data()'s docstring).
+    chart_data = prepare_chart_data(sections, tab_data=tab_data, config=config)
 
     # --- Step 5c: Write trade_flows CSV download ------------------------------
     _write_trade_flows_csv(sections)

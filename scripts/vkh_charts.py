@@ -13,8 +13,60 @@
 # Security: no credentials in this file. All secrets from environment only.
 
 from collections import defaultdict
+from datetime import date
 
-from scripts.vkh_data import _backfill_product_type, _normalise_date_str
+from scripts.vkh_data import _backfill_product_type, _normalise_date_str, _today_kst
+
+# ---------------------------------------------------------------------------
+# C-12e — KPTA pharmaceutical estimate (manual constant, VMV-style)
+# ---------------------------------------------------------------------------
+
+# Staleness threshold: config.yaml's kpta_pharma_estimate.as_of_date older
+# than this many days triggers a visible dashboard warning (C-12f), not just
+# a footnote — per the 잠망경 pre-mortem's DINZ-reader finding.
+_KPTA_STALE_AFTER_DAYS = 365
+
+
+def _kpta_estimate_context(config: dict) -> dict:
+    """
+    Read the config.yaml kpta_pharma_estimate block and compute its staleness.
+
+    Returns:
+      {
+        "available": bool,
+        "pharma_total_dmt": float,
+        "pharma_nz_origin_dmt": float,
+        "as_of_date": "YYYY-MM-DD",
+        "source": str,
+        "age_days": int,
+        "is_stale": bool,   # True once >365 days old (C-12f shows a warning)
+      }
+
+    "available": False (all other fields absent) if the block is missing or
+    as_of_date cannot be parsed — graceful degradation (L-12), never raises.
+    """
+    block = config.get("kpta_pharma_estimate")
+    if not isinstance(block, dict):
+        return {"available": False}
+
+    as_of_raw = str(block.get("as_of_date", "")).strip()
+    try:
+        as_of_date = date.fromisoformat(as_of_raw)
+    except ValueError:
+        return {"available": False}
+
+    age_days = (_today_kst() - as_of_date).days
+
+    return {
+        "available": True,
+        "pharma_total_dmt": block.get("pharma_total_dmt"),
+        "pharma_nz_origin_dmt": block.get("pharma_nz_origin_dmt"),
+        "as_of_date": as_of_raw,
+        "source": str(block.get("source", "")),
+        "age_days": age_days,
+        "is_stale": age_days > _KPTA_STALE_AFTER_DAYS,
+    }
+
 
 # ---------------------------------------------------------------------------
 # C-3h helper functions — destination breakdown charts (Panel C + Panel D)
@@ -667,7 +719,7 @@ def _build_mfds_annual_series(all_trade_rows: list[dict]) -> list[dict]:
     }
 
 
-def prepare_chart_data(sections: dict, tab_data: dict | None = None) -> dict:
+def prepare_chart_data(sections: dict, tab_data: dict | None = None, config: dict | None = None) -> dict:
     """
     Build pre-aggregated chart datasets for the trade_flows section and
     the B-7 import intelligence price chart.
@@ -682,6 +734,10 @@ def prepare_chart_data(sections: dict, tab_data: dict | None = None) -> dict:
       - yoy_chip: section-level KPI chip data (primary source = NZ exports)
       - source objects: nz_export, korea_qia, korea_kstat (each with monthly/rolling arrays)
       - window: {"start": "YYYY-MM", "end": "YYYY-MM"} for the 24-month display range
+
+    C-12e addition:
+      - kpta_estimate: manual KPTA pharma constant + staleness flag (see
+        _kpta_estimate_context()) — read from config.yaml, not Sheets.
 
     C-3h additions:
       - tf_destination_area: {country: [{x, y}, ...]} — NZD FOB by destination, all dates
@@ -878,4 +934,7 @@ def prepare_chart_data(sections: dict, tab_data: dict | None = None) -> dict:
         # ── C-8: raw rows for A1/A2 toggle charts ────────────────────────────
         "qia_raw_rows": qia_raw_for_toggle,
         "nz_raw_rows":  nz_raw_for_toggle,
+
+        # ── C-12e: KPTA manual pharma estimate (config.yaml constant) ────────
+        "kpta_estimate": _kpta_estimate_context(config or {}),
     }
