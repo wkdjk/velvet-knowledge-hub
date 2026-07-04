@@ -23,10 +23,16 @@
 # L-10: Dedup key is (date, importer_ko, product_name) — three fields.
 # L-13: Dynamic header detection — scan by column name, never by index.
 #
-# Note on EN translation fields: VKH does not ship a translation_table.py.
-# MFDS-only EN fields (importer_en, country_origin_en, country_export_en,
-# product_type_en) are set to empty string for MFDS rows — VFI's lookup table
-# dependency is intentionally excluded from VKH.
+# Note on EN translation fields: VKH does not ship a translation_table.py for
+# product/country/type fields. importer_en IS resolved though — via the
+# map_companies trust-pipeline gate (C-15, 2026-07-05, directive §4): both
+# modes call ingest_common.resolve_company() when importer_en is blank after
+# parsing. A match backfills importer_en; no match logs the row to
+# needs_review instead of silently shipping a blank/Korean-only name (this
+# was the actual root cause of 9 live rows found 2026-07-05 — see
+# Domain_Knowledge/VKH_section4_trust_pipeline_2026-07-05.md).
+# country_origin_en, country_export_en, product_type_en remain empty for MFDS
+# rows — no canonical source for those exists (G-2), unchanged from before.
 #
 # Note on VFI schema mapping: VFI uses a 25-col schema with classifier flags
 # (type_frozen, type_dried, type_ambiguous, source, report_no, item_no,
@@ -51,6 +57,12 @@ import openpyxl
 # ---------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from scripts.ingest_common import (  # noqa: E402
+    load_company_mapping,
+    normalise_company_key,
+    resolve_company,
+)
+from scripts.schema import RAW_VFI_HEADERS  # noqa: E402
 from scripts.sheets_auth import _load_config, connect_sheets, resolve_sheet_id  # noqa: E402
 
 logging.basicConfig(
@@ -448,10 +460,13 @@ def _parse_mfds(filepath: Path) -> list[dict]:
 # scripts.sheets_auth (see H-3 fix, VKH audit 2026-07-01), matching the
 # pattern used in ingest_kstat.py, ingest_qia.py, classify_articles.py, etc.
 #
-# build_dedup_key/load_existing_keys/rows_to_append stay local (M-1, not
-# fixed): this file's dedup key is (date, importer_ko, product_name), a
-# genuinely different shape from ingest_common's 5-field trade key, so
-# importing the shared function would not serve this file's needs.
+# build_dedup_key/load_existing_keys stay local (M-1, not fixed): this
+# file's dedup key is (date, importer_ko, product_name), a genuinely
+# different shape from ingest_common's 5-field trade key, so importing the
+# shared function would not serve this file's needs. rows_to_append() was
+# removed C-15 (2026-07-05) — its filter+listify was inlined into main() so
+# the trust-pipeline gate (mapping resolution, needs_review) runs on the
+# same new-rows-only dict list before conversion to gspread row lists.
 
 def build_dedup_key(row: dict) -> tuple:
     """
@@ -474,29 +489,6 @@ def load_existing_keys(worksheet) -> tuple[set, int]:
     """
     existing_rows = worksheet.get_all_records()
     return {build_dedup_key(r) for r in existing_rows}, len(existing_rows)
-
-
-def rows_to_append(
-    new_rows: list[dict],
-    existing_keys: set,
-    headers: list[str],
-) -> tuple[list[list], int]:
-    """
-    Filter new_rows to those not already in existing_keys.
-
-    Returns (list_of_lists_for_gspread, skipped_count).
-    """
-    to_write: list[list] = []
-    skipped = 0
-
-    for row in new_rows:
-        key = build_dedup_key(row)
-        if key in existing_keys:
-            skipped += 1
-            continue
-        to_write.append([row.get(h, "") for h in headers])
-
-    return to_write, skipped
 
 
 # ---------------------------------------------------------------------------
@@ -607,13 +599,48 @@ def main() -> None:
         )
         sys.exit(1)
 
-    new_rows_lists, rows_skipped = rows_to_append(parsed_rows, existing_keys, headers)
-    rows_new = len(new_rows_lists)
+    # New (non-duplicate) rows only — mapping/needs_review applies just to
+    # these, so re-running against an already-ingested file never re-flags
+    # the same row in needs_review.
+    new_dict_rows = [r for r in parsed_rows if build_dedup_key(r) not in existing_keys]
+    rows_skipped = rows_parsed - len(new_dict_rows)
 
-    if rows_new == 0:
+    if not new_dict_rows:
         print("  Nothing to write — all rows already present.")
         print(f"\nrows_parsed: {rows_parsed} | rows_written: 0 | rows_skipped: {rows_skipped} | errors: {errors}")
         sys.exit(0)
+
+    # --- Trust-pipeline gate (C-15): resolve importer_en via map_companies ---
+    # Directive §4 addendum — no ingest path writes to master unresolved.
+    # Graceful degradation (L-12): if map_companies is missing, warn and skip
+    # the gate rather than aborting the whole ingest.
+    needs_review_rows: list[list] = []
+    now_iso = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        map_ws = spreadsheet.worksheet("map_companies")
+        mapping = load_company_mapping(map_ws)
+    except gspread.exceptions.WorksheetNotFound:
+        print("  WARNING: 'map_companies' tab not found — skipping company-name gate.", file=sys.stderr)
+        mapping = None
+
+    if mapping is not None:
+        for row in new_dict_rows:
+            if str(row.get("importer_en", "")).strip():
+                continue
+            ko = str(row.get("importer_ko", "")).strip()
+            if not ko:
+                continue
+            canonical_en, matched = resolve_company(ko, mapping)
+            if matched and canonical_en:
+                row["importer_en"] = canonical_en
+            else:
+                needs_review_rows.append([
+                    TARGET_TAB, row.get("date", ""), "importer_en", ko,
+                    normalise_company_key(ko), "no map_companies match", now_iso,
+                ])
+
+    new_rows_lists = [[row.get(h, "") for h in headers] for row in new_dict_rows]
+    rows_new = len(new_rows_lists)
 
     # --- Write (L-4: 200-row batches with 1.1s sleep) ------------------------
     rows_written = 0
@@ -629,6 +656,32 @@ def main() -> None:
             logger.error("Sheets write error on batch starting %d: %s", batch_start, exc)
             errors += 1
             break
+
+    # --- Raw layer + exceptions gate (only for rows actually written) -------
+    if rows_written:
+        try:
+            raw_ws = spreadsheet.worksheet("raw_vfi")
+            raw_rows = [
+                [
+                    row.get("date", ""), row.get("importer_ko", ""),
+                    row.get("product_name", ""), row.get("product_type_ko", ""),
+                    row.get("country_origin_ko", ""), row.get("country_export_ko", ""),
+                    row.get("expiry_date", ""), row.get("notes", ""), now_iso,
+                ]
+                for row in new_dict_rows[:rows_written]
+            ]
+            for batch_start in range(0, len(raw_rows), _BATCH_SIZE):
+                raw_ws.append_rows(raw_rows[batch_start:batch_start + _BATCH_SIZE], value_input_option="USER_ENTERED")
+        except gspread.exceptions.WorksheetNotFound:
+            print("  WARNING: 'raw_vfi' tab not found — skipping raw-layer write.", file=sys.stderr)
+
+    if needs_review_rows:
+        try:
+            review_ws = spreadsheet.worksheet("needs_review")
+            review_ws.append_rows(needs_review_rows, value_input_option="USER_ENTERED")
+            print(f"  needs_review: {len(needs_review_rows)} rows flagged.")
+        except gspread.exceptions.WorksheetNotFound:
+            print("  WARNING: 'needs_review' tab not found — could not flag unmapped rows.", file=sys.stderr)
 
     print()
     print(f"rows_parsed: {rows_parsed} | rows_written: {rows_written} | rows_skipped: {rows_skipped} | errors: {errors}")
