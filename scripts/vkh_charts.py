@@ -912,14 +912,15 @@ def _purpose_split(qia_rolling_dried_eq_kg: dict[str, float], kpta_estimate: dic
     # this needs a Commander decision on the KPTA figure's actual reference
     # period, not a silent Python fix.
     if pharma_dmt >= quarantine_total_dmt:
+        ref_period = kpta_estimate.get("reference_period") or "an earlier period"
         return {
             "available": False,
             "reason": (
-                "the KPTA pharmaceutical estimate is currently larger than "
-                "the live QIA quarantine total — the two figures likely "
-                "cover different reference periods and are not yet "
-                "comparable. Awaiting Commander confirmation of the KPTA "
-                "figure's reference period."
+                f"the KPTA pharmaceutical estimate is a {ref_period} annual "
+                "total, larger than the current live rolling QIA quarantine "
+                "total — the two figures cover different reference periods "
+                "and are not comparable. Will update once a KPTA figure for "
+                "a period closer to the live rolling window is available."
             ),
         }
 
