@@ -43,6 +43,10 @@
 
   /* Harvest-year band — gold at low opacity (C-3e) */
   --harvest-band:      rgba(167, 130, 48, 0.08);
+
+  /* Typography floor (readability fix 2026-07-04) — body ≥16px, caption ≥14px */
+  --fs-body:           1rem;       /* 16px — prose the reader reads sentence-by-sentence */
+  --fs-caption:        0.875rem;   /* 14px — labels, timestamps, footnotes, table cells */
 }
 
 /* ── 2. RESET ─────────────────────────────────────────────── */
@@ -110,8 +114,8 @@ p {
 .caption, small, figcaption {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
                Arial, sans-serif;
-  font-size: 0.75rem;
-  line-height: 1.4;
+  font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
+  line-height: 1.5;
 }
 
 /* Links */
@@ -287,8 +291,8 @@ footer .caption:last-child {
 .kpi-label {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
                Arial, sans-serif;
-  font-size: 0.75rem;
-  line-height: 1.4;
+  font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
+  line-height: 1.5;
   letter-spacing: 0.06em;
   font-weight: 500;
   text-transform: uppercase;
@@ -337,8 +341,8 @@ footer .caption:last-child {
 .last-updated {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
                Arial, sans-serif;
-  font-size: 0.75rem;
-  line-height: 1.4;
+  font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
+  line-height: 1.5;
   letter-spacing: 0;
   font-weight: 400;
   color: var(--text-muted);
@@ -358,7 +362,7 @@ footer .caption:last-child {
 }
 
 .data-table caption {
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
   font-weight: 600;
   color: var(--text-muted);
   text-align: left;
@@ -368,7 +372,7 @@ footer .caption:last-child {
 
 .data-table th {
   text-transform: uppercase;
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
   letter-spacing: 0.08em;
   font-weight: 600;
   color: var(--text-secondary);
@@ -396,8 +400,8 @@ footer .caption:last-child {
 
 /* Truncation disclosure line above the records table (B-7) */
 .table-record-count {
-  font-size: 0.75rem;
-  line-height: 1.4;
+  font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
+  line-height: 1.5;
   color: var(--text-muted);
   margin-bottom: 8px;
 }
@@ -405,7 +409,7 @@ footer .caption:last-child {
 /* Quiet inline download link below the records table (B-7) */
 .table-download-inline {
   display: block;
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
   color: var(--text-muted);
   margin-top: 8px;
   text-decoration: underline;
@@ -444,7 +448,7 @@ footer .caption:last-child {
 .download-btn {
   display: inline-block;
   padding: 6px 14px;
-  font-size: 0.8125rem;
+  font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
   font-weight: 500;
   letter-spacing: 0.04em;
   color: var(--text-secondary);
@@ -464,7 +468,7 @@ footer .caption:last-child {
 
 /* Source footnote */
 .source-footnote {
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
   line-height: 1.5;
   color: var(--text-muted);
   margin-top: 12px;
@@ -500,7 +504,7 @@ footer .caption:last-child {
 
 /* C-5e D-18: article count + period label above the article list */
 .article-list-header {
-  font-size: 0.8125rem;
+  font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
   color: var(--text-muted);
   margin-bottom: 8px;
   font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
@@ -567,13 +571,13 @@ footer .caption:last-child {
 
 .article-meta-date {
   font-family: "SF Mono", "Cascadia Code", "Fira Mono", "Courier New", monospace;
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
   color: var(--text-muted);
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .article-meta-category {
-  font-size: 0.6875rem;
+  font-size: var(--fs-caption);   /* was 0.6875rem (11px) — readability floor fix */
   font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -581,7 +585,7 @@ footer .caption:last-child {
   background: var(--surface-deep);
   border: 1px solid var(--border);
   padding: 2px 6px;
-  line-height: 1.4;
+  line-height: 1.5;
   display: none; /* Korean-only labels hidden from English-speaking DINZ readers */
 }
 
@@ -639,7 +643,7 @@ footer .caption:last-child {
 
 /* Chart panel heading — distinguishes KG panel from value panel (legacy .chart-title) */
 .chart-title {
-  font-size: 0.8125rem;
+  font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
   font-weight: 600;
   letter-spacing: 0.03em;
   color: var(--text-secondary);
@@ -649,8 +653,8 @@ footer .caption:last-child {
 
 /* Chart sub-caption — latest-year annotation below chart heading (B-7) */
 .chart-subtitle {
-  font-size: 0.8125rem;
-  line-height: 1.4;
+  font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
+  line-height: 1.5;
   color: var(--text-muted);
   margin-top: 4px;
   margin-bottom: 12px;
@@ -658,7 +662,7 @@ footer .caption:last-child {
 
 /* C-3e: chart annotation text below canvas */
 .chart-annotation {
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
   line-height: 1.5;
   color: var(--text-muted);
   margin-top: 8px;
@@ -677,7 +681,7 @@ footer .caption:last-child {
 }
 
 .hs-toggle-label {
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -689,7 +693,7 @@ footer .caption:last-child {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 0.8125rem;
+  font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
   font-weight: 400;
   color: var(--text-secondary);
   cursor: pointer;
@@ -761,7 +765,7 @@ footer .caption:last-child {
 
 .import-records-table caption {
   text-align: left;
-  font-size: 0.8125rem;
+  font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
   color: var(--text-muted);
   margin-bottom: 8px;
   caption-side: top;
@@ -769,7 +773,7 @@ footer .caption:last-child {
 }
 
 .import-records-table thead th {
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -781,11 +785,11 @@ footer .caption:last-child {
 }
 
 .import-records-table tbody td {
-  font-size: 0.8125rem;
+  font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
   color: var(--text-secondary);
   padding: 7px 8px;
   border-bottom: 1px solid var(--border);
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 /* Date column — 90 px, no wrap */
@@ -843,7 +847,7 @@ footer .caption:last-child {
 /* D-4: Show-more text link — gold accent for interactive affordance */
 .show-more-btn {
   display: inline-block;
-  font-size: 0.8125rem;
+  font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
   font-weight: 500;
   color: var(--accent);           /* #A78230 — gold for interactive text */
   background: transparent;
@@ -862,7 +866,7 @@ footer .caption:last-child {
 
 /* D-6: Chart scope note — above MFDS chart canvas */
 .chart-scope-note {
-  font-size: 0.8125rem;
+  font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
   color: var(--text-muted);
   font-style: italic;
   margin-bottom: 10px;
@@ -871,7 +875,7 @@ footer .caption:last-child {
 
 /* D-9/D-11: Table footnote — same weight as .source-footnote */
 .table-footnote {
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
   line-height: 1.5;
   color: var(--text-muted);
   margin-top: 12px;
@@ -893,7 +897,7 @@ footer .caption:last-child {
 }
 
 .trade-flows-kpi-chip .chip-label {
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -1003,7 +1007,7 @@ input[type="checkbox"]:checked + .toggle-track .toggle-handle {
   position: absolute;
   top: 4px;
   left: 4px;
-  font-size: 0.65rem;
+  font-size: var(--fs-caption);   /* was 0.65rem (10.4px) — readability floor fix */
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -1036,7 +1040,7 @@ input[type="checkbox"]:checked + .toggle-track .toggle-handle {
 }
 
 .discrepancy-accordion__chevron {
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);   /* was 0.75rem (12px) — readability floor fix */
   color: var(--text-muted);
   transition: transform 0.15s ease;
 }
@@ -1047,7 +1051,7 @@ details.discrepancy-accordion[open] .discrepancy-accordion__chevron {
 
 .discrepancy-accordion__body {
   padding: 16px 14px;
-  font-size: 0.8125rem;
+  font-size: var(--fs-body);   /* was 0.8125rem (13px) — this is prose the reader reads in full, readability floor fix */
   line-height: 1.65;
   color: var(--text-secondary);
   border-top: 1px solid var(--border);
