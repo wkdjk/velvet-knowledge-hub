@@ -15,6 +15,14 @@
 #   load_company_mapping(worksheet) -> dict[str, dict]
 #   resolve_company(source_name, mapping) -> tuple[str, bool]
 #
+# C-16 (2026-07-05): all three functions are generic over any KR-source ->
+# canonical_name_en mapping tab shaped like map_companies (match_key /
+# source_name_kr / canonical_name_en columns) — reused as-is (no rename, no
+# new functions) for map_countries and map_types. "Company" in the names is
+# historical; the corp-suffix stripping in normalise_company_key is a no-op
+# on country/product-type strings, so it works unchanged as a general term
+# key normaliser too.
+#
 # Security: no credentials in this file.
 
 import re

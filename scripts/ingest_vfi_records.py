@@ -24,15 +24,18 @@
 # L-13: Dynamic header detection — scan by column name, never by index.
 #
 # Note on EN translation fields: VKH does not ship a translation_table.py for
-# product/country/type fields. importer_en IS resolved though — via the
-# map_companies trust-pipeline gate (C-15, 2026-07-05, directive §4): both
-# modes call ingest_common.resolve_company() when importer_en is blank after
-# parsing. A match backfills importer_en; no match logs the row to
-# needs_review instead of silently shipping a blank/Korean-only name (this
-# was the actual root cause of 9 live rows found 2026-07-05 — see
-# Domain_Knowledge/VKH_section4_trust_pipeline_2026-07-05.md).
-# country_origin_en, country_export_en, product_type_en remain empty for MFDS
-# rows — no canonical source for those exists (G-2), unchanged from before.
+# product/country/type fields. importer_en, country_origin_en,
+# country_export_en and product_type_en are all resolved via the same
+# trust-pipeline gate in main() — map_companies (C-15, 2026-07-05) and
+# map_countries/map_types (C-16, 2026-07-05, directive §4 follow-up): after
+# parsing, any of these 4 fields left blank is looked up via
+# ingest_common.resolve_company() against the matching mapping tab. A match
+# backfills the _en field; no match logs the row to needs_review instead of
+# silently shipping a blank/Korean-only value (this was the root cause of 9
+# live rows found 2026-07-05 for importer_en, and of every MFDS row's
+# country/type "—" dashes found in the follow-up audit — see
+# Domain_Knowledge/VKH_section4_trust_pipeline_2026-07-05.md and
+# Domain_Knowledge_handoff/VKH_section4_country_type_mapping_2026-07-05.md).
 #
 # Note on VFI schema mapping: VFI uses a 25-col schema with classifier flags
 # (type_frozen, type_dried, type_ambiguous, source, report_no, item_no,
@@ -637,6 +640,43 @@ def main() -> None:
                 needs_review_rows.append([
                     TARGET_TAB, row.get("date", ""), "importer_en", ko,
                     normalise_company_key(ko), "no map_companies match", now_iso,
+                ])
+
+    # --- Trust-pipeline gate (C-16): resolve country_origin_en, ------------
+    # country_export_en, product_type_en via map_countries / map_types. Same
+    # shared gate as importer_en above (ingest_common.resolve_company()) —
+    # these tabs are shaped identically to map_companies, so no new
+    # resolution code was needed, only new tabs (see schema.py).
+    _TERM_GATE_FIELDS = [
+        ("country_origin_ko", "country_origin_en", "map_countries"),
+        ("country_export_ko", "country_export_en", "map_countries"),
+        ("product_type_ko", "product_type_en", "map_types"),
+    ]
+    term_mappings: dict = {}
+    for _, _, tab_name in _TERM_GATE_FIELDS:
+        if tab_name in term_mappings:
+            continue
+        try:
+            term_mappings[tab_name] = load_company_mapping(spreadsheet.worksheet(tab_name))
+        except gspread.exceptions.WorksheetNotFound:
+            print(f"  WARNING: '{tab_name}' tab not found — skipping {tab_name} gate.", file=sys.stderr)
+            term_mappings[tab_name] = None
+
+    for row in new_dict_rows:
+        for ko_field, en_field, tab_name in _TERM_GATE_FIELDS:
+            term_mapping = term_mappings.get(tab_name)
+            if term_mapping is None or str(row.get(en_field, "")).strip():
+                continue
+            ko = str(row.get(ko_field, "")).strip()
+            if not ko:
+                continue
+            canonical_en, matched = resolve_company(ko, term_mapping)
+            if matched and canonical_en:
+                row[en_field] = canonical_en
+            else:
+                needs_review_rows.append([
+                    TARGET_TAB, row.get("date", ""), en_field, ko,
+                    normalise_company_key(ko), f"no {tab_name} match", now_iso,
                 ])
 
     new_rows_lists = [[row.get(h, "") for h in headers] for row in new_dict_rows]

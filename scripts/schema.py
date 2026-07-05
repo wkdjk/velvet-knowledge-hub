@@ -87,6 +87,29 @@ NEEDS_REVIEW_HEADERS = [
     "flagged_at",
 ]
 
+# map_countries / map_types (C-16, 2026-07-05): same trust-pipeline pattern
+# as map_companies, extended to country_origin_en/country_export_en and
+# product_type_en — the 3 fields _parse_mfds() previously hardcoded to "".
+# Same 4-column shape as map_companies minus public_display_name/country
+# (irrelevant for a country or product-type name) so ingest_common.py's
+# load_company_mapping()/resolve_company() work against these tabs
+# unchanged (both just read match_key/source_name_kr/canonical_name_en).
+# Countries: one tab covers both country_origin and country_export — same
+# set of country names, no need for two tabs.
+MAP_COUNTRIES_HEADERS = [
+    "source_name_kr",
+    "match_key",
+    "canonical_name_en",
+    "notes",
+]
+
+MAP_TYPES_HEADERS = [
+    "source_name_kr",
+    "match_key",
+    "canonical_name_en",
+    "notes",
+]
+
 
 # weekly_brief (C-14 item 4, 2026-07-05): auto-drafted "this week at a
 # glance" brief + human publication gate. See scripts/vkh_brief.py for the
