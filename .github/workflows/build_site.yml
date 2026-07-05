@@ -8,11 +8,29 @@ on:
   workflow_dispatch:        # allow manual trigger
 
 permissions:
-  contents: write           # needed to commit docs/ back to main
+  contents: read
+  pages: write              # deploy via actions/deploy-pages, not a git push
+  id-token: write           # required by actions/deploy-pages for OIDC
+
+# Queue overlapping deployments instead of racing them. Root cause of the
+# "Deployment failed, try again later" errors seen when merges land close
+# together: this workflow used to commit docs/ back to main, so every human
+# push triggered Pages twice (the push itself, then this workflow's own
+# follow-up commit) — GitHub Pages only runs one deployment at a time, so
+# the older of the two always failed. Deploying via actions/deploy-pages
+# below removes that second push entirely; this concurrency group is
+# defence in depth for the remaining case of two genuinely separate merges
+# landing close together.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout
@@ -108,14 +126,14 @@ jobs:
             echo "WARNING: PDF file not found at ${PDF_PATH} — generation step may have failed."
           fi
 
-      - name: Commit and push docs/
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/
-          git diff --staged --quiet || git commit -m "chore(build): update docs/ [skip ci]"
-          git pull --rebase origin main
-          git push
+      - name: Upload docs/ as Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 
       - name: Send succession notice email
         # SurveyorQ revised instruction (c), 2026-07-04: a canonical succession
