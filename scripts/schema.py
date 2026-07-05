@@ -88,6 +88,22 @@ NEEDS_REVIEW_HEADERS = [
 ]
 
 
+# weekly_brief (C-14 item 4, 2026-07-05): auto-drafted "this week at a
+# glance" brief + human publication gate. See scripts/vkh_brief.py for the
+# full design. Human-edited columns are marked below — the build script
+# never overwrites them, same convention as manual_override above.
+WEEKLY_BRIEF_HEADERS = [
+    "week_ending_date",     # script-written; ISO date; one row per build week (unique key)
+    "draft_text",           # script-written; only written once per week_ending_date, never overwritten
+    "fact_check_status",    # script-written: "ok" | "review_needed"
+    "fact_check_detail",    # script-written: human-readable list of any unmatched figures, blank if ok
+    "approved",             # human-only — Commander sets TRUE to publish this week's brief
+    "approved_at",          # auto-stamped once by the script, the first run after approved=TRUE with this cell blank
+    "published_text",       # human-only — optional edited final text; blank means the site falls back to draft_text
+    "notes",                # human-only — free text
+]
+
+
 def verify_header(worksheet, expected: list[str] = KVN_ARTICLES_HEADERS) -> None:
     """
     Read row 1 of worksheet and compare it to expected.

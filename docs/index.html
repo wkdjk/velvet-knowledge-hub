@@ -228,6 +228,46 @@
       font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
     }
 
+    /* Weekly brief card (C-14 item 4) — same visual language as the
+       staleness warning above: bordered surface, gold left accent, no new
+       colour beyond the existing B&W/gold DINZ token set. */
+    .weekly-brief-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent);
+      padding: 16px 18px;
+      margin: 20px 0;
+    }
+
+    .weekly-brief-label {
+      font-size: var(--fs-caption);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+    }
+
+    .weekly-brief-text {
+      font-size: var(--fs-body);
+      line-height: 1.6;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .weekly-brief-meta {
+      font-size: var(--fs-caption);
+      color: var(--text-muted);
+    }
+
+    .weekly-brief-stale-warning {
+      font-size: var(--fs-caption);
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-top: 8px;
+    }
+
     /* Section C reference accordion */
     .reference-accordion {
       border: 1px solid var(--border);
@@ -551,6 +591,20 @@
     <a class="pdf-download-btn" href="velvet-knowledge-hub.pdf" download>Download PDF</a>
   </div>
 </header>
+
+
+
+
+
+<div class="page-wrapper">
+  <div class="weekly-brief-card">
+    <p class="weekly-brief-label">This week's summary — week ending 2026-07-05</p>
+    <p class="weekly-brief-text">Korea's demand for deer velvet has dropped sharply over the past year, with imports down 18.3% compared to April 2025. The rolling 12-month total through April stands at 153,674 kg. Over the last three months, there have been 12 food-channel import declarations and 50 news articles mentioning velvet, suggesting the market remains in the public eye despite the softer import numbers. Recent shipments into Korea included frozen deer velvet on 17 June and deer horn on 4 June. The sustained media interest, including coverage of celebrity health supplement use, indicates Korean consumers are still engaged with velvet products, even as overall import volumes contract.</p>
+    <p class="weekly-brief-meta caption">Approved 2026-07-05</p>
+    
+  </div>
+</div>
+
 
 
 <div class="page-wrapper">
