@@ -1,4 +1,4 @@
-# VKH site Korean-text cleanup — 2026-07-06
+# VKH site Korean-text cleanup — 2026-07-05
 
 Worktree: `/Users/Qs/C/velvet-knowledge-hub-worktrees/vkh-korean-text-cleanup`
 Branch: `vkh-korean-text-cleanup`
