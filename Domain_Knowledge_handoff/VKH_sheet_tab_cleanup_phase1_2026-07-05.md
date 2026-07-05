@@ -1,6 +1,6 @@
 # VKH_Data sheet — Phase 1 tab cleanup (cosmetic/organisational only)
 
-_TechQ, 2026-07-06. Worktree: `/Users/Qs/C/velvet-knowledge-hub`, branch `vkh-sheet-tab-cleanup-phase1`. Not merged/pushed._
+_TechQ, 2026-07-05. Worktree: `/Users/Qs/C/velvet-knowledge-hub`, branch `vkh-sheet-tab-cleanup-phase1`. Merged to main and executed against the live sheet same day (see `surveyorq_verification_sheet_cleanup_phase1_2026-07-05.md` for independent T3 verification)._
 
 ## INCIDENT — flag to CaptainQ before anything else
 
@@ -122,4 +122,4 @@ Recommend running `scripts/backup_sheet.py` first (existing convention per `setu
 - `/Users/Qs/C/velvet-knowledge-hub/scripts/append_readme_admin_tab_guide.py`
 - `/Users/Qs/C/velvet-knowledge-hub/scripts/organize_sheet_tabs.py`
 - `/Users/Qs/C/velvet-knowledge-hub/scripts/test_organize_sheet_tabs.py`
-- This handoff: `/Users/Qs/C/velvet-knowledge-hub/Domain_Knowledge_handoff/VKH_sheet_tab_cleanup_phase1_2026-07-06.md`
+- This handoff: `/Users/Qs/C/velvet-knowledge-hub/Domain_Knowledge_handoff/VKH_sheet_tab_cleanup_phase1_2026-07-05.md`
