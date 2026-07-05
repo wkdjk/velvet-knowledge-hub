@@ -15,7 +15,14 @@ from jinja2 import Environment, FileSystemLoader
 from scripts.vkh_data import OUTPUT_PATH, TEMPLATE_DIR, _display_name, _today_kst
 
 
-def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date: str) -> int:
+def render(
+    config: dict,
+    sections: dict,
+    kpi: dict,
+    chart_data: dict,
+    build_date: str,
+    weekly_brief: dict | None = None,
+) -> int:
     """
     Render the Jinja2 template with all collected data and write docs/index.html.
     Returns the number of bytes written.
@@ -129,6 +136,8 @@ def render(config: dict, sections: dict, kpi: dict, chart_data: dict, build_date
         nz_raw_rows=chart_data.get("nz_raw_rows", []),
         # C8-P2: Apps Script endpoint URL injected at build time.
         csv_endpoint_url=config.get("csv_endpoint_url", ""),
+        # C-14 item 4: weekly brief + human publication gate.
+        weekly_brief=weekly_brief or {"enabled": False},
     )
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)

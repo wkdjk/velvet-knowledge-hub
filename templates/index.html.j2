@@ -228,6 +228,46 @@
       font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
     }
 
+    /* Weekly brief card (C-14 item 4) — same visual language as the
+       staleness warning above: bordered surface, gold left accent, no new
+       colour beyond the existing B&W/gold DINZ token set. */
+    .weekly-brief-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent);
+      padding: 16px 18px;
+      margin: 20px 0;
+    }
+
+    .weekly-brief-label {
+      font-size: var(--fs-caption);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+    }
+
+    .weekly-brief-text {
+      font-size: var(--fs-body);
+      line-height: 1.6;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .weekly-brief-meta {
+      font-size: var(--fs-caption);
+      color: var(--text-muted);
+    }
+
+    .weekly-brief-stale-warning {
+      font-size: var(--fs-caption);
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-top: 8px;
+    }
+
     /* Section C reference accordion */
     .reference-accordion {
       border: 1px solid var(--border);
@@ -551,6 +591,25 @@
     <a class="pdf-download-btn" href="velvet-knowledge-hub.pdf" download>Download PDF</a>
   </div>
 </header>
+
+{# ── WEEKLY BRIEF (C-14 item 4) ───────────────────────────────────────── #}
+{# weekly_brief.enabled=false in config.yaml is a hard kill switch — the whole
+   block is absent from the page, not an empty placeholder (pre-mortem item 5).
+   Nothing renders until the Commander has approved at least one week's draft
+   (pre-mortem item 3: no auto-publish fallback exists). #}
+{% set weekly_brief = weekly_brief if weekly_brief is defined else {"enabled": false} %}
+{% if weekly_brief.enabled and weekly_brief.available %}
+<div class="page-wrapper">
+  <div class="weekly-brief-card">
+    <p class="weekly-brief-label">This week's summary — week ending {{ weekly_brief.week_ending_date }}</p>
+    <p class="weekly-brief-text">{{ weekly_brief.text }}</p>
+    <p class="weekly-brief-meta caption">Approved {{ weekly_brief.approved_at }}{% if weekly_brief.fact_check_status == "review_needed" %} — fact-check flagged this draft for review before approval; verify figures against the sections below{% endif %}</p>
+    {% if weekly_brief.is_stale %}
+      <p class="weekly-brief-stale-warning">⚠ This summary is {{ weekly_brief.age_days }} days old — a newer week's data may not be reflected. See the sections below for current figures.</p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
 
 {# ── KPI STRIP ────────────────────────────────────────────────────────── #}
 <div class="page-wrapper">

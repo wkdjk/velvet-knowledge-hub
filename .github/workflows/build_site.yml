@@ -60,10 +60,15 @@ jobs:
         run: python scripts/classify_articles.py
 
       - name: Build site
+        id: build
         env:
           PYTHONPATH: "."    # L-1: PYTHONPATH on every step
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           VKH_SHEET_ID: ${{ secrets.VKH_SHEET_ID }}
+          # C-14 item 4: one Haiku call for the weekly brief draft. Missing/invalid
+          # key degrades gracefully (scripts/vkh_brief.py._call_haiku, L-12) —
+          # does not fail the build.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python scripts/build.py
 
       - name: Install Playwright Chromium
@@ -139,6 +144,33 @@ jobs:
             If you suppressed that original article because you wanted to hide the whole story (not just that one write-up of it), please also suppress the newly-promoted article the same way — set its manual_override cell to TRUE and include_on_site to FALSE in the KVN_Articles sheet.
 
             If you only meant to hide that one specific article (bad link, low quality, wrong outlet), no action is needed — this is working as intended.
+
+            Full run log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Send weekly brief ready notice
+        # C-14 item 4, 2026-07-05: fires only when scripts/vkh_brief.py's
+        # generate_weekly_brief_draft() wrote a NEW draft this run (via
+        # emit_weekly_brief_notice() — same GITHUB_OUTPUT pattern as the
+        # succession notice above). Nothing goes live until the Commander
+        # sets approved=TRUE in the weekly_brief Sheets tab.
+        if: steps.build.outputs.brief_ready == '1'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          secure: false
+          username: ${{ secrets.ALERT_EMAIL }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          to: ${{ secrets.ALERT_EMAIL }}
+          from: Velvet Knowledge Hub <${{ secrets.ALERT_EMAIL }}>
+          subject: "[VKH] This week's brief is ready for review (week ending ${{ steps.build.outputs.brief_week }}, build #${{ github.run_number }})"
+          body: |
+            A new weekly summary draft has been written to the weekly_brief tab in the VKH_Data Google Sheet, week ending ${{ steps.build.outputs.brief_week }}.
+
+            Fact-check result: ${{ steps.build.outputs.brief_fact_check_status }}
+            (A result of "review_needed" means the draft cites at least one figure that did not match this week's actual computed numbers — check it carefully before approving.)
+
+            Nothing changes on the live site until you review the draft and set its "approved" column to TRUE in the weekly_brief tab. You may also edit the "published_text" column first if you want to change the wording — leave it blank to publish the draft as written.
 
             Full run log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 

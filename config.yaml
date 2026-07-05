@@ -168,6 +168,26 @@ sources:
 csv_endpoint_url: "https://script.google.com/macros/s/AKfycbxHQO5CkfaWiWV3ZxYByuoFq9B8KW7ElY46rp-sn8DiI6fH5FOi9qKqCYReJz5mRHT26w/exec"  # set after deploying scripts/vkh_csv_email.gs
 
 # ---------------------------------------------------------------------------
+# Weekly brief — auto-drafted "this week at a glance" + human publication
+# gate (C-14 item 4, 잠망경-approved 2026-07-04, Commander-approved 2026-07-05).
+#
+# enabled: false is a hard kill switch — no draft is generated and no
+# section renders on the site (not an empty box). Flip to false if weekly
+# review becomes a burden; flip back on whenever.
+#
+# stale_after_days: once an approved brief is older than this many days, the
+# site shows a visible staleness warning (same pattern as
+# scripts/vkh_charts.py's _kpta_estimate_context()). Default 14 = roughly
+# two build_site.yml cron cycles (Monday 11:00 KST weekly).
+#
+# See scripts/vkh_brief.py for the generation, fact-check, and gate logic;
+# run scripts/setup_weekly_brief_tab.py once to create the weekly_brief tab.
+# ---------------------------------------------------------------------------
+weekly_brief:
+  enabled: true
+  stale_after_days: 14
+
+# ---------------------------------------------------------------------------
 # KPTA pharmaceutical estimate — Phase 2 triangulation (C-12e).
 #
 # Not automatable: IntelQ's phase2_data_access_research (2026-07-03) found

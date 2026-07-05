@@ -41,6 +41,11 @@ from scripts.vkh_data import (
 from scripts.vkh_kpi import compute_kpis
 from scripts.vkh_charts import prepare_chart_data
 from scripts.vkh_render import render
+from scripts.vkh_brief import (
+    emit_weekly_brief_notice,
+    generate_weekly_brief_draft,
+    get_weekly_brief_context,
+)
 
 
 def main() -> None:
@@ -83,8 +88,15 @@ def main() -> None:
     # --- Step 5e: Write news_pulse CSV download -------------------------------
     _write_news_pulse_csv(sections)
 
+    # --- Step 5f: Weekly brief — draft + read the approved brief (C-14 item 4) -
+    # weekly_brief.enabled in config.yaml is a hard kill switch (pre-mortem
+    # item 5) — both calls below return {"enabled": False} / no-op if off.
+    brief_notice = generate_weekly_brief_draft(config, sheet, kpi, chart_data, sections, build_date)
+    emit_weekly_brief_notice(brief_notice)
+    weekly_brief = get_weekly_brief_context(config, sheet)
+
     # --- Step 6: Render -------------------------------------------------------
-    bytes_written = render(config, sections, kpi, chart_data, build_date)
+    bytes_written = render(config, sections, kpi, chart_data, build_date, weekly_brief=weekly_brief)
 
     # --- Step 7: Copy static assets to docs/assets/ (GitHub Pages serves from docs/) ---
     src_assets = REPO_ROOT / "assets"
@@ -137,6 +149,11 @@ def main() -> None:
     print(f"  C-3h dest area countries: {dest_countries}")
     print(f"  C-3h dest pie year: {dest_pie.get('year', '—')}")
     print(f"  C-3h QIA origin years: {[r['year'] for r in qia_origin]}")
+    if brief_notice.get("new_draft"):
+        print(f"  weekly brief: new draft written for {brief_notice['week_ending_date']} "
+              f"(fact-check: {brief_notice['fact_check_status']})")
+    print(f"  weekly brief published: enabled={weekly_brief.get('enabled')} "
+          f"available={weekly_brief.get('available', '—')}")
     print(f"  output: docs/index.html ({bytes_written} bytes)")
     print(f"  build complete: {build_date}")
 
