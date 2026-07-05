@@ -1,9 +1,12 @@
 # Run as: PYTHONPATH=. python scripts/setup_trust_pipeline_tabs.py
 #
-# setup_trust_pipeline_tabs.py — one-time (idempotent) creation of the four
-# trust-pipeline tabs for VFI_Import_Records (directive §4, C-15 2026-07-05):
+# setup_trust_pipeline_tabs.py — one-time (idempotent) creation of the
+# trust-pipeline tabs for VFI_Import_Records (directive §4, C-15 2026-07-05;
+# map_countries/map_types added C-16 2026-07-05):
 #   raw_vfi        — append-only KR-language raw layer
 #   map_companies  — human-edited KR->EN company mapping (replaces old VLOOKUP)
+#   map_countries  — human-edited KR->EN country-name mapping
+#   map_types      — human-edited KR->EN product-type mapping
 #   needs_review   — exceptions gate output, shared by all future ingest scripts
 #   review_view    — generated human-readable snapshot (§4.3), scripts read
 #                    master (VFI_Import_Records) directly; humans read this tab
@@ -20,6 +23,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.schema import (  # noqa: E402
     MAP_COMPANIES_HEADERS,
+    MAP_COUNTRIES_HEADERS,
+    MAP_TYPES_HEADERS,
     NEEDS_REVIEW_HEADERS,
     RAW_VFI_HEADERS,
 )
@@ -34,6 +39,10 @@ REVIEW_VIEW_HEADERS = [
 TABS = [
     ("raw_vfi", RAW_VFI_HEADERS, []),
     ("map_companies", MAP_COMPANIES_HEADERS, []),
+    # C-16 (2026-07-05): same pattern as map_companies, for country_origin_en/
+    # country_export_en/product_type_en.
+    ("map_countries", MAP_COUNTRIES_HEADERS, []),
+    ("map_types", MAP_TYPES_HEADERS, []),
     ("needs_review", NEEDS_REVIEW_HEADERS, []),
     ("review_view", REVIEW_VIEW_HEADERS, []),
 ]
@@ -48,7 +57,10 @@ def main() -> None:
     for tab_name, headers, seed_rows in TABS:
         create_tab(spreadsheet, tab_name, headers, seed_rows)
 
-    print("\nTrust-pipeline tabs ready: raw_vfi, map_companies, needs_review, review_view.")
+    print(
+        "\nTrust-pipeline tabs ready: raw_vfi, map_companies, map_countries, "
+        "map_types, needs_review, review_view."
+    )
 
 
 if __name__ == "__main__":
