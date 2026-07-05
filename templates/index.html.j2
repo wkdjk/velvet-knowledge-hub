@@ -62,8 +62,7 @@
       white-space: nowrap;
     }
 
-    .chart-toggle-row select,
-    .chart-toggle-row input[type="month"] {
+    .chart-toggle-row select {
       font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
       font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
       padding: 4px 8px;
@@ -72,8 +71,7 @@
       color: var(--text-primary);
     }
 
-    .chart-toggle-row select:focus,
-    .chart-toggle-row input[type="month"]:focus {
+    .chart-toggle-row select:focus {
       outline: 2px solid var(--accent);
       outline-offset: 1px;
     }
@@ -160,8 +158,9 @@
       font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
     }
 
-    /* "Estimate" badge — every derived figure in this section carries one,
-       per the 잠망경 pre-mortem's Appendix B caveat requirement. */
+    /* "Estimate" badge — every derived (non-source-reported) figure in this
+       section carries one, so readers can tell a calculated estimate from a
+       directly-sourced number at a glance. */
     .estimate-badge {
       display: inline-block;
       font-size: var(--fs-caption);   /* was 0.6875rem (11px) — readability floor fix */
@@ -428,8 +427,7 @@
         align-items: stretch;
       }
 
-      .chart-toggle-row select,
-      .chart-toggle-row input[type="month"] {
+      .chart-toggle-row select {
         width: 100%;
       }
 
@@ -701,10 +699,12 @@
             </select>
           </div>
           <div class="toggle-group">
-            <label for="a1-from">From</label>
-            <input type="month" id="a1-from" onchange="a1Render()">
-            <label for="a1-to">To</label>
-            <input type="month" id="a1-to" onchange="a1Render()">
+            <label for="a1-from-year">From</label>
+            <select id="a1-from-year" aria-label="From year" onchange="a1Render()"></select>
+            <select id="a1-from-month" aria-label="From month" onchange="a1Render()"></select>
+            <label for="a1-to-year">To</label>
+            <select id="a1-to-year" aria-label="To year" onchange="a1Render()"></select>
+            <select id="a1-to-month" aria-label="To month" onchange="a1Render()"></select>
             <span class="date-range-note">Data available from January 2021</span>
           </div>
           <div class="toggle-group">
@@ -767,10 +767,12 @@
             </select>
           </div>
           <div class="toggle-group">
-            <label for="a2-from">From</label>
-            <input type="month" id="a2-from" onchange="a2Render()">
-            <label for="a2-to">To</label>
-            <input type="month" id="a2-to" onchange="a2Render()">
+            <label for="a2-from-year">From</label>
+            <select id="a2-from-year" aria-label="From year" onchange="a2Render()"></select>
+            <select id="a2-from-month" aria-label="From month" onchange="a2Render()"></select>
+            <label for="a2-to-year">To</label>
+            <select id="a2-to-year" aria-label="To year" onchange="a2Render()"></select>
+            <select id="a2-to-month" aria-label="To month" onchange="a2Render()"></select>
             <span class="date-range-note">Data available from January 2021</span>
           </div>
           <div class="toggle-group">
@@ -817,7 +819,7 @@
     <div id="a3-panel" style="margin-top:40px;">
 
       <h2 style="font-size:1.125rem; margin-top:0; margin-bottom:4px; border-top: 2px solid var(--accent); padding-top:10px;">Korea import price</h2>
-      <p class="source-footnote" style="margin-top:4px; border-top:none; padding-top:0;">Source: MFDS (Ministry of Food and Drug Safety, Korea) — 식품의약품통계연보 (Korean medicine yearbook), herbal medicine channel. Annual data.</p>
+      <p class="source-footnote" style="margin-top:4px; border-top:none; padding-top:0;">Source: MFDS (Ministry of Food and Drug Safety, Korea) — Food & Drug Statistical Yearbook, herbal medicine channel. Annual data.</p>
 
       {% if mfds_annual_series and mfds_annual_series.has_data %}
         <div class="chart-panel" style="margin-top:12px;">
@@ -826,7 +828,7 @@
           <div class="chart-canvas-wrapper" style="height:260px;">
             <canvas id="chart-a3" aria-label="MFDS total annual import value, Korean herbal medicine channel" role="img"></canvas>
           </div>
-          <p class="chart-annotation">Source: MFDS 식품의약품통계연보 Table 6-3-8. Korean herbal medicine channel (pharmaceutical classification). Does not include food ingredient imports shown in the import records section below.</p>
+          <p class="chart-annotation">Source: MFDS Food & Drug Statistical Yearbook, Table 6-3-8. Korean herbal medicine channel (pharmaceutical classification). Does not include food ingredient imports shown in the import records section below.</p>
         </div>
       {% else %}
         <div class="placeholder-card" style="margin-top:16px;">
@@ -988,8 +990,8 @@
               </div>
               <div class="article-meta">
                 <span class="article-meta-date">{{ article.published_date | default("") }}</span>
-                {% if article.category %}
-                  <span class="article-meta-category">{{ article.category }}</span>
+                {% if article._display_category %}
+                  <span class="article-meta-category">{{ article._display_category }}</span>
                 {% endif %}
               </div>
             </li>
@@ -1112,8 +1114,8 @@
       <div class="discrepancy-accordion__body">
         <h4>Why the chart and table show different figures</h4>
         <p>The numbers are not directly comparable, and neither is wrong — they come from two distinct MFDS databases covering different import channels.</p>
-        <p><strong>The A3 chart</strong> uses the MFDS annual statistics yearbook (식품의약품통계연보, Table 6-3-8), which records deer velvet imported as a <em>herbal medicine or pharmaceutical ingredient</em>. Figures show total annual value in USD, 2004–2024.</p>
-        <p><strong>The records table</strong> uses the MFDS food-import portal (수입식품 정보마루), which records deer velvet imported as a <em>food ingredient</em>. These are individual shipment notifications filed under Korea's food safety system, 2016–2026.</p>
+        <p><strong>The A3 chart</strong> uses the MFDS Food & Drug Statistical Yearbook (Table 6-3-8), which records deer velvet imported as a <em>herbal medicine or pharmaceutical ingredient</em>. Figures show total annual value in USD, 2004–2024.</p>
+        <p><strong>The records table</strong> uses the MFDS Imported Food Information Portal, which records deer velvet imported as a <em>food ingredient</em>. These are individual shipment notifications filed under Korea's food safety system, 2016–2026.</p>
         <p>A third channel also exists — sliced velvet under a separate product code (HS 0507.90.1190) — which neither source covers. Total Korean deer velvet imports are therefore higher than either source shows alone.</p>
       </div>
     </details>
@@ -1211,6 +1213,54 @@
     var d = new Date(now.getFullYear(), now.getMonth() - 11, 1);
     var start = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
     return { start: start, end: end };
+  }
+
+  /* ── Month-picker replacement (D-fix, 2026-07-06) ─────────────────────
+     Native <input type="month"> renders its picker UI in the visitor's
+     browser locale (Chromium ignores <html lang>), so Korean-locale
+     browsers showed "2025년 8월" instead of English. Plain <select> pairs
+     always render in the labels we give them. Data format stays "YYYY-MM"
+     so filterRows() and every other consumer is unchanged. */
+  var MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+  function populateMonthYearSelects(prefix, startYear, endYear) {
+    var yearSel  = document.getElementById(prefix + '-year');
+    var monthSel = document.getElementById(prefix + '-month');
+    if (yearSel && !yearSel.options.length) {
+      for (var y = startYear; y <= endYear; y++) {
+        var yOpt = document.createElement('option');
+        yOpt.value = String(y);
+        yOpt.textContent = String(y);
+        yearSel.appendChild(yOpt);
+      }
+    }
+    if (monthSel && !monthSel.options.length) {
+      MONTH_NAMES.forEach(function (name, idx) {
+        var mOpt = document.createElement('option');
+        mOpt.value = String(idx + 1).padStart(2, '0');
+        mOpt.textContent = name;
+        monthSel.appendChild(mOpt);
+      });
+    }
+  }
+
+  /* Read "YYYY-MM" from a prefix's year+month select pair. */
+  function getMonthValue(prefix) {
+    var yearSel  = document.getElementById(prefix + '-year');
+    var monthSel = document.getElementById(prefix + '-month');
+    if (!yearSel || !monthSel || !yearSel.value || !monthSel.value) return '';
+    return yearSel.value + '-' + monthSel.value;
+  }
+
+  /* Set a prefix's year+month select pair from a "YYYY-MM" string. */
+  function setMonthValue(prefix, value) {
+    if (!value) return;
+    var parts = value.split('-');
+    var yearSel  = document.getElementById(prefix + '-year');
+    var monthSel = document.getElementById(prefix + '-month');
+    if (yearSel)  yearSel.value  = parts[0];
+    if (monthSel) monthSel.value = parts[1];
   }
 
   /* ── Populate country dropdowns from raw data ─────────────────────── */
@@ -1534,24 +1584,20 @@
   };
 
   window.a1Render = function () {
-    var fromEl    = document.getElementById('a1-from');
-    var toEl      = document.getElementById('a1-to');
     var countryEl = document.getElementById('a1-country');
     var formEl    = document.getElementById('a1-form');
-    a1State.from    = fromEl    ? fromEl.value    : '';
-    a1State.to      = toEl      ? toEl.value      : '';
+    a1State.from    = getMonthValue('a1-from');
+    a1State.to      = getMonthValue('a1-to');
     a1State.country = countryEl ? countryEl.value : '';
     a1State.form    = formEl    ? formEl.value    : '';
     a1Render();
   };
 
   window.a2Render = function () {
-    var fromEl    = document.getElementById('a2-from');
-    var toEl      = document.getElementById('a2-to');
     var countryEl = document.getElementById('a2-country');
     var formEl    = document.getElementById('a2-form');
-    a2State.from    = fromEl    ? fromEl.value    : '';
-    a2State.to      = toEl      ? toEl.value      : '';
+    a2State.from    = getMonthValue('a2-from');
+    a2State.to      = getMonthValue('a2-to');
     a2State.country = countryEl ? countryEl.value : '';
     a2State.form    = formEl    ? formEl.value    : '';
     a2Render();
@@ -1560,25 +1606,29 @@
   /* ── Init: set defaults, populate dropdowns, render ─────────────────── */
   (function init() {
     var range = last12Months();
+    /* Year range for the picker selects: data starts January 2021 (see
+       the "Data available from" note next to the controls) through the
+       current year — reuses last12Months()'s own current-year computation
+       rather than hardcoding a value that would go stale. */
+    var currentYear = parseInt(range.end.split('-')[0], 10);
+    ['a1-from', 'a1-to', 'a2-from', 'a2-to'].forEach(function (prefix) {
+      populateMonthYearSelects(prefix, 2021, currentYear);
+    });
 
     /* Populate country dropdowns */
     populateCountries(QIA_ROWS, 'a1-country', qiaCountryEn);
     populateCountries(NZ_ROWS,  'a2-country', nzCountryEn);
 
     /* Set default date range to last 12 months */
-    var a1From = document.getElementById('a1-from');
-    var a1To   = document.getElementById('a1-to');
-    if (a1From) a1From.value = range.start;
-    if (a1To)   a1To.value   = range.end;
-    a1State.from = a1From ? a1From.value : '';
-    a1State.to   = a1To   ? a1To.value   : '';
+    setMonthValue('a1-from', range.start);
+    setMonthValue('a1-to',   range.end);
+    a1State.from = getMonthValue('a1-from');
+    a1State.to   = getMonthValue('a1-to');
 
-    var a2From = document.getElementById('a2-from');
-    var a2To   = document.getElementById('a2-to');
-    if (a2From) a2From.value = range.start;
-    if (a2To)   a2To.value   = range.end;
-    a2State.from = a2From ? a2From.value : '';
-    a2State.to   = a2To   ? a2To.value   : '';
+    setMonthValue('a2-from', range.start);
+    setMonthValue('a2-to',   range.end);
+    a2State.from = getMonthValue('a2-from');
+    a2State.to   = getMonthValue('a2-to');
 
     /* Initial render */
     a1Render();

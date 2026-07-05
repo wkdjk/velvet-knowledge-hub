@@ -14,6 +14,20 @@ from jinja2 import Environment, FileSystemLoader
 
 from scripts.vkh_data import OUTPUT_PATH, TEMPLATE_DIR, _display_name, _today_kst
 
+# News pulse category badges — closed 6-value enum fixed by
+# classify_articles.py's _VALID_CATEGORIES (the classifier prompt only ever
+# returns one of these Korean strings). Site-facing text must be English
+# (CLAUDE.md language split); translate at render time only — raw Korean
+# stays in the sheet/data layer untouched.
+_CATEGORY_EN = {
+    "규제정책": "Regulatory policy",
+    "무역시장": "Trade market",
+    "건강제품": "Health products",
+    "수입유통": "Import & distribution",
+    "업계소식": "Industry news",
+    "기타": "Other",
+}
+
 
 def render(
     config: dict,
@@ -81,6 +95,18 @@ def render(
         # Flag rows within the last 90 days for JS expand control (P1-H: 30d → 90d).
         display_row["_in_last_90d"] = display_row["_display_date"] >= cutoff_90d
         import_records_display.append(display_row)
+
+    # News pulse: translate the Korean category enum to English for display,
+    # falling back to the raw value if somehow not in the map (defensive —
+    # should never trigger since classify_articles.py already validates
+    # against _VALID_CATEGORIES before writing to the sheet).
+    news_pulse = sections.get("news_pulse", {})
+    news_pulse_display = dict(news_pulse)
+    news_pulse_display["data"] = [
+        {**row, "_display_category": _CATEGORY_EN.get(row.get("category"), row.get("category"))}
+        for row in news_pulse.get("data", [])
+    ]
+    sections = {**sections, "news_pulse": news_pulse_display}
 
     import_records_total = len(all_import_records)
     import_records_has_data = ii.get("import_records_has_data", False)
