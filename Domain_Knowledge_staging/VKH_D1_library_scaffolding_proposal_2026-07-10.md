@@ -109,28 +109,24 @@ promote_one() : Commander (or CaptainQ on Commander's instruction) supplies
 list_library_docs() reads published rows for the dashboard build
 ```
 
-**Where `promote_one()` gets called from** is an open question (see §7) — options are (a) a small new admin CLI script the Commander runs after reading `list_pending()` output, (b) a Google Sheet the Commander edits (title/date/category columns) that a script diffs against `list_pending()` and promotes automatically once filled in — closer to the existing Sheets-editing UX the Commander already knows, and would reuse `gspread` rather than requiring a new admin surface. Option (b) more closely matches "Google Sheets remains the human edit/view window" from the rebuild decision's Architecture section — flagging as the likely right answer, pending confirmation.
+**Where `promote_one()` gets called from — decided (CaptainQ, 2026-07-10):** a Sheets tab, not an admin CLI. The rebuild decision doc's Architecture section is explicit that Sheets stays the human edit/view window for every section, not only the ones with a pre-existing tab. `promote_one()`'s real implementation reuses `gspread` (same pattern as every other ingest script): a small script reads a Library-curation Sheets tab (title/date/category/tags/summary columns, keyed to `raw_library_files.id` or `drive_file_id`), diffs it against `list_pending()`'s output, and calls `promote_one()` for any row the Commander has filled in.
 
-## 6. config.yaml source block draft
+## 6. config.yaml source block — added (2026-07-10, `enabled: false` still)
+
+`validate_config.py` fixed (§6a) and the block below is now live in this worktree's `config.yaml` — no longer a draft:
 
 ```yaml
-  # --- Library (D1, Phase D rebuild, sqlite-backed — not a Sheets tab) -----
+  # --- Library (D1, Phase D rebuild) -----------------------------------------
+  # sqlite-backed, not a Sheets tab — first source of this kind, see
+  # validate_config.py's tab/db_table location-field check (2026-07-10).
+  # enabled stays false until ingest_library.py's real implementation and
+  # dashboard rendering exist (D1 full build; this is still scaffolding).
+
   - id: library_docs
-    tab: null  # NOTE: validate_config.py currently requires 'tab' to be
-               # non-empty for every source (REQUIRED_SOURCE_FIELDS). This
-               # source has no Sheets tab. validate_config.py needs a small
-               # follow-up patch (accept 'db_table' as an alternative to
-               # 'tab') before this block can be enabled — flagged in §7,
-               # not fixed here (out of scope for scaffolding).
     db_table: library_docs
-    kind: directory  # closest existing kind (stable, low-churn curated
-                      # rows). Revisit if Library's display needs diverge
-                      # enough from "directory" once D1 is actually built —
-                      # a new "library" kind is one line to add if so.
+    kind: directory
     section: library
-    enabled: false  # flip true once ingest_library.py + dashboard
-                    # rendering exist (D1 full build, not this scaffolding
-                    # step)
+    enabled: false
     description: >
       Reference library — deer velvet supply-chain intelligence, pricing
       research, and industry yearbook excerpts. Files dropped in the Drive
@@ -143,15 +139,53 @@ list_library_docs() reads published rows for the dashboard build
 
 `id: library_docs` — plain descriptive name, no predecessor codename, per the 2026-07-09 purge directive.
 
+### 6a. `validate_config.py` fix (was §7 item 2, now resolved)
+
+`REQUIRED_SOURCE_FIELDS` used to hardcode `tab` as unconditionally required and non-empty — this would have rejected `library_docs` (no Sheets tab at all). Fixed:
+
+- `REQUIRED_SOURCE_FIELDS` narrowed to `{id, kind, section, enabled}` (backing-store-agnostic).
+- New `_LOCATION_FIELDS = ("tab", "db_table")` check: a source is valid if **at least one** of `tab`/`db_table` is non-empty — not both required, and having both is not an error either (covers a hypothetical future migration-in-progress source cleanly, at no extra cost).
+- New test file `scripts/test_validate_config.py` (assert-based, matches `test_dedup_logic.py`/`test_smoke.py` convention — no existing test coverage for the validator was found before this fix). 7/7 pass:
+
+```
+$ PYTHONPATH=. python3 scripts/test_validate_config.py
+  PASS: test_sheets_backed_source_valid
+  PASS: test_sqlite_backed_source_valid
+  PASS: test_source_with_neither_tab_nor_db_table_fails
+  PASS: test_source_with_both_tab_and_db_table_is_not_an_error
+  PASS: test_empty_tab_and_missing_db_table_fails
+  PASS: test_missing_other_required_field_still_caught
+  PASS: test_unknown_kind_still_caught
+test_validate_config.py: 7/7 passed
+```
+
+- **Regression check** — ran the real validator against the full real `config.yaml` (all 7 existing sources + the new `library_docs` block), not just the new path:
+
+```
+$ PYTHONPATH=. python3 scripts/validate_config.py
+validate_config.py — all checks passed
+  display_kinds : 5 kinds defined
+  sources total : 8
+  enabled       : 6
+  disabled      : 2
+  disabled ids  : ['market_presence', 'library_docs']
+  result        : OK
+```
+
+All existing Sheets-backed sources (`nz_export`, `korea_quarantine`, `kstat_api`, `vfi_import_records`, `vfi_price_annual`, `market_presence`, `kvn_articles`) still validate clean — the narrowed `REQUIRED_SOURCE_FIELDS` didn't silently loosen anything else, since every one of them still has a non-empty `tab`.
+
 ## 7. Open questions for CaptainQ / Commander
 
-1. **Promotion interface** — admin CLI vs. a Sheets tab the Commander fills in (§5). Sheets tab is likely the better fit (matches "Sheets stays the human edit/view window" from the decision doc) but needs confirmation before `ingest_library.py`'s real implementation is written.
-2. **`validate_config.py` gap** — the validator's `REQUIRED_SOURCE_FIELDS` set (`id, tab, kind, section, enabled`) assumes every source has a Sheets tab. A sqlite-backed source needs either a placeholder `tab` value or a validator patch (accept `db_table` as an alternative to `tab`). This will affect every one of D1–D4, not just Library — worth deciding once, here, rather than re-deciding at D2.
-3. **Same-repo vs. new repo** — this worktree adds new files to `velvet-knowledge-hub` (the same repo whose `main` is frozen for feature work). None of the new files touch anything frozen, so this should be safe to merge under the freeze policy, but confirming explicitly: is the sqlite rebuild meant to land as new files in this same repo (assumed here), or a separate repo entirely?
-4. **Drive subfolder for Library uploads** — decision doc references the existing intake folder `DINZ data for Velvet Knowledge Hub` generally; `ingest_from_drive.py`'s `FOLDER_MAP` keys on specific named subfolders (`qia`, `nz`, `mfds_price`, etc.). Library needs its own subfolder ID before `ingest_from_drive.py` can gain a `library` key — likely a new Drive subfolder the Commander creates, e.g. matching the `02_Library` placeholder name used in this doc's demo code, or reusing an existing one if the staged reference material (`VKH_library_staging_2026-07-09.md`) already has a home.
-5. **`file_type` source of truth** — Drive's own `mimeType` (e.g. `application/pdf`) vs. filename suffix (`.pdf`). Recommend deriving from `mimeType` where present (more reliable than a user-supplied filename) with suffix as fallback — not yet decided in code, flagging for the real implementation.
+**Resolved 2026-07-10 (CaptainQ, from existing Commander decisions already on file):**
+1. ~~Promotion interface~~ → Sheets tab, not an admin CLI (see §5).
+2. ~~`validate_config.py` gap~~ → fixed, see §6a.
+3. ~~Same-repo vs. new repo~~ → confirmed same repo (`velvet-knowledge-hub`). The whole rebuild (module boundaries kept, `actions/deploy-pages` kept, `ingest_from_drive.py` reworked in place) was always scoped to stay in this repo — there was never a new-repo option on the table.
+5. ~~`file_type` source of truth~~ → ratified: Drive `mimeType` primary, filename-suffix fallback.
 
-None of these block the scaffolding step itself — all five are implementation-time decisions for the next dispatch once this proposal is confirmed.
+**Still genuinely open (Commander-only — cannot be resolved from existing decisions):**
+4. **Drive subfolder for Library uploads** — `ingest_from_drive.py`'s `FOLDER_MAP` keys on specific named subfolders (`qia`, `nz`, `mfds_price`, etc.). Library needs its own subfolder ID before `ingest_from_drive.py` can gain a `library` key — this is the Commander's own Drive organisation and cannot be decided for them.
+
+Neither open item blocks the scaffolding step itself.
 
 ## 8. Test-as-specification checklist (for the real D1 build, not this scaffolding step)
 
@@ -164,7 +198,7 @@ None of these block the scaffolding step itself — all five are implementation-
 
 ## 9. Pre-mortem gap check
 
-Nothing missed from the 2026-07-09 pre-mortem specific to Library scaffolding. One addition worth flagging to CaptainQ: the pre-mortem covered the rebuild decision generally but the `validate_config.py` required-fields gap (§7 item 2) is a concrete blocker that will hit D2 identically — worth fixing once, before D2 starts, rather than re-discovering it there.
+Nothing missed from the 2026-07-09 pre-mortem specific to Library scaffolding. The `validate_config.py` required-fields gap flagged in the original version of this doc has now been fixed (§6a) — done once, before D2, rather than re-discovered there. Confirmed no regression: all 7 pre-existing sources plus the new `library_docs` block validate clean (§6a).
 
 ---
 
