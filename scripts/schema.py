@@ -127,6 +127,22 @@ WEEKLY_BRIEF_HEADERS = [
 ]
 
 
+# library_curation (D1 full build, 2026-07-10): the Commander-facing Sheets
+# window onto raw_library_files/library_docs (sqlite). Mirrors weekly_brief's
+# "script writes some columns, human writes others" split — see
+# scripts/ingest_library.py's sync_curation_tab() for the full read/write
+# flow (design doc §5, promotion interface decision).
+LIBRARY_CURATION_HEADERS = [
+    "drive_file_id",  # script-written — Drive file ID, primary key for the sync join
+    "filename",        # script-written — original filename, for human reference only
+    "title",           # human-only — blank means "not yet curated" (pending)
+    "doc_date",        # human-only — free text or ISO date
+    "category",        # human-only
+    "tags",            # human-only — free text, comma-separated
+    "summary",         # human-only
+]
+
+
 def verify_header(worksheet, expected: list[str] = KVN_ARTICLES_HEADERS) -> None:
     """
     Read row 1 of worksheet and compare it to expected.

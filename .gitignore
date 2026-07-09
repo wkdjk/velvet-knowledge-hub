@@ -5,3 +5,9 @@ __pycache__/
 output/
 *.log
 backup/
+
+# vkh.sqlite (D1 Phase D rebuild): local data store, regenerated idempotently
+# by vkh_sqlite.migrate() on first run. Not committed — CI/persistence
+# strategy (git-tracked vs artifact) is an open question, see D1 full
+# implementation report, 2026-07-10.
+vkh.sqlite

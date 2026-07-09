@@ -153,7 +153,7 @@ sources:
     db_table: library_docs
     kind: directory
     section: library
-    enabled: false
+    enabled: true
     description: >
       Reference library — deer velvet supply-chain intelligence, pricing
       research, and industry yearbook excerpts. Files dropped in the Drive

@@ -6,7 +6,7 @@
 # Usage:
 #   PYTHONPATH=. python scripts/ingest_from_drive.py --folder FOLDER_NAME [--dry-run]
 #
-# FOLDER_NAME: qia | nz | mfds_price | mfds_records | kstat | all
+# FOLDER_NAME: qia | nz | mfds_price | mfds_records | kstat | library | all
 #
 # L-1:  PYTHONPATH=. ensures repo root is importable.
 # L-2:  .env must be at repo root (velvet-knowledge-hub/.env).
@@ -51,6 +51,12 @@ FOLDER_MAP: dict[str, tuple[str, str, str | None]] = {
     "mfds_price":   ("1UUf55PlJjbCPzVxpcHSERnjC5Ah0Za3g", "scripts/ingest_mfds_annual.py",   None),
     "mfds_records": ("1xZI1MFMMVS09OUdXSvsuYjYQwi2OPXCg", "scripts/ingest_vfi_records.py",  "--auto"),
     "kstat":        ("1ebc4WfgBh-egMQOTX0fujdH6EJpBq-BI", "scripts/ingest_kstat.py",         "--file"),
+    # D1 Library (2026-07-10) — Drive subfolder "07_Library_Reference" under
+    # "DINZ data for Velvet Knowledge Hub" (folder ID confirmed in the D1
+    # scaffolding proposal). ingest_library.py additionally needs
+    # drive_file_id + mimeType per file — see the "library" special-case in
+    # _process_folder() below.
+    "library":      ("11S9L1Hhg52ncsnN8CJyWzSCF1KQPnc3k", "scripts/ingest_library.py",       "--file"),
 }
 
 # Extra scripts dispatched for a folder in addition to the primary script.
@@ -305,6 +311,13 @@ def _process_folder(folder_key: str, dry_run: bool) -> tuple[int, int, int]:
 
             # Primary script dispatch.
             cmd = _build_cmd(primary_script, resolved_flag, dest, dry_run)
+            # library folder: ingest_library.py needs drive_file_id + mimeType
+            # for raw_library_files dedup — not passed via FOLDER_MAP's tuple
+            # shape (only library needs Drive metadata, so this is a
+            # one-line special case rather than extending FOLDER_MAP for
+            # every folder — ponytail).
+            if folder_key == "library":
+                cmd += ["--drive-file-id", file_meta["id"], "--mime-type", file_meta.get("mimeType", "")]
             if dry_run:
                 print(f"  [DRY-RUN] Would run: {' '.join(cmd)}")
                 scripts_run += 1
