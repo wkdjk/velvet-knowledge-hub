@@ -113,3 +113,58 @@ The final `docs/index.html` committed in this worktree reflects a clean rebuild 
 ## 8. Commits made in this worktree
 
 See `git log` on branch `d1-library-scaffold` for the exact commit(s) accompanying this report. `main` remains untouched at `5750786`. The `d2-triangulation-viz` (`velvet-knowledge-hub-d2-viz`) worktree/branch was not read-write touched — read only, for the dark-mode verification-style precedent (§4).
+
+---
+
+## 9. Addendum 2026-07-10 (same day) — SurveyorQ-verified persistence decision + two related fixes
+
+Commander-approved, implementing SurveyorQ's tier-3 audit verbatim (`Projects/Velvet_Knowledge_Hub/Domain_Knowledge/surveyorq_verification_d1_persistence_decision_2026-07-10.md`) — closes §6 item 1's open question and both blind spots SurveyorQ found outside the original brief's scope.
+
+### Item 1 — `vkh.sqlite` as ephemeral build cache (closes §6 item 1)
+
+Added two steps to `.github/workflows/build_site.yml`, immediately before "Build site": `ingest_from_drive.py --folder library` then `ingest_library.py --sync`, reusing the exact `GOOGLE_SERVICE_ACCOUNT_JSON`/`VKH_SHEET_ID` secrets already declared on the neighbouring steps. No other change to how `vkh.sqlite` is handled — it stays gitignored, uncommitted, unrestored; every CI run now rebuilds `raw_library_files`/`library_docs` from Drive + the `library_curation` tab before `build.py` reads them. `backup_sheet.py` needs no change (iterates `spreadsheet.worksheets()`, already covers the new tab).
+
+### Item 2 — `ingest_from_drive.yml`'s dead deploy path
+
+Root cause (confirmed by direct inspection): since `3f8e658`, Pages deploys via `build_site.yml`'s `actions/deploy-pages` artifact under `contents: read` / `pages: write` / `id-token: write`. `ingest_from_drive.yml`'s old finale (`git add docs/` → commit `[skip ci]` → push) could never reach the live site through that path, and `[skip ci]` had nothing left to suppress.
+
+Fix chosen: removed the old "Rebuild site" (`build.py`) and "Commit built site" steps entirely and replaced both with one step, `gh workflow run build_site.yml --ref ${{ github.ref_name }}` (`GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}`, no new secret). Went with the cross-workflow trigger over duplicating `deploy-pages` steps, per the brief's own preference — one Pages-deploy code path, not two to keep in sync. `gh` is preinstalled on `ubuntu-latest` GitHub-hosted runners (confirmed locally: `gh version 2.92.0` present without an install step), so this needed no new dependency.
+
+Judgment call beyond the brief's literal wording: the brief said fix the deploy finale; I also deleted the "Rebuild site" `build.py` step that fed it, since with the commit step gone that local `docs/` build is dead output nobody reads or uploads — leaving it running would be the same "vestigial step nobody re-examined" class of bug, just smaller. `permissions:` narrowed from `contents: write` to `contents: read` + `actions: write` (the job no longer touches git at all; it only needs to dispatch another workflow).
+
+**Real vs simulated:** YAML syntax validated (`yaml.safe_load`, both files, passed). Permissions/secrets cross-checked by direct read against `build_site.yml`'s current header block. **Cannot be verified further without actually running in GitHub Actions** — a local shell cannot exercise `gh workflow run`'s cross-workflow dispatch permission end to end (it needs the real Actions `GITHUB_TOKEN` context, not a local `gh` session). Genuinely untested until the next real `workflow_dispatch` of `ingest_from_drive.yml` in CI; flagging this honestly rather than claiming a dry-run proved it.
+
+### Item 3 — `README_Admin` registry entry
+
+Added a `library_curation` row to `scripts/append_readme_admin_tab_guide.py`'s `NEW_ROWS` list, matching the existing per-tab format exactly (section / instruction / example, same idempotent-append pattern as the other 15 rows). Describes: `drive_file_id`/`filename` are sync-written and read-only, `title`/`doc_date`/`category`/`tags`/`summary` are Commander-edited, feeds Section 6.
+
+**Real, not simulated:** ran the script live against the production `VKH_Data` sheet — `--dry-run` first (confirmed exactly 1 new row, 15 already present), then live (`README_Admin: 1 row(s) appended`), then `--dry-run` again to confirm idempotency (0 new rows, 16 already present — no duplicate).
+
+### Verification summary (all real, this session)
+
+```
+$ PYTHONPATH=. python3 scripts/test_smoke.py            # 32 checks, 0 failed
+$ PYTHONPATH=. python3 scripts/test_library_ingest.py   # 8/8 passed
+$ PYTHONPATH=. python3 scripts/test_validate_config.py  # 7/7 passed
+$ PYTHONPATH=. python3 scripts/validate_config.py       # OK, 7 enabled, 1 disabled
+```
+
+Copied `.env` from the sibling `velvet-knowledge-hub` worktree (same pattern as §5), then ran the two new build_site.yml commands live, back to back, exactly as the workflow will:
+```
+$ PYTHONPATH=. python3 scripts/ingest_from_drive.py --folder library
+  No files found (or folder inaccessible).   # Library Drive folder still empty, per §6 item 2 — unchanged since this morning
+  === Summary: 0 file(s) downloaded, 0 script(s) run, 0 error(s) ===
+$ PYTHONPATH=. python3 scripts/ingest_library.py --sync
+  sync_curation_tab: {'new_rows_added': 0, 'promoted': 0, 'updated': 0, 'skipped_blank_title': 0, 'skipped_no_raw_match': 0}
+```
+Both exited 0 cleanly in sequence against the live Drive folder and the live `library_curation` tab — confirms the new build_site.yml steps will not break the build even with zero library files present (the common near-term case). Deleted the copied `.env` and the local test `vkh.sqlite` afterward (both gitignored, neither was committed).
+
+### Files changed in this addendum
+
+| File | Change |
+|---|---|
+| `.github/workflows/build_site.yml` | Two new steps before "Build site": poll Library Drive folder, sync curation tab |
+| `.github/workflows/ingest_from_drive.yml` | Removed dead `build.py` + git-commit-push finale; replaced with `gh workflow run build_site.yml`; permissions narrowed to `contents: read` + `actions: write` |
+| `scripts/append_readme_admin_tab_guide.py` | Added `library_curation` row to `NEW_ROWS` (also run live against the production sheet — see above) |
+
+No changes to `main`, no changes to the `d2-triangulation-viz` worktree/branch, no new dependencies (`gh` CLI is runner-preinstalled, not a repo dependency).

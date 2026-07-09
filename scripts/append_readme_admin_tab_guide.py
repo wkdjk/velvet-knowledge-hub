@@ -168,6 +168,19 @@ NEW_ROWS: list[list[str]] = [
         "needs_review flags 편록 as unmapped — add a row here with "
         "canonical_name_en = Sliced velvet.",
     ],
+    [
+        "library_curation",
+        "drive_file_id/filename columns are written by ingest_library.py "
+        "--sync (read-only, filled from the Library Drive folder — do not "
+        "hand-edit these two). title/doc_date/category/tags/summary are "
+        "Commander-edited. The same --sync step reads this tab and "
+        "promotes/updates library_docs (sqlite, rebuilt fresh every build "
+        "— see D1 addendum 2026-07-10). Feeds Section 6 (Reference "
+        "library).",
+        "A row with drive_file_id+filename filled but title blank is still "
+        "pending curation — fill in title (and optionally doc_date/"
+        "category/tags/summary) to publish it.",
+    ],
 ]
 
 

@@ -77,6 +77,25 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python scripts/classify_articles.py
 
+      - name: Poll Library Drive folder
+        # D1 addendum 2026-07-10 (SurveyorQ-verified decision): vkh.sqlite is
+        # an ephemeral build cache, not persisted data — raw_library_files
+        # and library_docs are fully reconstructible every run from the
+        # Drive folder + the library_curation Sheets tab, both already
+        # durable and already covered by the Sunday backup_sheet.py job.
+        # No secrets beyond what "Build site" below already uses.
+        env:
+          PYTHONPATH: "."
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: python scripts/ingest_from_drive.py --folder library
+
+      - name: Sync library curation tab
+        env:
+          PYTHONPATH: "."
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          VKH_SHEET_ID: ${{ secrets.VKH_SHEET_ID }}
+        run: python scripts/ingest_library.py --sync
+
       - name: Build site
         id: build
         env:

@@ -12,7 +12,8 @@ jobs:
   ingest:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+      actions: write   # needed to trigger build_site.yml below
     steps:
       - uses: actions/checkout@v4
 
@@ -32,17 +33,15 @@ jobs:
         run: |
           PYTHONPATH=. python scripts/ingest_from_drive.py --folder ${{ github.event.inputs.folder }}
 
-      - name: Rebuild site
+      - name: Trigger site rebuild + deploy
+        # D1 addendum 2026-07-10: since 3f8e658, Pages deploys from
+        # build_site.yml's actions/deploy-pages artifact, not from a docs/
+        # commit — this workflow's old "rebuild locally, git commit docs/,
+        # push [skip ci]" finale could never actually reach the live site
+        # (and [skip ci] suppressed a re-trigger that wasn't happening
+        # anyway). One Pages-deploy code path, not two to keep in sync:
+        # dispatch the real build/deploy workflow instead of duplicating
+        # its steps here.
         env:
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-          VKH_SHEET_ID: ${{ secrets.VKH_SHEET_ID }}
-        run: PYTHONPATH=. python scripts/build.py
-
-      - name: Commit built site
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/
-          git diff --cached --quiet || git commit -m "build: auto-rebuild after Drive ingest [skip ci]"
-          git pull --rebase
-          git push
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run build_site.yml --ref ${{ github.ref_name }}
