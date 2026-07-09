@@ -3,7 +3,11 @@ validate_config.py — Velvet Knowledge Hub config validator.
 
 Reads config.yaml from the repo root and validates:
   1. Every source's `kind` is in the `display_kinds` list.
-  2. Every source has all required fields: id, tab, kind, section, enabled.
+  2. Every source has all required fields: id, kind, section, enabled.
+  3. Every source has a non-empty 'tab' (Sheets-backed) OR 'db_table'
+     (sqlite-backed) — at least one, not both required. Added 2026-07-10 for
+     the Phase D sqlite rebuild (D1 Library is the first source with no
+     Sheets tab at all — see config.yaml's library_docs block).
 
 Exits with code 1 and a clear error message on any failure.
 Exits with code 0 and a success summary if all sources pass.
@@ -20,8 +24,12 @@ from pathlib import Path
 
 import yaml
 
-# Required fields that every source block must contain.
-REQUIRED_SOURCE_FIELDS = {"id", "tab", "kind", "section", "enabled"}
+# Fields every source block must contain regardless of backing store.
+REQUIRED_SOURCE_FIELDS = {"id", "kind", "section", "enabled"}
+
+# A source must have a non-empty value in at least one of these — which one
+# tells you the backing store (tab = Sheets, db_table = sqlite).
+_LOCATION_FIELDS = ("tab", "db_table")
 
 # Path to config relative to this script's parent (repo root).
 CONFIG_PATH = Path(__file__).parent.parent / "config.yaml"
@@ -88,6 +96,13 @@ def validate(config: dict) -> list[str]:
             errors.append(
                 f"{source_label}: kind '{kind}' is not in display_kinds "
                 f"({', '.join(display_kinds)})"
+            )
+
+        # Check at least one location field (tab or db_table) is populated.
+        if not any(source.get(f) not in (None, "") for f in _LOCATION_FIELDS):
+            errors.append(
+                f"{source_label}: must have a non-empty 'tab' (Sheets-backed) "
+                f"or 'db_table' (sqlite-backed)"
             )
 
     return errors

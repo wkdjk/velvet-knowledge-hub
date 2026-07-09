@@ -143,6 +143,26 @@ sources:
       news and major retailer scraping. Deferred to Phase 3; KPL predecessor
       project data will seed this tab at Phase C knowledge inheritance.
 
+  # --- Library (D1, Phase D rebuild) -----------------------------------------
+  # sqlite-backed, not a Sheets tab — first source of this kind, see
+  # validate_config.py's tab/db_table location-field check (2026-07-10).
+  # enabled stays false until ingest_library.py's real implementation and
+  # dashboard rendering exist (D1 full build; this is still scaffolding).
+
+  - id: library_docs
+    db_table: library_docs
+    kind: directory
+    section: library
+    enabled: true
+    description: >
+      Reference library — deer velvet supply-chain intelligence, pricing
+      research, and industry yearbook excerpts. Files dropped in the Drive
+      folder "DINZ data for Velvet Knowledge Hub" are auto-captured into
+      raw_library_files (sqlite); a human (Commander) curates title/date/
+      category into library_docs before a document appears on the
+      dashboard. Schema + ingest flow: scripts/library_schema.py,
+      Domain_Knowledge/VKH_D1_library_scaffolding_proposal_2026-07-10.md.
+
   # --- News pulse -----------------------------------------------------------
 
   - id: kvn_articles

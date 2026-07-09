@@ -46,6 +46,7 @@ from scripts.vkh_brief import (
     generate_weekly_brief_draft,
     get_weekly_brief_context,
 )
+from scripts.library_data import assemble_library_section
 
 
 def main() -> None:
@@ -69,6 +70,10 @@ def main() -> None:
 
     # --- Step 4: Assemble section dicts ---------------------------------------
     sections = assemble_sections(config, tab_data)
+
+    # --- Step 4b: Library section (D1) — sqlite-backed, not a Sheets tab, so
+    # it does not go through assemble_sections()'s generic tab_data loader.
+    sections["library"] = assemble_library_section(config)
 
     # --- Step 5: Compute KPIs -------------------------------------------------
     kpi = compute_kpis(sections)
@@ -109,7 +114,7 @@ def main() -> None:
 
     # --- Console output -------------------------------------------------------
     print("  sections rendered:")
-    for section_id in SECTION_SOURCE_MAP:
+    for section_id in [*SECTION_SOURCE_MAP, "library"]:
         sec = sections.get(section_id, {})
         enabled = sec.get("enabled", False)
         rows = len(sec.get("data", []))

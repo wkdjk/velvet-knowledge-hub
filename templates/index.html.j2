@@ -660,6 +660,7 @@
     <li><a href="#section-3">3. News pulse</a></li>
     <li><a href="#section-4">4. Import records</a></li>
     <li><a href="#section-5">5. Trade reference</a></li>
+    <li><a href="#section-6">6. Reference library</a></li>
   </ul>
 </nav>
 
@@ -1148,6 +1149,56 @@
         <a class="reference-download-link" href="velvet-knowledge-hub.pdf" download>Download dashboard (PDF) →</a>
       </div>
     </details>
+
+  </section>
+
+  {# ── SECTION 6 — REFERENCE LIBRARY (D1) ──────────────────────────────── #}
+  {% set library = sections.library if sections is defined and sections.library is defined else {} %}
+  <section id="section-6">
+
+    <div class="section-header">
+      <div class="section-header-left">
+        <h2>6. Reference library</h2>
+        <span class="last-updated">Last updated: {{ library.last_updated | default("—", true) }}</span>
+      </div>
+    </div>
+
+    <p class="source-footnote">Deer velvet supply-chain intelligence, pricing research, and industry yearbook excerpts curated by the Commander.</p>
+
+    {% if library.enabled and library.has_data %}
+
+      <div class="table-scroll-wrapper" style="margin-top:12px;">
+        <table class="import-records-table" id="library-docs-table">
+          <caption>Curated reference documents</caption>
+          <thead>
+            <tr>
+              <th scope="col">Title</th>
+              <th scope="col">Date</th>
+              <th scope="col">Category</th>
+              <th scope="col">Tags</th>
+              <th scope="col">Summary</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for doc in library.data %}
+              <tr>
+                <td>{{ doc.title }}</td>
+                <td class="data">{{ doc.doc_date | default("—", true) }}</td>
+                <td>{{ doc.category | default("—", true) }}</td>
+                <td>{{ doc.tags | default("—", true) }}</td>
+                <td>{{ doc.summary | default("—", true) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    {% else %}
+      <div class="placeholder-card" style="margin-top:16px;">
+        <p class="placeholder-title">Reference library — coming soon</p>
+        <p class="placeholder-body">Curated documents will appear here once the Commander has reviewed and tagged the first upload.</p>
+      </div>
+    {% endif %}
 
   </section>
 
