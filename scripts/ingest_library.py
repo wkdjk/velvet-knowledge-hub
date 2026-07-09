@@ -121,6 +121,7 @@ def promote_one(
     category: str | None,
     tags: str | None,
     summary: str | None,
+    download_url: str | None = None,
     curated_by: str = "Commander",
 ) -> None:
     """
@@ -135,9 +136,9 @@ def promote_one(
     """
     try:
         conn.execute(
-            "INSERT INTO library_docs (file_ref, title, doc_date, category, tags, summary, curated_at, curated_by) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (raw_file_id, title, doc_date, category, tags, summary, _utc_now_iso(), curated_by),
+            "INSERT INTO library_docs (file_ref, title, doc_date, category, tags, summary, download_url, curated_at, curated_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (raw_file_id, title, doc_date, category, tags, summary, download_url, _utc_now_iso(), curated_by),
         )
         conn.commit()
     except sqlite3.IntegrityError as exc:
@@ -158,6 +159,7 @@ def promote_or_update_one(
     category: str | None,
     tags: str | None,
     summary: str | None,
+    download_url: str | None = None,
     curated_by: str = "Commander",
 ) -> str:
     """
@@ -170,6 +172,11 @@ def promote_or_update_one(
     upsert function sync_curation_tab() calls — no separate reconciliation
     service (ponytail).
 
+    download_url is stored as-given (raw Commander paste) — scheme
+    validation happens at read time in library_data.py, not here, so a
+    malformed URL can still be seen/fixed by the Commander in the Sheet
+    rather than being silently dropped before it is even stored.
+
     Returns "inserted" or "updated".
     """
     existing = conn.execute(
@@ -178,17 +185,17 @@ def promote_or_update_one(
 
     if existing is None:
         conn.execute(
-            "INSERT INTO library_docs (file_ref, title, doc_date, category, tags, summary, curated_at, curated_by) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (raw_file_id, title, doc_date, category, tags, summary, _utc_now_iso(), curated_by),
+            "INSERT INTO library_docs (file_ref, title, doc_date, category, tags, summary, download_url, curated_at, curated_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (raw_file_id, title, doc_date, category, tags, summary, download_url, _utc_now_iso(), curated_by),
         )
         conn.commit()
         return "inserted"
 
     conn.execute(
-        "UPDATE library_docs SET title = ?, doc_date = ?, category = ?, tags = ?, summary = ? "
+        "UPDATE library_docs SET title = ?, doc_date = ?, category = ?, tags = ?, summary = ?, download_url = ? "
         "WHERE file_ref = ?",
-        (title, doc_date, category, tags, summary, raw_file_id),
+        (title, doc_date, category, tags, summary, download_url, raw_file_id),
     )
     conn.commit()
     return "updated"
@@ -217,7 +224,7 @@ def sync_curation_tab(conn: sqlite3.Connection, spreadsheet) -> dict:
     existing_ids = {str(r.get("drive_file_id", "")) for r in rows if r.get("drive_file_id")}
     pending = list_pending(conn)
     new_rows = [
-        [p["drive_file_id"], p["filename"], "", "", "", "", ""]
+        [p["drive_file_id"], p["filename"], "", "", "", "", "", ""]
         for p in pending
         if str(p["drive_file_id"]) not in existing_ids
     ]
@@ -254,6 +261,7 @@ def sync_curation_tab(conn: sqlite3.Connection, spreadsheet) -> dict:
             row.get("category") or None,
             row.get("tags") or None,
             row.get("summary") or None,
+            row.get("download_url") or None,
         )
         if result == "inserted":
             promoted += 1
