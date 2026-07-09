@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       folder:
-        description: "Folder to ingest (qia / nz / mfds_price / mfds_records / kstat / all)"
+        description: "Folder to ingest (qia / nz / mfds_price / mfds_records / kstat / library / all)"
         required: false
         default: "all"
 
