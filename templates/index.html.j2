@@ -267,82 +267,6 @@
       margin-top: 8px;
     }
 
-    /* Section C reference accordion */
-    .reference-accordion {
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--accent);
-    }
-
-    .reference-accordion summary {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 14px 16px;
-      cursor: pointer;
-      font-size: 0.9375rem;
-      font-weight: 600;
-      color: var(--text-primary);
-      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
-      list-style: none;
-      user-select: none;
-    }
-
-    .reference-accordion summary::-webkit-details-marker {
-      display: none;
-    }
-
-    .reference-accordion summary::after {
-      content: "\25B6";
-      font-size: var(--fs-caption);   /* was 0.7rem (11.2px) — readability floor fix */
-      color: var(--text-muted);
-      transition: transform 0.15s ease;
-    }
-
-    details[open].reference-accordion summary::after {
-      transform: rotate(90deg);
-    }
-
-    .reference-accordion__body {
-      padding: 16px 16px 20px;
-      border-top: 1px solid var(--border);
-    }
-
-    .reference-accordion__body p {
-      font-size: 0.875rem;
-      color: var(--text-secondary);
-      line-height: 1.65;
-      margin-bottom: 12px;
-      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
-    }
-
-    .reference-accordion__body ul {
-      padding-left: 20px;
-      margin-bottom: 16px;
-    }
-
-    .reference-accordion__body li {
-      font-size: 0.875rem;
-      color: var(--text-secondary);
-      line-height: 1.55;
-      margin-bottom: 6px;
-      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
-    }
-
-    .reference-download-link {
-      display: inline-block;
-      font-size: 0.875rem;
-      font-weight: 500;
-      color: var(--accent);
-      text-decoration: underline;
-      text-underline-offset: 3px;
-      font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
-    }
-
-    .reference-download-link:hover {
-      color: var(--text-primary);
-      text-decoration: none;
-    }
-
     /* Section D — CSV email form */
     .csv-email-form {
       display: none;
@@ -553,14 +477,6 @@
         border-left: 3px solid #999;
       }
 
-      details.reference-accordion {
-        border-left: 3px solid #888;
-      }
-
-      details.reference-accordion > .reference-accordion__body {
-        display: block !important;
-      }
-
       .table-controls,
       .csv-email-form,
       .csv-confirmation {
@@ -659,8 +575,7 @@
     <li><a href="#section-2">2. Trade triangulation</a></li>
     <li><a href="#section-3">3. News pulse</a></li>
     <li><a href="#section-4">4. Import records</a></li>
-    <li><a href="#section-5">5. Trade reference</a></li>
-    <li><a href="#section-6">6. Reference library</a></li>
+    <li><a href="#section-5">5. Reference library</a></li>
   </ul>
 </nav>
 
@@ -1123,42 +1038,13 @@
 
   </section>
 
-  {# ── SECTION 5 — TRADE REFERENCE ─────────────────────────────────────── #}
+  {# ── SECTION 5 — REFERENCE LIBRARY (D1) ──────────────────────────────── #}
+  {% set library = sections.library if sections is defined and sections.library is defined else {} %}
   <section id="section-5">
 
     <div class="section-header">
       <div class="section-header-left">
-        <h2>5. Trade reference</h2>
-      </div>
-    </div>
-
-    <p class="source-footnote">Exporter guidebook produced by Deer Industry New Zealand (DINZ) for velvet exporters.</p>
-
-    <details class="reference-accordion" style="margin-top:16px;">
-      <summary>Exporter guidebook</summary>
-      <div class="reference-accordion__body">
-        <p>The DINZ Velvet Exporter Guidebook covers the requirements and procedures for exporting deer velvet from New Zealand to Korea and other Asian markets. It is produced by Deer Industry New Zealand for registered velvet exporters.</p>
-        <p>Topics covered:</p>
-        <ul>
-          <li>Korea import regulatory requirements and MFDS approval procedures</li>
-          <li>Velvet grading and product classification standards</li>
-          <li>Export documentation and customs declaration requirements</li>
-          <li>Quarantine inspection and phytosanitary certificate requirements</li>
-          <li>Market entry channels — pharmaceutical, food ingredient, and direct export</li>
-        </ul>
-        <a class="reference-download-link" href="velvet-knowledge-hub.pdf" download>Download dashboard (PDF) →</a>
-      </div>
-    </details>
-
-  </section>
-
-  {# ── SECTION 6 — REFERENCE LIBRARY (D1) ──────────────────────────────── #}
-  {% set library = sections.library if sections is defined and sections.library is defined else {} %}
-  <section id="section-6">
-
-    <div class="section-header">
-      <div class="section-header-left">
-        <h2>6. Reference library</h2>
+        <h2>5. Reference library</h2>
         <span class="last-updated">Last updated: {{ library.last_updated | default("—", true) }}</span>
       </div>
     </div>
