@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS library_docs (
     category        TEXT,
     tags            TEXT,
     summary         TEXT,
+    download_url    TEXT,
     curated_at      TEXT NOT NULL,
     curated_by      TEXT NOT NULL DEFAULT 'Commander'
 )

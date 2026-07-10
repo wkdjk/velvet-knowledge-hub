@@ -26,7 +26,11 @@ from scripts.ingest_library import (  # noqa: E402
     promote_or_update_one,
     sync_curation_tab,
 )
-from scripts.library_data import library_available, list_library_docs  # noqa: E402
+from scripts.library_data import (  # noqa: E402
+    _sanitise_download_url,
+    library_available,
+    list_library_docs,
+)
 from scripts.library_schema import LIBRARY_DDL  # noqa: E402
 
 
@@ -60,7 +64,7 @@ class _FakeSpreadsheet:
         return self._worksheet
 
 
-_CURATION_HEADERS = ["drive_file_id", "filename", "title", "doc_date", "category", "tags", "summary"]
+_CURATION_HEADERS = ["drive_file_id", "filename", "title", "doc_date", "category", "tags", "summary", "download_url"]
 
 
 def test_dedup_on_drive_file_id():
@@ -184,6 +188,56 @@ def test_sync_curation_tab_push_then_promote_then_update():
     docs = list_library_docs(conn)
     assert docs[0]["title"] == "2025 velvet pricing yearbook (revised)"
     assert len(docs) == 1  # still one row, not a duplicate
+
+
+def test_download_url_round_trips_through_promote_and_update():
+    conn = _fresh_conn()
+    ingest_one_file(conn, "id-1", "a.pdf", "library", "pdf", "", "{}")
+    raw_id = conn.execute("SELECT id FROM raw_library_files").fetchone()[0]
+
+    promote_or_update_one(
+        conn, raw_id, "Title A", "2026-01-01", "pricing", None, "summary",
+        download_url="https://example.com/report.pdf",
+    )
+    docs = list_library_docs(conn)
+    assert docs[0]["download_url"] == "https://example.com/report.pdf"
+
+    # Editing an already-curated row (correction A path) must also carry
+    # download_url through the UPDATE branch, not just the INSERT branch.
+    promote_or_update_one(
+        conn, raw_id, "Title A", "2026-01-01", "pricing", None, "summary",
+        download_url="https://example.com/v2.pdf",
+    )
+    docs = list_library_docs(conn)
+    assert len(docs) == 1
+    assert docs[0]["download_url"] == "https://example.com/v2.pdf"
+
+
+def test_download_url_scheme_guard_at_read_time():
+    conn = _fresh_conn()
+    ingest_one_file(conn, "id-1", "a.pdf", "library", "pdf", "", "{}")
+    raw_id = conn.execute("SELECT id FROM raw_library_files").fetchone()[0]
+
+    # A garbage-scheme URL is stored as given (curation-tab data is never
+    # rejected on write — see promote_or_update_one() docstring) but must be
+    # treated as absent by the read path that feeds the template.
+    promote_or_update_one(
+        conn, raw_id, "Title A", None, None, None, None,
+        download_url="javascript:alert(1)",
+    )
+    docs = list_library_docs(conn)
+    assert docs[0]["download_url"] is None
+
+    # A well-formed https URL passes through unchanged.
+    assert _sanitise_download_url("https://dinz.co.nz/guide.pdf") == "https://dinz.co.nz/guide.pdf"
+    # Disallowed/malformed schemes and blank/whitespace-only strings are
+    # treated as absent, not crash the build.
+    assert _sanitise_download_url("javascript:alert(1)") is None
+    assert _sanitise_download_url("ftp://example.com/x") is None
+    assert _sanitise_download_url("") is None
+    assert _sanitise_download_url("   ") is None
+    assert _sanitise_download_url(None) is None
+    assert _sanitise_download_url("not a url at all") is None
 
 
 def main() -> None:

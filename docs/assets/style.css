@@ -864,6 +864,113 @@ footer .caption:last-child {
   text-decoration: none;
 }
 
+/* ── Section 5 — Reference library list/card layout ──────────────────
+   DesignQ spec: Domain_Knowledge/VKH_library_table_designq_spec_2026-07-10.md
+   Replaces .import-records-table for this section only — Section 4 keeps
+   the table (genuinely tabular, short columns). Structurally identical to
+   .article-list/.article-entry (Section 3), new class names because the
+   fields and degrade-rules differ (category visible here, tags + download
+   link have no equivalent in the news row). ─────────────────────────── */
+.library-list {
+  list-style: none;
+  margin-top: 8px;
+  padding: 0;
+}
+
+.library-entry {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.library-body {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.library-title {
+  font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+/* Deliberate deviation from .article-summary (0.875rem): this summary IS
+   the row's content, not a supplementary blurb under a headline — same
+   "prose read in full" reasoning already applied to .weekly-brief-text and
+   .discrepancy-accordion__body, so it gets --fs-body (16px), not caption. */
+.library-summary {
+  font-size: var(--fs-body);
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.library-tags {
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+}
+
+.library-tags-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.library-meta {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 120px;
+}
+
+.library-meta-date {
+  font-family: "SF Mono", "Cascadia Code", "Fira Mono", "Courier New", monospace;
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+}
+
+.library-meta-category {
+  font-size: var(--fs-caption);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--surface-deep);
+  border: 1px solid var(--border);
+  padding: 2px 6px;
+}
+
+.library-download-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-caption);
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-family: "Trebuchet MS", "Gill Sans MT", "Gill Sans", "Century Gothic", Arial, sans-serif;
+}
+
+.library-download-link:hover {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.library-download-empty {
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 /* D-6: Chart scope note — above MFDS chart canvas */
 .chart-scope-note {
   font-size: var(--fs-caption);   /* was 0.8125rem (13px) — readability floor fix */
@@ -1135,6 +1242,20 @@ details.discrepancy-accordion[open] .discrepancy-accordion__chevron {
   }
 
   .article-meta {
+    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  /* Section 5 library entry: same stack-then-wrap treatment as .article-entry */
+  .library-entry {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .library-meta {
     align-items: flex-start;
     flex-direction: row;
     flex-wrap: wrap;

@@ -140,6 +140,7 @@ LIBRARY_CURATION_HEADERS = [
     "category",        # human-only
     "tags",            # human-only — free text, comma-separated
     "summary",         # human-only
+    "download_url",    # human-only — Commander-pasted public link; validated at read time (library_data._sanitise_download_url)
 ]
 
 

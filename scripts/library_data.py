@@ -15,10 +15,42 @@
 #
 # Security: no credentials in this file.
 
+import sys
 import sqlite3
+from urllib.parse import urlparse
 
 from scripts import vkh_sqlite
 from scripts.library_schema import LIBRARY_DDL
+
+# Only these two schemes are safe to render into an href — anything else
+# (javascript:, data:, empty-but-not-blank, malformed) is treated as absent.
+# Defence-in-depth XSS guard on a Commander-pasted arbitrary string, applied
+# here (data layer) so the template never has to think about it.
+_ALLOWED_URL_SCHEMES = {"http", "https"}
+
+
+def _sanitise_download_url(raw: str | None) -> str | None:
+    """
+    Return raw unchanged if it is a well-formed http(s) URL, else None.
+
+    Fails closed and silently (a WARNING print, not an exception) — one bad
+    Commander paste must not crash the build. See dispatch brief security
+    requirement, 2026-07-10.
+    """
+    if not raw:
+        return None
+    candidate = raw.strip()
+    if not candidate:
+        return None
+    try:
+        parsed = urlparse(candidate)
+    except ValueError:
+        print(f"  WARNING: library download_url unparseable, treating as absent: {candidate!r}", file=sys.stderr)
+        return None
+    if parsed.scheme not in _ALLOWED_URL_SCHEMES or not parsed.netloc:
+        print(f"  WARNING: library download_url has disallowed scheme/shape, treating as absent: {candidate!r}", file=sys.stderr)
+        return None
+    return candidate
 
 
 def list_library_docs(
@@ -31,9 +63,9 @@ def list_library_docs(
     Returns plain dicts (not sqlite3.Row) so this works regardless of the
     caller's row_factory and so the result is directly Jinja2/JSON-safe —
     no join back to raw_library_files needed (title/date/category/tags/
-    summary are all in library_docs already).
+    summary/download_url are all in library_docs already).
     """
-    query = "SELECT id, file_ref, title, doc_date, category, tags, summary, curated_at, curated_by FROM library_docs"
+    query = "SELECT id, file_ref, title, doc_date, category, tags, summary, download_url, curated_at, curated_by FROM library_docs"
     params: list = []
     if category:
         query += " WHERE category = ?"
@@ -42,7 +74,10 @@ def list_library_docs(
 
     cur = conn.execute(query, params)
     cols = [d[0] for d in cur.description]
-    return [dict(zip(cols, row)) for row in cur.fetchall()]
+    docs = [dict(zip(cols, row)) for row in cur.fetchall()]
+    for doc in docs:
+        doc["download_url"] = _sanitise_download_url(doc.get("download_url"))
+    return docs
 
 
 def library_available(conn: sqlite3.Connection) -> bool:
