@@ -317,8 +317,16 @@ def main() -> None:
     if args.dry_run:
         print("  mode: dry-run (no writes)")
 
-    # --- Credentials ------------------------------------------------------
+    # --- L-44 guard: news source disabled in config.yaml — skip before any
+    # API client is constructed or network call is made. Same sources_by_id
+    # lookup convention as scripts/news_data.py's assemble_news_section().
     config = load_config()
+    sources_by_id = {s["id"]: s for s in config.get("sources", [])}
+    if not sources_by_id.get("news_articles", {}).get("enabled", False):
+        print("  news source disabled in config.yaml — skipping collection")
+        sys.exit(0)
+
+    # --- Credentials ------------------------------------------------------
     sheet_id = resolve_sheet_id(config)
     sheet = connect_sheets(sheet_id)  # keywords only — see module docstring
     client_id, client_secret = get_naver_credentials()

@@ -54,6 +54,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts import vkh_sqlite  # noqa: E402
 from scripts.news_schema import NEWS_DDL  # noqa: E402
+from scripts.sheets_auth import _load_config  # noqa: E402
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -779,6 +780,16 @@ def main() -> None:
     args = parser.parse_args()
 
     print("classify_articles.py — VKH article AI classification (sqlite)")
+
+    # --- L-44 guard: news source disabled in config.yaml — skip before any
+    # Anthropic client is constructed or API call is made. Same sources_by_id
+    # lookup convention as scripts/news_data.py's assemble_news_section().
+    config = _load_config()
+    sources_by_id = {s["id"]: s for s in config.get("sources", [])}
+    if not sources_by_id.get("news_articles", {}).get("enabled", False):
+        print("  news source disabled in config.yaml — skipping classification")
+        sys.exit(0)
+
     print(f"  model: {_HAIKU_MODEL}")
     print(f"  mode: {'async (Semaphore 3, 40 RPM bucket)' if args.async_mode else 'sync (0.5s sleep)'}")
     print(f"  dry-run: {args.dry_run}")
