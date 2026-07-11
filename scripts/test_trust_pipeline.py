@@ -11,7 +11,7 @@
 # markers on the same company; genuinely unmapped companies; MFDS rows with
 # blank country/type _en fields).
 #
-# This repo has no test framework (see scripts/test_dedup_logic.py) — a
+# This repo has no test framework (see scripts/test_news_pipeline.py) — a
 # single assert-based script matches the existing convention.
 
 import sys

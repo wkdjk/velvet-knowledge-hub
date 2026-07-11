@@ -2,7 +2,7 @@
 #
 # test_validate_config.py — coverage for validate_config.py's validate().
 #
-# No test framework (matches test_dedup_logic.py/test_smoke.py convention —
+# No test framework (matches test_news_pipeline.py/test_smoke.py convention —
 # this repo has no pytest config). Assert-based script.
 #
 # Added 2026-07-10 alongside the tab/db_table fix (Phase D rebuild gap):
