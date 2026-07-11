@@ -45,8 +45,43 @@ from scripts.vkh_brief import (
     emit_weekly_brief_notice,
     generate_weekly_brief_draft,
     get_weekly_brief_context,
+    push_pending_drafts_to_sheet,
+    rehydrate_drafts_from_sheet,
+    sync_weekly_brief_approvals,
 )
 from scripts.library_data import assemble_library_section
+from scripts.news_schema import NEWS_DDL
+from scripts import vkh_sqlite
+
+
+def run_weekly_brief_step(config: dict, sheet, conn, kpi: dict, chart_data: dict, sections: dict, build_date: str):
+    """
+    Step 5f as its own function so it has a real caller to test from (the
+    class of bug that escaped review twice per SurveyorQ's D3 re-merge audit,
+    2026-07-11, §2: "the new module's own tests pass but nothing tests the
+    real caller in build.py"). main() just wires this up with the live
+    Sheet/sqlite connection; tests pass fakes for both.
+
+    conn must already be migrated (NEWS_DDL) by the caller — this function
+    only runs the weekly-brief read/write sequence, not schema setup.
+
+    Order matters (SurveyorQ audit §6 item 2): vkh.sqlite is an ephemeral
+    build cache (D1 decision, 2026-07-10) — raw_weekly_brief_drafts starts
+    empty every build, so it must be rehydrated from the durable
+    weekly_brief Sheets tab BEFORE the approvals sync can find anything to
+    promote, and BEFORE this week's draft is generated. weekly_brief.enabled
+    in config.yaml is a hard kill switch (pre-mortem item 5) — every
+    vkh_brief call below is a no-op if off.
+
+    Returns (brief_notice, weekly_brief).
+    """
+    rehydrate_drafts_from_sheet(conn, sheet)
+    sync_weekly_brief_approvals(conn, sheet)
+    brief_notice = generate_weekly_brief_draft(config, conn, kpi, chart_data, sections, build_date)
+    emit_weekly_brief_notice(brief_notice)
+    push_pending_drafts_to_sheet(conn, sheet)
+    weekly_brief = get_weekly_brief_context(config, conn)
+    return brief_notice, weekly_brief
 
 
 def main() -> None:
@@ -93,12 +128,15 @@ def main() -> None:
     # --- Step 5e: Write news_pulse CSV download -------------------------------
     _write_news_pulse_csv(sections)
 
-    # --- Step 5f: Weekly brief — draft + read the approved brief (C-14 item 4) -
-    # weekly_brief.enabled in config.yaml is a hard kill switch (pre-mortem
-    # item 5) — both calls below return {"enabled": False} / no-op if off.
-    brief_notice = generate_weekly_brief_draft(config, sheet, kpi, chart_data, sections, build_date)
-    emit_weekly_brief_notice(brief_notice)
-    weekly_brief = get_weekly_brief_context(config, sheet)
+    # --- Step 5f: Weekly brief — rehydrate + sync + draft + push + read
+    # (C-14 item 4; rewired to sqlite D3 Phase D 2026-07-11; call-site wiring
+    # fix, SurveyorQ T3 audit B-1/B-2/B-4, 2026-07-11). See
+    # run_weekly_brief_step()'s docstring for why this is its own function
+    # and the ordering rationale.
+    brief_conn = vkh_sqlite.connect()
+    vkh_sqlite.migrate(brief_conn, NEWS_DDL)
+    brief_notice, weekly_brief = run_weekly_brief_step(config, sheet, brief_conn, kpi, chart_data, sections, build_date)
+    brief_conn.close()
 
     # --- Step 6: Render -------------------------------------------------------
     bytes_written = render(config, sections, kpi, chart_data, build_date, weekly_brief=weekly_brief)

@@ -350,6 +350,53 @@ def _is_truthy(val) -> bool:
     return str(val).strip().upper() in ("TRUE", "1", "YES")
 
 
+def rehydrate_drafts_from_sheet(conn: sqlite3.Connection, sheet) -> int:
+    """
+    Repopulate raw_weekly_brief_drafts from the weekly_brief Sheets tab.
+
+    vkh.sqlite is an ephemeral build cache (D1 decision, 2026-07-10) — it
+    starts empty every build, so without this step sync_weekly_brief_approvals()
+    would find no matching sqlite draft for any already-approved week and
+    the site would lose its approved brief on every single build (SurveyorQ
+    B-4, D3 re-merge audit 2026-07-11). The weekly_brief tab is the durable,
+    cheap-to-replay source — same posture as D1's Drive re-poll pattern.
+    Call this BEFORE sync_weekly_brief_approvals() and BEFORE generating the
+    current week's draft (build.py step 5f order).
+
+    INSERT OR IGNORE keyed on UNIQUE(week_ending_date): safe to call more
+    than once — an already-present week is a no-op, not an error.
+
+    Returns the number of weeks rehydrated.
+    """
+    ws = _get_brief_worksheet(sheet)
+    if ws is None:
+        return 0
+
+    rows = ws.get_all_records()
+    rehydrated = 0
+    for row in rows:
+        week = str(row.get("week_ending_date", "")).strip()
+        draft_text = str(row.get("draft_text", "")).strip()
+        if not week or not draft_text:
+            continue
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO raw_weekly_brief_drafts "
+            "(week_ending_date, draft_text, fact_check_status, fact_check_detail, generated_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                week,
+                draft_text,
+                str(row.get("fact_check_status", "")).strip() or "ok",
+                str(row.get("fact_check_detail", "")).strip() or None,
+                _utc_now_iso(),
+            ),
+        )
+        if cur.rowcount:
+            rehydrated += 1
+    conn.commit()
+    return rehydrated
+
+
 def push_pending_drafts_to_sheet(conn: sqlite3.Connection, sheet) -> int:
     """
     Append any raw_weekly_brief_drafts row not yet present in the
