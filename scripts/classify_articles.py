@@ -1,10 +1,19 @@
 # Run as: PYTHONPATH=. python scripts/classify_articles.py [--dry-run] [--limit N] [--async]
 #
-# classify_articles.py — AI classification of KVN_Articles rows for Velvet Knowledge Hub.
+# classify_articles.py — AI relevance + classification of raw_news_articles
+# rows for Velvet Knowledge Hub (D3, Phase D rebuild, sqlite storage —
+# 2026-07-11; ported from the pre-rebuild Sheets version — see §4/§6b of
+# Domain_Knowledge_staging/VKH_D3_news_scaffolding_proposal_2026-07-11.md).
 #
-# Reads KVN_Articles rows with an empty ai_processed_at column, calls Haiku 4.5
-# to classify each article, then updates category, english_summary, ai_processed_at,
-# and include_on_site in-place via batch_update.
+# Reads raw_news_articles rows with no matching news_articles row (the
+# "pending judgement" queue — same query shape as Library's pending-curation
+# queue), calls Haiku 4.5 once per article, then writes relevant +
+# classification in ONE INSERT statement (§4 atomicity rule — never
+# INSERT-then-UPDATE). conn.commit() only at batch boundaries.
+#
+# No more column-swap workaround: raw_news_articles.title_ko/description are
+# named for what they hold — the old KVN_Articles Sheet's C-5h swap only
+# existed because the pre-rebuild collector wrote columns in the wrong order.
 #
 # Usage:
 #   PYTHONPATH=. python scripts/classify_articles.py
@@ -13,17 +22,14 @@
 #   PYTHONPATH=. python scripts/classify_articles.py --async
 #
 # L-1: PYTHONPATH=. ensures repo root is importable.
-# L-2: .env must be at repo root (/Users/Qs/C/velvet-knowledge-hub/.env).
-# L-3: GOOGLE_SERVICE_ACCOUNT_JSON must be single-line JSON in .env.
-# L-4: get_all_records() called once; batch_update called once per batch of rows.
+# L-2: .env must be at repo root.
+# L-3: GOOGLE_SERVICE_ACCOUNT_JSON must be single-line JSON in .env (unused
+#      by this script now — no Sheets connection needed for classification).
 # L-11: ANTHROPIC_API_KEY validated — must start with "sk-ant-api03-".
 #
 # AI model: claude-haiku-4-5-20251001
 # Sync rate limiting: 0.5s sleep between API calls.
-# Async mode: asyncio.Semaphore(20) caps concurrency at 20 simultaneous requests.
-#
-# In-place update: uses gspread worksheet.batch_update() with A1 cell ranges.
-# Header is row 1 → first data row is row 2.
+# Async mode: asyncio.Semaphore(3) + a 40 RPM token bucket.
 #
 # Security: no credentials or secrets in this file. All secrets from .env only.
 
@@ -31,26 +37,23 @@ import argparse
 import asyncio
 import json
 import logging
-import os
 import re
+import sqlite3
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import date as _date, datetime, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
 
 import anthropic
-import gspread
-from dotenv import load_dotenv
-from gspread.utils import rowcol_to_a1
 
 # ---------------------------------------------------------------------------
 # L-1: ensure repo root is on sys.path.
 # ---------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.sheets_auth import _load_config, connect_sheets, resolve_sheet_id  # noqa: E402
-from scripts.schema import KVN_ARTICLES_HEADERS, verify_header  # noqa: E402
+from scripts import vkh_sqlite  # noqa: E402
+from scripts.news_schema import NEWS_DDL  # noqa: E402
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -65,92 +68,35 @@ sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
 # Constants
 # ---------------------------------------------------------------------------
 
-TARGET_TAB = "KVN_Articles"
-
-# Haiku model ID as specified in the brief.
 _HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
-# KVN_Articles column indices (0-based) — must match schema.py KVN_ARTICLES_HEADERS,
-# the single source of truth for this tab (A3 fix, 2026-07-03).
-# Verified 2026-06-05 by reading ws.row_values(1) directly from the sheet;
-# verify_header() re-checks this at every run startup and warns on drift.
-#
-# Header row (0-based):
-#   article_id(0) | title(1) | url(2) | content_hash(3) | published_date(4) |
-#   source(5) | category(6) | english_summary(7) | ai_processed_at(8) |
-#   include_on_site(9) | crawled_at(10) | english_title(11) |
-#   duplicate_of_article_id(12) | dedup_judged_at(13) | manual_override(14)
-#
-# Note: input columns (title_ko, description) are read by header NAME, not
-# index, at each call site — see _classify_article_async() and the sync loop
-# in main(), which both read row.get("url") / row.get("content_hash").
-# A3 cleanup: removed unused _COL_TITLE_KO / _COL_DESCRIPTION index constants
-# — neither was referenced anywhere else in this file.
-# Columns written by the classifier (0-based, A=0):
-_COL_CATEGORY = 6        # 'category' (G)
-_COL_ENGLISH_SUMMARY = 7  # 'english_summary' (H)
-_COL_AI_PROCESSED_AT = 8  # 'ai_processed_at' (I)
-_COL_INCLUDE_ON_SITE = 9  # 'include_on_site' (J)
-# crawled_at occupies col K (index 10) — english_title goes in col L (index 11).
-# C-8 P0b: english_title is a new column appended to the right of the existing schema.
-# Prerequisite: run setup_sheets_add_english_title.py (or manually add the header
-# 'english_title' to cell L1 of KVN_Articles) before running the classifier.
-_COL_ENGLISH_TITLE = 11   # 'english_title' (L) — added C-8 P0b
-
-# C-13 Task 1 (2026-07-04): semantic dedup cache + manual-protection columns.
-# Prerequisite: run scripts/add_dedup_columns_header.py once against the live
-# sheet before running the semantic clustering pass (mirrors C-8 P0b's
-# add_english_title_header.py migration pattern).
-_COL_DUPLICATE_OF = 12         # 'duplicate_of_article_id' (M)
-_COL_DEDUP_JUDGED_AT = 13      # 'dedup_judged_at' (N)
-_COL_MANUAL_OVERRIDE = 14      # 'manual_override' (O) — written only by a human, never by this script.
-
-# Valid category values — classifier must return one of these.
 _VALID_CATEGORIES = frozenset([
     "규제정책", "무역시장", "건강제품", "수입유통", "업계소식", "기타"
 ])
 
-# Near-duplicate clustering (Task 2, 2026-07-03; superseded by semantic
-# matching Task 1, 2026-07-04): the same press release covered by multiple
-# outlets gets a different URL and content_hash per collect_naver.py's
-# exact-hash dedup — content_hash dedup cannot catch this by design (see
-# classifier_guidance.md §7: cluster_id was intentionally dropped from KVN's
-# design, but that assumed exact-hash dedup would catch same-story
-# republication, which it does not for multi-outlet coverage).
-#
-# Task 1 root-cause fix (2026-07-04): pure difflib.SequenceMatcher ratio
-# (Task 2) only caught near-verbatim headlines (ratio >= 0.72) — confirmed
-# live it misses the same press release written up with structurally
-# different headlines by different outlets (measured ratios 0.46-0.68 for
-# the Joa Pharma / 몽진환마인 cluster). Haiku 4.5 (the model already wired
-# into this file for classification) now makes the match decision;
-# SequenceMatcher stays only as (a) a loose pre-filter to cap how many
-# candidate headlines go into one LLM prompt, and (b) the fallback match
-# rule if an individual LLM call errors — see run_semantic_clustering_pass().
+# Near-duplicate clustering — semantic (Haiku pairwise match), ported as-is
+# from the pre-rebuild version. See news_schema.py's schema note: the old
+# string-sentinel duplicate_of_article_id ("" / "none" / article_id) is
+# replaced by NULL-based states (dedup_judged_at IS NULL = never judged;
+# dedup_judged_at IS NOT NULL AND duplicate_of_raw_ref IS NULL = judged,
+# canonical) — no sentinel string anywhere in this file any more.
 _CLUSTER_DATE_WINDOW_DAYS = 3
-_CLUSTER_TITLE_RATIO = 0.72          # fallback-only strict threshold (was the sole rule pre-Task-1).
-_CLUSTER_LLM_LOOSE_RATIO = 0.3       # pre-filter floor — well below the 0.46 lowest confirmed real duplicate, so it only trims obviously-unrelated headlines, never the ones Task 1 exists to catch.
-_CLUSTER_LLM_MAX_CANDIDATES = 20     # ponytail: caps one prompt's candidate list; revisit if a 3-day window regularly exceeds this (today's live max is 10).
-_DEDUP_SENTINEL_NONE = "none"        # duplicate_of_article_id value meaning "judged, not a duplicate of anything".
+_CLUSTER_TITLE_RATIO = 0.72          # fallback-only strict threshold.
+_CLUSTER_LLM_LOOSE_RATIO = 0.3       # pre-filter floor.
+_CLUSTER_LLM_MAX_CANDIDATES = 20     # ponytail: caps one prompt's candidate list; revisit if a 3-day window regularly exceeds this.
 
-# Rate limit pause between individual Claude API calls (brief specifies 0.5s).
+# Rate limit pause between individual Claude API calls.
 _API_SLEEP_SECONDS = 0.5
 
-# Async mode: max concurrent API requests.
-# Set conservatively — the account limit is 50 RPM on Haiku.
-# With Semaphore(3) and a token bucket at 40 tokens/min we stay well under quota.
+# Async mode: max concurrent API requests + token bucket (RPM headroom below
+# the 50 RPM Haiku account limit).
 _ASYNC_CONCURRENCY = 3
-
-# Token bucket: max requests per minute for async mode.
-# Set to 40 to leave 10 RPM headroom below the 50 RPM account limit.
 _ASYNC_RPM_LIMIT = 40
 
-# System prompt for Haiku classification.
-# A2b fix (2026-07-03): enriched with explicit include/exclude criteria and
-# worked examples from Domain_Knowledge/classifier_guidance.md §2 and §6.
-# Previously a one-line relevance instruction let celebrity-reminiscence and
-# clinic-treatment articles (녹용 mentioned only in passing) score as
-# include_on_site=true. CaptainQ-approved per classifier_guidance.md §8.
+# Write-batch size — conn.commit() only at these boundaries (§4 rule 2).
+_WRITE_BATCH_SIZE = 200
+
+# System prompt for Haiku classification — UNCHANGED from the pre-rebuild version.
 _SYSTEM_PROMPT = (
     "You are a Korean deer velvet industry news classifier. "
     "Given a Korean news article title and description, return JSON with four fields:\n"
@@ -182,16 +128,16 @@ _SYSTEM_PROMPT = (
 )
 
 
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 # ---------------------------------------------------------------------------
-# Anthropic API helpers — sync
+# Anthropic API helpers — sync (UNCHANGED from the pre-rebuild version)
 # ---------------------------------------------------------------------------
 
 def validate_api_key(api_key: str) -> None:
-    """
-    L-11: Validate ANTHROPIC_API_KEY prefix.
-
-    A valid key starts with 'sk-ant-api03-'. Exits with code 1 if invalid.
-    """
+    """L-11: Validate ANTHROPIC_API_KEY prefix. Exits with code 1 if invalid."""
     if not api_key.startswith("sk-ant-api03-"):
         print(
             "ERROR: ANTHROPIC_API_KEY does not start with 'sk-ant-api03-'.\n"
@@ -206,11 +152,9 @@ def validate_api_key(api_key: str) -> None:
 def _parse_classification_response(raw_text: str, title_ko: str) -> dict:
     """
     Parse and normalise a raw JSON string from the Haiku classifier.
-
-    Shared between sync and async paths. Returns a classification dict with
-    keys: category, english_summary, include_on_site, _error.
+    Returns a classification dict with keys: category, english_title,
+    english_summary, include_on_site, _error.
     """
-    # Strip markdown code fences if present (```json ... ``` or ``` ... ```).
     if raw_text.startswith("```"):
         raw_text = raw_text.strip("`").strip()
         if raw_text.lower().startswith("json"):
@@ -218,7 +162,6 @@ def _parse_classification_response(raw_text: str, title_ko: str) -> dict:
 
     result = json.loads(raw_text)
 
-    # Normalise category — ensure it is one of the valid values.
     category = str(result.get("category", "기타")).strip()
     if category not in _VALID_CATEGORIES:
         logger.warning(
@@ -230,7 +173,6 @@ def _parse_classification_response(raw_text: str, title_ko: str) -> dict:
     english_title = str(result.get("english_title", "")).strip()
     english_summary = str(result.get("english_summary", "")).strip()
 
-    # include_on_site — accept bool or string.
     raw_include = result.get("include_on_site", False)
     if isinstance(raw_include, bool):
         include_on_site = raw_include
@@ -253,11 +195,7 @@ def classify_article(
 ) -> dict:
     """
     Call Haiku 4.5 to classify a single article (sync path).
-
-    Returns a dict with keys: category, english_summary, include_on_site.
-    On any failure (API error, JSON parse error), returns safe defaults and
-    logs a warning. The caller must still write ai_processed_at so the row
-    is not reprocessed.
+    On any failure, returns safe defaults and logs a warning.
     """
     user_msg = f"Title: {title_ko}\nDescription: {description}"
 
@@ -272,47 +210,31 @@ def classify_article(
         return _parse_classification_response(raw_text, title_ko)
 
     except json.JSONDecodeError as exc:
-        logger.warning(
-            "JSON parse error for title='%s': %s", title_ko[:60], exc
-        )
+        logger.warning("JSON parse error for title='%s': %s", title_ko[:60], exc)
         return {"category": "기타", "english_title": "", "english_summary": "", "include_on_site": False, "_error": True}
     except anthropic.APIError as exc:
-        logger.warning(
-            "Anthropic API error for title='%s': %s", title_ko[:60], exc
-        )
+        logger.warning("Anthropic API error for title='%s': %s", title_ko[:60], exc)
         return {"category": "기타", "english_title": "", "english_summary": "", "include_on_site": False, "_error": True}
     except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "Unexpected error for title='%s': %s", title_ko[:60], exc
-        )
+        logger.warning("Unexpected error for title='%s': %s", title_ko[:60], exc)
         return {"category": "기타", "english_title": "", "english_summary": "", "include_on_site": False, "_error": True}
 
 
 # ---------------------------------------------------------------------------
-# Anthropic API helpers — async
+# Anthropic API helpers — async (UNCHANGED shape; source columns no longer swapped)
 # ---------------------------------------------------------------------------
 
 async def _classify_article_async(
     client: anthropic.AsyncAnthropic,
     semaphore: asyncio.Semaphore,
-    sheet_row_num: int,
-    row: dict,
+    raw_id: int,
+    title_ko: str,
+    description: str,
     counter: list,
     counter_lock: asyncio.Lock,
     total: int,
 ) -> tuple[int, dict]:
-    """
-    Classify a single article asynchronously, bounded by semaphore.
-
-    Returns (sheet_row_num, classification_result).
-    Increments shared counter and prints progress every 100 rows.
-    On any failure, returns safe defaults and sets ai_processed_at so the
-    row is not reprocessed on the next run.
-    """
-    # C-5h fix: live KVN_Articles sheet has data written to wrong columns.
-    # 'url' column holds the Korean article title; 'content_hash' holds description.
-    title_ko = str(row.get("url") or row.get("title_ko", "")).strip()
-    description = str(row.get("content_hash", "")).strip()
+    """Classify a single article asynchronously, bounded by semaphore. Returns (raw_id, result)."""
     user_msg = f"Title: {title_ko}\nDescription: {description}"
 
     async with semaphore:
@@ -328,110 +250,165 @@ async def _classify_article_async(
 
         except json.JSONDecodeError as exc:
             logger.warning("JSON parse error for title='%s': %s", title_ko[:60], exc)
-            result = {"category": "기타", "english_summary": "", "include_on_site": False, "_error": True}
+            result = {"category": "기타", "english_title": "", "english_summary": "", "include_on_site": False, "_error": True}
         except anthropic.APIError as exc:
             logger.warning("Anthropic API error for title='%s': %s", title_ko[:60], exc)
-            result = {"category": "기타", "english_summary": "", "include_on_site": False, "_error": True}
+            result = {"category": "기타", "english_title": "", "english_summary": "", "include_on_site": False, "_error": True}
         except Exception as exc:  # noqa: BLE001
             logger.warning("Unexpected error for title='%s': %s", title_ko[:60], exc)
-            result = {"category": "기타", "english_summary": "", "include_on_site": False, "_error": True}
+            result = {"category": "기타", "english_title": "", "english_summary": "", "include_on_site": False, "_error": True}
 
-    # Update shared progress counter (thread-safe via asyncio.Lock).
     async with counter_lock:
         counter[0] += 1
         done = counter[0]
         if done % 100 == 0 or done == total:
             print(f"  classified {done}/{total} rows...")
 
-    return sheet_row_num, result
+    return raw_id, result
 
 
 class _TokenBucket:
-    """
-    Simple async token bucket for rate limiting.
-
-    Replenishes at rate tokens/second. Each acquire() waits until a token
-    is available. Thread-safe via asyncio.Lock.
-    """
+    """Simple async token bucket for rate limiting. Thread-safe via asyncio.Lock."""
 
     def __init__(self, rate_per_minute: int) -> None:
-        self._rate = rate_per_minute / 60.0  # tokens per second
+        self._rate = rate_per_minute / 60.0
         self._tokens = float(rate_per_minute)
         self._max_tokens = float(rate_per_minute)
         self._last_refill = asyncio.get_event_loop().time()
         self._lock = asyncio.Lock()
 
     async def acquire(self) -> None:
-        """Block until a token is available, then consume one token."""
         while True:
             async with self._lock:
                 now = asyncio.get_event_loop().time()
                 elapsed = now - self._last_refill
-                self._tokens = min(
-                    self._max_tokens,
-                    self._tokens + elapsed * self._rate,
-                )
+                self._tokens = min(self._max_tokens, self._tokens + elapsed * self._rate)
                 self._last_refill = now
 
                 if self._tokens >= 1.0:
                     self._tokens -= 1.0
-                    return  # token acquired
+                    return
 
-            # No token available — wait a small amount then retry.
             wait_seconds = (1.0 - self._tokens) / self._rate
             await asyncio.sleep(max(0.05, wait_seconds))
 
 
 async def _classify_all_async(
     api_key: str,
-    unprocessed: list[tuple[int, dict]],
+    unprocessed: list[dict],
 ) -> list[tuple[int, dict]]:
     """
-    Classify all unprocessed rows concurrently using AsyncAnthropic.
-
-    Rate-limiting strategy:
-    - asyncio.Semaphore(_ASYNC_CONCURRENCY) caps simultaneous open connections.
-    - _TokenBucket(_ASYNC_RPM_LIMIT) enforces requests-per-minute to stay
-      within the account's 50 RPM Haiku limit.
-
-    Results are collected in original order via asyncio.gather (index-preserving).
-    Returns list of (sheet_row_num, classification_result) in input order.
+    Classify all unprocessed raw rows concurrently using AsyncAnthropic.
+    unprocessed: list of raw_news_articles dicts (must have id/title_ko/description).
+    Returns list of (raw_id, classification_result) in input order.
     """
     client = anthropic.AsyncAnthropic(api_key=api_key)
     semaphore = asyncio.Semaphore(_ASYNC_CONCURRENCY)
     bucket = _TokenBucket(_ASYNC_RPM_LIMIT)
-    counter = [0]  # mutable container for shared counter
+    counter = [0]
     counter_lock = asyncio.Lock()
     total = len(unprocessed)
 
-    async def _rate_limited_task(sheet_row_num: int, row: dict) -> tuple[int, dict]:
-        # Acquire rate-limit token before acquiring semaphore (avoids holding
-        # the semaphore slot while waiting for a rate-limit token).
+    async def _rate_limited_task(raw_row: dict) -> tuple[int, dict]:
         await bucket.acquire()
         return await _classify_article_async(
             client=client,
             semaphore=semaphore,
-            sheet_row_num=sheet_row_num,
-            row=row,
+            raw_id=raw_row["id"],
+            title_ko=str(raw_row.get("title_ko") or ""),
+            description=str(raw_row.get("description") or ""),
             counter=counter,
             counter_lock=counter_lock,
             total=total,
         )
 
-    tasks = [
-        _rate_limited_task(sheet_row_num, row)
-        for sheet_row_num, row in unprocessed
-    ]
-
-    # gather preserves order — index i in results corresponds to tasks[i].
+    tasks = [_rate_limited_task(row) for row in unprocessed]
     results = await asyncio.gather(*tasks)
     await client.close()
     return list(results)
 
 
 # ---------------------------------------------------------------------------
-# Near-duplicate clustering — semantic (Task 1, 2026-07-04; supersedes the
-# difflib-only Task 2, 2026-07-03 implementation)
+# sqlite read/write paths — relevance + classification
+# ---------------------------------------------------------------------------
+
+def list_pending_relevance(conn: sqlite3.Connection) -> list[dict]:
+    """
+    Raw articles with no matching news_articles row — the "pending
+    judgement" queue (§4). Same query shape as Library's pending-curation
+    queue: SELECT * FROM raw WHERE id NOT IN (SELECT ref FROM canonical).
+    """
+    cur = conn.execute(
+        "SELECT * FROM raw_news_articles "
+        "WHERE id NOT IN (SELECT raw_ref FROM news_articles) "
+        "ORDER BY id"
+    )
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+
+def list_stuck_classification(conn: sqlite3.Connection) -> list[dict]:
+    """
+    news_articles rows with relevant=1 AND classified_at IS NULL — the
+    "pending, retry" state (§4 correction 1). Should never arise from this
+    script's own write path (one INSERT covers both column groups
+    atomically — see write_relevance_and_classification()), but is wired in
+    as a real, callable self-heal path per the dispatch brief, not just
+    documented: a manual sqlite edit, or a future write path, could still
+    produce it.
+    """
+    cur = conn.execute(
+        "SELECT n.id AS news_id, n.raw_ref, r.title_ko, r.description "
+        "FROM news_articles n JOIN raw_news_articles r ON r.id = n.raw_ref "
+        "WHERE n.relevant = 1 AND n.classified_at IS NULL"
+    )
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+
+def write_relevance_and_classification(
+    conn: sqlite3.Connection,
+    raw_id: int,
+    result: dict,
+    now_ts: str,
+) -> None:
+    """
+    ONE INSERT statement covering both column groups — relevant +
+    relevance_judged_at, and category/english_title/english_summary/
+    classified_at (NULL unless relevant) — never an INSERT-then-UPDATE pair
+    (§4 atomicity rule 1). Caller commits at batch boundaries, not here.
+    """
+    if result["include_on_site"]:
+        conn.execute(
+            "INSERT INTO news_articles "
+            "(raw_ref, relevant, relevance_judged_at, category, english_title, english_summary, classified_at) "
+            "VALUES (?, 1, ?, ?, ?, ?, ?)",
+            (raw_id, now_ts, result["category"], result["english_title"], result["english_summary"], now_ts),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO news_articles (raw_ref, relevant, relevance_judged_at) VALUES (?, 0, ?)",
+            (raw_id, now_ts),
+        )
+
+
+def retry_stuck_classification(conn: sqlite3.Connection, news_id: int, result: dict, now_ts: str) -> None:
+    """
+    UPDATE path for a row already stuck at relevant=1/classified_at IS NULL.
+    Not a violation of the "never INSERT-then-UPDATE" rule — that rule
+    governs a single article's FIRST write (write_relevance_and_classification
+    above); this repairs an already-broken row from a prior run/edit, which
+    an INSERT cannot do (UNIQUE(raw_ref) would reject it).
+    """
+    conn.execute(
+        "UPDATE news_articles SET category = ?, english_title = ?, english_summary = ?, classified_at = ? "
+        "WHERE id = ?",
+        (result["category"], result["english_title"], result["english_summary"], now_ts, news_id),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Near-duplicate clustering — semantic (ported as-is, NULL-based states)
 # ---------------------------------------------------------------------------
 
 _DEDUP_MATCH_SYSTEM_PROMPT = (
@@ -451,10 +428,9 @@ _DEDUP_MATCH_SYSTEM_PROMPT = (
 
 def _parse_iso_date(raw: str):
     """Parse a YYYY-MM-DD(-prefixed) string to a date object, or None."""
-    from datetime import date as _date  # ponytail: local import, single call site
     try:
         return _date.fromisoformat(raw[:10])
-    except ValueError:
+    except (ValueError, TypeError):
         return None
 
 
@@ -471,8 +447,7 @@ def _match_duplicate_with_llm(
     """
     Ask Haiku whether `new_title` describes the same news event as any of
     `candidate_titles`. Returns the 0-based index of the matching candidate,
-    or None if no match. Raises on API/parse error — caller decides the
-    fallback (see run_semantic_clustering_pass).
+    or None if no match. Raises on API/parse error — caller decides fallback.
     """
     numbered = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(candidate_titles))
     user_msg = f"New headline: {new_title}\n\nCandidates:\n{numbered}"
@@ -485,12 +460,6 @@ def _match_duplicate_with_llm(
     )
     raw_text = message.content[0].text.strip()
 
-    # Haiku sometimes wraps the JSON in a fence and/or adds explanatory
-    # prose after it despite "No explanation" — confirmed live (2026-07-04):
-    # ```json\n{"match": null}\n```\n\nThe new headline discusses... Simple
-    # prefix/suffix stripping isn't reliable once there's trailing prose, so
-    # pull out the first flat {...} object directly instead of trusting the
-    # response to be ONLY that object.
     json_match = re.search(r"\{[^{}]*\}", raw_text)
     if not json_match:
         raise json.JSONDecodeError("no JSON object found in LLM response", raw_text, 0)
@@ -507,13 +476,7 @@ def _match_duplicate_with_llm(
 
 
 def _fallback_ratio_match(new_title: str, candidate_titles: list[str]) -> int | None:
-    """
-    difflib fallback used only when an individual _match_duplicate_with_llm
-    call errors (fail loud via logger.warning, don't crash the run — same
-    posture as the rest of this file). Reapplies Task 2's original strict
-    threshold (_CLUSTER_TITLE_RATIO) so a transient API failure degrades to
-    "at least catch verbatim duplicates", not "catch nothing this run".
-    """
+    """difflib fallback used only when an individual _match_duplicate_with_llm call errors."""
     for i, candidate in enumerate(candidate_titles):
         if SequenceMatcher(None, new_title, candidate).ratio() >= _CLUSTER_TITLE_RATIO:
             return i
@@ -521,76 +484,66 @@ def _fallback_ratio_match(new_title: str, candidate_titles: list[str]) -> int | 
 
 
 def run_semantic_clustering_pass(
-    ws,
+    conn: sqlite3.Connection,
     client: anthropic.Anthropic,
     dry_run: bool,
     force: bool = False,
 ) -> dict:
     """
-    Incrementally judge every unjudged (dedup_judged_at empty, or all rows if
-    force) include_on_site=TRUE row against already-settled rows in its
+    Incrementally judge every unjudged (dedup_judged_at IS NULL, or all rows
+    if force) relevant=1 row against already-settled rows in its
     _CLUSTER_DATE_WINDOW_DAYS window, using Haiku to decide same-story
-    matches (see module header for the difflib-only Task 2 ceiling this
-    replaces).
+    matches. Ported from the pre-rebuild difflib+Haiku version; NULL-based
+    judged/not-judged states replace the old string sentinel (news_schema.py
+    schema note).
 
-    Incremental strategy (Task 1, chosen over full-recompute — see
-    Domain_Knowledge/C13_news_pulse_dedup_pagination_fix_2026-07-04.md Part
-    B §5): only rows with no cached verdict trigger an LLM call. A row
-    already judged 'not a duplicate' (duplicate_of_article_id == "none")
-    joins the "settled" candidate pool other rows get compared against;
-    a row judged a duplicate is suppressed and never becomes a candidate
-    itself.
+    Same-batch handling: rows are processed in ascending published_date
+    order (raw_ref as tie-break, matching the old article_id tie-break) so a
+    row settled earlier in THIS pass can become the canonical match for a
+    row processed later in the same pass, before either has a
+    dedup_judged_at value committed.
 
-    Task 1a same-batch handling: rows are processed in ascending
-    published_date order within this single pass, and each row judged
-    'not a duplicate' is appended to the settled pool immediately — so a
-    row classified earlier in the SAME run can become the canonical match
-    for a row processed later in the same run, before either one has a
-    dedup_judged_at value written to the sheet. This is what catches
-    same-day multi-outlet coverage collected in one scrape.
+    manual_override protection: if a pending row has manual_override=1, a
+    duplicate verdict is still cached (duplicate_of_raw_ref gets set — a
+    human can see the LLM's opinion) but is never "applied" in the sense of
+    hiding the row — news_data.py's display predicate already keeps a
+    manual_override=1 row visible regardless of duplicate_of_raw_ref, so no
+    separate "leave relevant=TRUE" step is needed here (unlike the old
+    include_on_site-based predicate). A protected row does not join the
+    settled pool either — only a genuinely confirmed-canonical row is
+    offered as a match target for later rows.
 
-    manual_override protection: if a pending row has manual_override=TRUE,
-    a duplicate verdict is still cached (duplicate_of_article_id gets set —
-    a human can see the LLM's opinion) but never applied — include_on_site
-    is left TRUE. A protected row does not join the settled pool either
-    (its duplicate_of_article_id is not "none"), so it is never offered as
-    a match target for later rows in the same pass — only a genuinely
-    confirmed-canonical row is. manual_override is never written by this
-    function, only read.
-
-    Never touches category, english_summary, ai_processed_at, or
-    english_title. Never deletes rows. Returns a stats dict:
-    {"suppressed": int, "judged": int, "llm_calls": int, "llm_errors": int}
-    (all zero if there was nothing to judge).
+    Never touches category/english_title/english_summary/classified_at.
+    Never deletes rows. Returns {"suppressed": int, "judged": int,
+    "llm_calls": int, "llm_errors": int}.
     """
-    all_rows = ws.get_all_records()
-    included: list[tuple[int, dict]] = [
-        (idx + 2, row)
-        for idx, row in enumerate(all_rows)
-        if str(row.get("include_on_site", "")).strip().upper() == "TRUE"
-    ]
+    cur = conn.execute(
+        "SELECT n.id AS news_id, n.raw_ref, n.duplicate_of_raw_ref, n.dedup_judged_at, n.manual_override, "
+        "r.published_date, r.title_ko "
+        "FROM news_articles n JOIN raw_news_articles r ON r.id = n.raw_ref "
+        "WHERE n.relevant = 1"
+    )
+    cols = [d[0] for d in cur.description]
+    all_relevant = [dict(zip(cols, row)) for row in cur.fetchall()]
 
     parsed = []
-    for row_num, row in included:
-        date = _parse_iso_date(str(row.get("published_date", "")))
-        title = str(row.get("url", "")).strip()
-        if date is None or not title:
+    for row in all_relevant:
+        d = _parse_iso_date(str(row.get("published_date") or ""))
+        title = str(row.get("title_ko") or "").strip()
+        if d is None or not title:
             continue  # can't window- or title-compare an unparseable row — leave untouched
-        parsed.append({"row_num": row_num, "row": row, "date": date, "title": title})
-    # SurveyorQ F3 (2026-07-04): same published_date is not itself a tie-break —
-    # sort by article_id too so processing order (and therefore which row
-    # settles first and becomes canonical) is identical across runs.
-    parsed.sort(key=lambda item: (item["date"], str(item["row"].get("article_id", ""))))
+        parsed.append({"news_id": row["news_id"], "raw_ref": row["raw_ref"], "row": row, "date": d, "title": title})
+    parsed.sort(key=lambda item: (item["date"], item["raw_ref"]))
 
     settled = [
         item for item in parsed
         if not force
-        and str(item["row"].get("dedup_judged_at", "")).strip()
-        and str(item["row"].get("duplicate_of_article_id", "")).strip() == _DEDUP_SENTINEL_NONE
+        and item["row"]["dedup_judged_at"] is not None
+        and item["row"]["duplicate_of_raw_ref"] is None
     ]
     pending = [
         item for item in parsed
-        if force or not str(item["row"].get("dedup_judged_at", "")).strip()
+        if force or item["row"]["dedup_judged_at"] is None
     ]
 
     if not pending:
@@ -600,8 +553,7 @@ def run_semantic_clustering_pass(
     print(f"  semantic clustering: {len(pending)} unjudged row(s) to check "
           f"against {len(settled)} already-settled row(s){' (--force-cluster)' if force else ''}")
 
-    now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    cell_updates: list[dict] = []
+    now_ts = _utc_now_iso()
     suppressed = 0
     llm_calls = 0
     llm_errors = 0
@@ -609,15 +561,11 @@ def run_semantic_clustering_pass(
     for item in pending:
         window_candidates = [
             s for s in settled
-            if s["row_num"] != item["row_num"] and _within_cluster_window(item["date"], s["date"])
+            if s["news_id"] != item["news_id"] and _within_cluster_window(item["date"], s["date"])
         ]
 
         duplicate_of = None
         if window_candidates:
-            # Cheap pre-filter (rung 2 of the ladder — SequenceMatcher is
-            # already imported and used elsewhere in this file): bounds the
-            # LLM prompt size, does NOT make the match decision — the loose
-            # ratio is well below the confirmed real-duplicate floor (0.46).
             loose = [
                 c for c in window_candidates
                 if SequenceMatcher(None, item["title"], c["title"]).ratio() >= _CLUSTER_LLM_LOOSE_RATIO
@@ -637,193 +585,156 @@ def run_semantic_clustering_pass(
                 match_idx = _fallback_ratio_match(item["title"], [c["title"] for c in candidates])
             duplicate_of = candidates[match_idx] if match_idx is not None else None
 
-            time.sleep(_API_SLEEP_SECONDS)  # reuse the existing inter-call rate-limit pause
+            time.sleep(_API_SLEEP_SECONDS)
 
-        is_protected = str(item["row"].get("manual_override", "")).strip().upper() == "TRUE"
+        is_protected = bool(item["row"]["manual_override"])
 
         if duplicate_of is not None and not is_protected:
-            canonical_article_id = str(duplicate_of["row"].get("article_id", ""))
-            cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_INCLUDE_ON_SITE + 1), "values": [["FALSE"]]})
-            cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_DUPLICATE_OF + 1), "values": [[canonical_article_id]]})
-            cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_DEDUP_JUDGED_AT + 1), "values": [[now_ts]]})
+            conn.execute(
+                "UPDATE news_articles SET duplicate_of_raw_ref = ?, dedup_judged_at = ? WHERE id = ?",
+                (duplicate_of["raw_ref"], now_ts, item["news_id"]),
+            )
             suppressed += 1
             # A suppressed duplicate never joins `settled` — it must not
             # become someone else's "canonical" reference.
         elif duplicate_of is not None and is_protected:
-            # manual_override=TRUE: the LLM's verdict is still cached (per
-            # Part B §6 of the design doc — a human reviewing the sheet can
-            # see the LLM's opinion) but never applied — include_on_site
-            # stays TRUE. Does not join `settled` (duplicate_of_article_id
-            # != "none"): this row is protected, not confirmed-canonical,
-            # so it isn't offered as a match target for later rows either.
-            canonical_article_id = str(duplicate_of["row"].get("article_id", ""))
-            cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_DUPLICATE_OF + 1), "values": [[canonical_article_id]]})
-            cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_DEDUP_JUDGED_AT + 1), "values": [[now_ts]]})
-            print(f"  semantic clustering: row {item['row_num']} judged a duplicate of "
-                  f"article_id={canonical_article_id} but manual_override=TRUE — not suppressed")
+            conn.execute(
+                "UPDATE news_articles SET duplicate_of_raw_ref = ?, dedup_judged_at = ? WHERE id = ?",
+                (duplicate_of["raw_ref"], now_ts, item["news_id"]),
+            )
+            print(f"  semantic clustering: news_id={item['news_id']} judged a duplicate of "
+                  f"raw_ref={duplicate_of['raw_ref']} but manual_override=1 — display predicate keeps it visible")
         else:
-            cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_DUPLICATE_OF + 1), "values": [[_DEDUP_SENTINEL_NONE]]})
-            cell_updates.append({"range": rowcol_to_a1(item["row_num"], _COL_DEDUP_JUDGED_AT + 1), "values": [[now_ts]]})
-            settled.append(item)  # Task 1a: available to later pending rows in this same pass.
+            conn.execute(
+                "UPDATE news_articles SET dedup_judged_at = ? WHERE id = ?",
+                (now_ts, item["news_id"]),
+            )
+            settled.append(item)  # available to later pending rows in this same pass.
 
     print(f"  semantic clustering: {llm_calls} LLM call(s) ({llm_errors} fell back to difflib), "
           f"{suppressed} row(s) suppressed as duplicates")
 
     if dry_run:
-        print(f"  [dry-run] would write {len(cell_updates)} cell update(s) — no Sheets write")
+        conn.rollback()
         return {"suppressed": suppressed, "judged": len(pending), "llm_calls": llm_calls, "llm_errors": llm_errors}
 
-    chunk_size = 200 * 3  # 3 cells per judged row (mirrors _write_results_to_sheets' chunking approach)
-    for i in range(0, len(cell_updates), chunk_size):
-        chunk = cell_updates[i: i + chunk_size]
-        ws.batch_update(chunk, value_input_option="USER_ENTERED")
-        if i + chunk_size < len(cell_updates):
-            time.sleep(1.1)
-
+    conn.commit()  # batch boundary — one commit for the whole pass
     return {"suppressed": suppressed, "judged": len(pending), "llm_calls": llm_calls, "llm_errors": llm_errors}
 
 
-def run_canonical_succession(ws, dry_run: bool) -> list[dict]:
+def run_canonical_succession(conn: sqlite3.Connection, dry_run: bool) -> list[dict]:
     """
-    Task 1b (2026-07-04): if a human manually flips a cluster's canonical
-    row (duplicate_of_article_id == "none") to include_on_site=FALSE
-    directly in the Sheet — bypassing this script entirely — promote that
-    cluster's earliest-published still-suppressed mate back to
-    include_on_site=TRUE, so a real story doesn't silently vanish from the
-    site because of one manual edit elsewhere in the cluster (Commander
-    directive: succession over cluster death — see design rationale in
-    Domain_Knowledge/C13_news_pulse_dedup_pagination_fix_2026-07-04.md Part C).
+    If a human hides a cluster's canonical article (hidden_by_commander=1 —
+    the only remaining human suppression signal in the new schema; relevant
+    is Haiku-only per §2, so this replaces the old "human flips
+    include_on_site=FALSE directly in the Sheet" trigger), promote that
+    cluster's earliest-published still-suppressed mate back to canonical, so
+    a real story doesn't silently vanish because of one manual hide
+    elsewhere in the cluster.
 
-    Only acts on rows this system's dedup columns actually describe (a
-    non-empty duplicate_of_article_id pointing FROM a suppressed mate TO a
-    canonical row). Never touches rows with no cluster relationship, and
-    never revives a row a human suppressed on its own merits — only a
-    canonical whose suppression orphaned at least one still-suppressed mate.
+    manual_override=1 mates are excluded from succession candidacy — the
+    display predicate already keeps them visible regardless of
+    duplicate_of_raw_ref, so they need no promotion (same rule (a) as the
+    pre-rebuild version, restated for the new predicate).
 
-    SurveyorQ revised instruction (2026-07-04), point (a): a mate with
-    manual_override=TRUE is excluded from succession candidacy — if a human
-    protected that specific row and it is nonetheless FALSE, that reads as
-    "I want this one suppressed regardless," not "promote me." Note this is
-    a different use of manual_override than run_semantic_clustering_pass's
-    (which protects a row from THIS SCRIPT's own suppression); here it is
-    read, not written, as a signal not to auto-revive.
+    UNIQUE(raw_ref) on news_articles means one raw article has at most one
+    canonical row — the old "up to 26 physical rows share one article_id"
+    duplicate-insert-debt class of bug (pre-rebuild classify_articles.py
+    docstring) is schema-enforced impossible here; that defensive
+    multi-row-per-id lookup is dropped, not ported.
 
-    Bug fix (2026-07-04, first live run): pre-C-13 duplicate-insert debt
-    means multiple physical rows can share one article_id (collect_naver.py's
-    content_hash dedup was broken before the 2026-07-03 fix; existing
-    duplicate rows were never retroactively cleaned up — one group observed
-    live had 26 copies of the same story, only one of them TRUE). A single
-    arbitrary-row lookup by article_id could land on a stale FALSE decoy
-    copy instead of the genuine TRUE row, wrongly declaring a still-visible
-    canonical "manually suppressed" and promoting a mate that duplicated a
-    story already live on the site. Fixed by checking ALL rows sharing the
-    canonical's article_id for ANY currently-TRUE row, not one arbitrary row.
-
-    Returns a list of promotion-event dicts (empty if none), each with
-    old_canonical_id/title, new_canonical_id/title, row numbers — used by
-    main() to build the Commander-visible succession notice (SurveyorQ
-    point (c)). Cell writes are skipped on dry_run but the list still
-    reports what *would* happen.
+    Returns a list of promotion-event dicts (empty if none).
     """
-    all_rows = ws.get_all_records()
-    rows_by_article_id: dict[str, list[tuple[int, dict]]] = {}
-    for idx, row in enumerate(all_rows):
-        rows_by_article_id.setdefault(str(row.get("article_id", "")), []).append((idx + 2, row))
+    cur = conn.execute(
+        "SELECT n.id AS news_id, n.raw_ref, n.duplicate_of_raw_ref, n.manual_override, n.hidden_by_commander, "
+        "r.title_ko, r.published_date "
+        "FROM news_articles n JOIN raw_news_articles r ON r.id = n.raw_ref "
+        "WHERE n.relevant = 1"
+    )
+    cols = [d[0] for d in cur.description]
+    all_rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+    by_raw_ref = {row["raw_ref"]: row for row in all_rows}
 
-    mates_by_canonical: dict[str, list[tuple[int, dict]]] = {}
-    for idx, row in enumerate(all_rows):
-        dup_of = str(row.get("duplicate_of_article_id", "")).strip()
-        if dup_of and dup_of != _DEDUP_SENTINEL_NONE:
-            mates_by_canonical.setdefault(dup_of, []).append((idx + 2, row))
+    mates_by_canonical_raw_ref: dict[int, list[dict]] = {}
+    for row in all_rows:
+        dup_of = row["duplicate_of_raw_ref"]
+        if dup_of is not None:
+            mates_by_canonical_raw_ref.setdefault(dup_of, []).append(row)
 
-    cell_updates: list[dict] = []
     promotions: list[dict] = []
-    now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_ts = _utc_now_iso()
 
-    for canonical_id, mates in mates_by_canonical.items():
-        canonical_rows = rows_by_article_id.get(canonical_id, [])
-        if not canonical_rows:
+    for canonical_raw_ref, mates in mates_by_canonical_raw_ref.items():
+        canonical = by_raw_ref.get(canonical_raw_ref)
+        if canonical is None:
             continue  # dangling pointer — canonical row missing; leave alone
-        canonical_row_num, canonical_row = canonical_rows[0]  # for logging/title only — may be any of several physical rows
-        still_visible = any(
-            str(row.get("include_on_site", "")).strip().upper() == "TRUE"
-            for _row_num, row in canonical_rows
-        )
-        if still_visible:
-            continue  # canonical still visible (via some physical row sharing this article_id) — nothing to do
 
-        # (a) manual_override rows are never succession candidates — a human
-        # protecting a specific row and it still being FALSE means "leave it
-        # suppressed," not "eligible to become canonical."
-        suppressed_mates = [
-            (row_num, row) for row_num, row in mates
-            if str(row.get("include_on_site", "")).strip().upper() == "FALSE"
-            and str(row.get("manual_override", "")).strip().upper() != "TRUE"
-        ]
-        if not suppressed_mates:
-            continue  # succession already happened, no eligible mates, or all remaining are protected
+        if not canonical["hidden_by_commander"]:
+            continue  # canonical still visible — nothing to do
 
-        # Same tie-break principle as Task 1a's sort (SurveyorQ F3): article_id
-        # as secondary key so the promoted mate is identical across re-runs.
-        suppressed_mates.sort(key=lambda item: (str(item[1].get("published_date", "")), str(item[1].get("article_id", ""))))
-        promote_row_num, promote_row = suppressed_mates[0]
-        new_canonical_id = str(promote_row.get("article_id", ""))
+        eligible = [m for m in mates if not m["manual_override"]]
+        if not eligible:
+            continue  # no eligible mate, or all remaining are protected
 
-        print(f"  succession: canonical article_id={canonical_id} (row {canonical_row_num}) "
-              f"was manually suppressed — promoting article_id={new_canonical_id} (row {promote_row_num})")
+        eligible.sort(key=lambda m: (str(m["published_date"] or ""), m["raw_ref"]))
+        promote = eligible[0]
+
+        print(f"  succession: canonical raw_ref={canonical_raw_ref} (news_id={canonical['news_id']}) "
+              f"is hidden_by_commander — promoting raw_ref={promote['raw_ref']} (news_id={promote['news_id']})")
         promotions.append({
-            "old_canonical_id": canonical_id,
-            "old_canonical_title": str(canonical_row.get("url", "")).strip(),
-            "old_canonical_row": canonical_row_num,
-            "new_canonical_id": new_canonical_id,
-            "new_canonical_title": str(promote_row.get("url", "")).strip(),
-            "new_canonical_row": promote_row_num,
+            "old_canonical_raw_ref": canonical_raw_ref,
+            "old_canonical_title": canonical["title_ko"],
+            "old_canonical_news_id": canonical["news_id"],
+            "new_canonical_raw_ref": promote["raw_ref"],
+            "new_canonical_title": promote["title_ko"],
+            "new_canonical_news_id": promote["news_id"],
         })
 
         if not dry_run:
-            cell_updates.append({"range": rowcol_to_a1(promote_row_num, _COL_INCLUDE_ON_SITE + 1), "values": [["TRUE"]]})
-            cell_updates.append({"range": rowcol_to_a1(promote_row_num, _COL_DUPLICATE_OF + 1), "values": [[_DEDUP_SENTINEL_NONE]]})
-            cell_updates.append({"range": rowcol_to_a1(promote_row_num, _COL_DEDUP_JUDGED_AT + 1), "values": [[now_ts]]})
-            # (b) Repoint EVERY other cluster member — the remaining suppressed
-            # mates AND the old (now-superseded) canonical row itself — to the
-            # newly-promoted canonical, so no row is left pointing at a
-            # no-longer-canonical article_id. Only touch physical rows that
-            # were actually tracked as this cluster's canonical (dup_of ==
-            # "none") — NOT every decoy row that merely shares the same
-            # article_id from pre-C-13 duplicate-insert debt (those were
-            # never part of this cluster's tracked membership and repointing
-            # them would conflate "same hash" with "cluster member").
-            for row_num, _row in suppressed_mates[1:]:
-                cell_updates.append({"range": rowcol_to_a1(row_num, _COL_DUPLICATE_OF + 1), "values": [[new_canonical_id]]})
-            for row_num, row in canonical_rows:
-                if str(row.get("duplicate_of_article_id", "")).strip() == _DEDUP_SENTINEL_NONE:
-                    cell_updates.append({"range": rowcol_to_a1(row_num, _COL_DUPLICATE_OF + 1), "values": [[new_canonical_id]]})
+            conn.execute(
+                "UPDATE news_articles SET duplicate_of_raw_ref = NULL, dedup_judged_at = ? WHERE id = ?",
+                (now_ts, promote["news_id"]),
+            )
+            # Repoint every other ELIGIBLE mate AND the old canonical itself
+            # to the newly-promoted canonical, so no row is left pointing at
+            # a no-longer-canonical raw_ref. A manual_override=1 mate is
+            # left untouched — its pointer never mattered for its own
+            # visibility (the display predicate already ignores
+            # duplicate_of_raw_ref when manual_override=1), and repointing
+            # it would misrepresent that a human never separately reviewed
+            # its relationship to the new canonical.
+            for m in eligible:
+                if m["news_id"] != promote["news_id"]:
+                    conn.execute(
+                        "UPDATE news_articles SET duplicate_of_raw_ref = ? WHERE id = ?",
+                        (promote["raw_ref"], m["news_id"]),
+                    )
+            conn.execute(
+                "UPDATE news_articles SET duplicate_of_raw_ref = ? WHERE id = ?",
+                (promote["raw_ref"], canonical["news_id"]),
+            )
 
-    if cell_updates:
-        ws.batch_update(cell_updates, value_input_option="USER_ENTERED")
+    if not dry_run:
+        conn.commit()
 
     if promotions:
         print(f"  succession: promoted {len(promotions)} row(s)" + (" [dry-run]" if dry_run else ""))
     else:
-        print("  succession: no manually-suppressed canonicals found")
+        print("  succession: no hidden_by_commander canonicals found")
 
     return promotions
 
 
 def emit_succession_notice(promotions: list[dict]) -> None:
     """
-    SurveyorQ revised instruction (c): a succession event must be visible to
-    the Commander, not only in the CI run log — because a manual suppression
-    can mean either "hide this one bad article" (succession is right) or
-    "hide the whole story" (succession just undid that intent, and the
-    promoted successor should probably be suppressed too). This writes a
-    GitHub Actions step output (a no-op if GITHUB_OUTPUT isn't set, e.g. when
-    running locally) that a workflow step turns into an email — see
-    "Send succession notice email" in .github/workflows/build_site.yml.
+    Write a GitHub Actions step output when a succession event occurred, so
+    a workflow step can turn it into an email. No-op if GITHUB_OUTPUT isn't
+    set (local run).
     """
+    import os
     github_output = os.environ.get("GITHUB_OUTPUT")
     if not github_output:
-        return  # local run — nothing to wire up
+        return
 
     with open(github_output, "a", encoding="utf-8") as f:
         f.write(f"succession_count={len(promotions)}\n")
@@ -831,71 +742,14 @@ def emit_succession_notice(promotions: list[dict]) -> None:
             f.write("succession_notice<<SUCCESSION_EOF\n")
             for p in promotions:
                 f.write(
-                    f"- Row {p['old_canonical_row']} ({p['old_canonical_title'][:80]}) was manually "
-                    f"suppressed. Promoted row {p['new_canonical_row']} "
+                    f"- raw_ref={p['old_canonical_raw_ref']} ({p['old_canonical_title'][:80]}) was hidden by "
+                    f"the Commander. Promoted raw_ref={p['new_canonical_raw_ref']} "
                     f"({p['new_canonical_title'][:80]}) to take its place.\n"
                     f"  If your intent was to hide the whole story (not just that one article), "
-                    f"also set manual_override=TRUE and include_on_site=FALSE on the promoted row.\n"
+                    f"also set manual_override=1 and hidden_by_commander=1 on the promoted row via "
+                    f"the articles_curation Sheets tab.\n"
                 )
             f.write("SUCCESSION_EOF\n")
-
-
-# ---------------------------------------------------------------------------
-# Shared write-back helper
-# ---------------------------------------------------------------------------
-
-def _write_results_to_sheets(
-    ws,
-    results: list[tuple[int, dict]],
-    processed_at_ts: str,
-) -> int:
-    """
-    Write classification results back to Google Sheets via chunked batch_update.
-
-    Returns the number of rows written.
-    Splits into chunks of 200 rows (800 cell dicts each) with 1.1s inter-chunk
-    sleep to stay within Sheets write quota (300 write requests/min per project).
-    """
-    _WRITE_CHUNK_ROWS = 200
-    cells_per_row = 5  # category + english_title + english_summary + ai_processed_at + include_on_site
-
-    cell_updates: list[dict] = []
-
-    for sheet_row_num, cls in results:
-        include_val = "TRUE" if cls["include_on_site"] else "FALSE"
-
-        cell_updates.append({
-            "range": rowcol_to_a1(sheet_row_num, _COL_CATEGORY + 1),
-            "values": [[cls["category"]]],
-        })
-        cell_updates.append({
-            "range": rowcol_to_a1(sheet_row_num, _COL_ENGLISH_SUMMARY + 1),
-            "values": [[cls["english_summary"]]],
-        })
-        cell_updates.append({
-            "range": rowcol_to_a1(sheet_row_num, _COL_AI_PROCESSED_AT + 1),
-            "values": [[processed_at_ts]],
-        })
-        cell_updates.append({
-            "range": rowcol_to_a1(sheet_row_num, _COL_INCLUDE_ON_SITE + 1),
-            "values": [[include_val]],
-        })
-        cell_updates.append({
-            "range": rowcol_to_a1(sheet_row_num, _COL_ENGLISH_TITLE + 1),
-            "values": [[cls.get("english_title", "")]],
-        })
-
-    chunk_size = _WRITE_CHUNK_ROWS * cells_per_row
-    total_chunks = (len(cell_updates) + chunk_size - 1) // chunk_size
-
-    for chunk_idx in range(total_chunks):
-        chunk = cell_updates[chunk_idx * chunk_size: (chunk_idx + 1) * chunk_size]
-        ws.batch_update(chunk, value_input_option="USER_ENTERED")
-        print(f"  wrote chunk {chunk_idx + 1}/{total_chunks} ({len(chunk) // cells_per_row} rows)...")
-        if chunk_idx < total_chunks - 1:
-            time.sleep(1.1)
-
-    return len(results)
 
 
 # ---------------------------------------------------------------------------
@@ -903,67 +757,37 @@ def _write_results_to_sheets(
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    import os
+    from dotenv import load_dotenv
+
     parser = argparse.ArgumentParser(
         description=(
-            "Classify unprocessed KVN_Articles rows using Haiku 4.5 and "
-            "write results back to Google Sheets in-place."
+            "Judge relevance and classify unjudged raw_news_articles rows "
+            "using Haiku 4.5, writing news_articles (sqlite) in-place."
         )
     )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Classify but do not write back to Sheets; print first 5 results.",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        metavar="N",
-        help="Only process the first N unprocessed rows (for testing).",
-    )
-    parser.add_argument(
-        "--async",
-        dest="async_mode",
-        action="store_true",
-        help=(
-            "Use AsyncAnthropic with Semaphore(3) + token bucket (40 RPM) "
-            "for rate-limited concurrent classification. "
-            "Sync path (default) uses 0.5s sleep between calls."
-        ),
-    )
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help=(
-            "Re-classify ALL rows, including those already processed. "
-            "Use after a failed run where rows were written with error defaults."
-        ),
-    )
-    parser.add_argument(
-        "--force-cluster",
-        dest="force_cluster",
-        action="store_true",
-        help=(
-            "Ignore the dedup_judged_at cache and re-run semantic clustering "
-            "on every include_on_site=TRUE row, not just unjudged ones. "
-            "Mirrors --force but scoped to Task 1 dedup, not classification."
-        ),
-    )
+    parser.add_argument("--dry-run", action="store_true",
+                         help="Classify but do not write to sqlite; print first 5 results.")
+    parser.add_argument("--limit", type=int, default=None, metavar="N",
+                         help="Only process the first N unprocessed rows (for testing).")
+    parser.add_argument("--async", dest="async_mode", action="store_true",
+                         help="Use AsyncAnthropic with Semaphore(3) + token bucket (40 RPM).")
+    parser.add_argument("--force", action="store_true",
+                         help="Re-classify stuck (relevant=1, classified_at IS NULL) rows even without --limit filtering them out.")
+    parser.add_argument("--force-cluster", dest="force_cluster", action="store_true",
+                         help="Ignore the dedup_judged_at cache and re-run semantic clustering on every relevant=1 row.")
     args = parser.parse_args()
 
-    print("classify_articles.py — VKH article AI classification")
+    print("classify_articles.py — VKH article AI classification (sqlite)")
     print(f"  model: {_HAIKU_MODEL}")
     print(f"  mode: {'async (Semaphore 3, 40 RPM bucket)' if args.async_mode else 'sync (0.5s sleep)'}")
     print(f"  dry-run: {args.dry_run}")
-    print(f"  force: {args.force}")
     print(f"  force-cluster: {args.force_cluster}")
     if args.limit:
         print(f"  limit: {args.limit}")
 
-    # L-2: load .env from repo root.
     load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-    # L-11: validate ANTHROPIC_API_KEY prefix before any API call.
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not anthropic_key:
         print(
@@ -975,208 +799,113 @@ def main() -> None:
         sys.exit(1)
     validate_api_key(anthropic_key)
 
-    # --- Connect to Sheets ----------------------------------------------------
-    sheet_id = resolve_sheet_id()
-    print(f"  sheet_id: {sheet_id}")
+    conn = vkh_sqlite.connect()
+    vkh_sqlite.migrate(conn, NEWS_DDL)
 
-    spreadsheet = connect_sheets(sheet_id)
-    print(f"  sheet title: {spreadsheet.title}")
+    pending = list_pending_relevance(conn)
+    stuck = list_stuck_classification(conn)
+    print(f"  pending relevance judgement: {len(pending)}")
+    print(f"  stuck (relevant=1, classified_at IS NULL) — self-heal retry: {len(stuck)}")
 
-    # Locate KVN_Articles tab (L-12: graceful skip if missing).
-    try:
-        ws = spreadsheet.worksheet(TARGET_TAB)
-    except gspread.exceptions.WorksheetNotFound:
-        print(
-            f"ERROR: tab '{TARGET_TAB}' not found in sheet {sheet_id}.\n"
-            "  Run scripts/setup_sheets.py first, then collect_naver.py to populate it.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    if args.limit is not None:
+        pending = pending[: args.limit]
+        print(f"  applying --limit: processing {len(pending)} rows")
 
-    # A3 fix: fail loudly (not silently) if the live header has drifted
-    # from schema.py's KVN_ARTICLES_HEADERS.
-    verify_header(ws)
+    ai_client = anthropic.Anthropic(api_key=anthropic_key)
 
-    # --- Read all rows once (L-4) ---------------------------------------------
-    # get_all_records() returns list of dicts keyed by header row.
-    all_rows = ws.get_all_records()
-    total_rows = len(all_rows)
-    print(f"  total KVN_Articles rows: {total_rows}")
+    # --- Self-heal stuck rows first (always sync — low volume, see docstring) ---
+    stuck_errors = 0
+    if stuck and not args.dry_run:
+        now_ts = _utc_now_iso()
+        for row in stuck:
+            result = classify_article(ai_client, str(row.get("title_ko") or ""), str(row.get("description") or ""))
+            if result.get("_error"):
+                stuck_errors += 1
+            retry_stuck_classification(conn, row["news_id"], result, now_ts)
+        conn.commit()
+        print(f"  self-healed {len(stuck)} stuck row(s) ({stuck_errors} errors)")
 
-    if total_rows == 0:
-        print("  Tab is empty — nothing to classify.")
-        print("articles_processed: 0 | written_to_sheets: 0 | errors: 0")
-        sys.exit(0)
-
-    # --- Filter to unprocessed rows (ai_processed_at is empty) ----------------
-    # Row number in Sheets: header = row 1, first data row = row 2.
-    # Index in all_rows list: 0-based. Sheet row = list_index + 2.
-    #
-    # C-5g fix: live sheet column is 'ai_processed_at' (col I). Due to the
-    # prior column mismatch, this column currently holds category values
-    # (e.g. "기타") for all rows. After the C-5g re-classification run,
-    # it will hold ISO timestamps. A row is treated as unprocessed when
-    # ai_processed_at is empty OR is a category value (not a timestamp).
-    # Detection: a valid timestamp starts with a 4-digit year, e.g. "2026-".
-    def _is_unprocessed(row: dict) -> bool:
-        val = str(row.get("ai_processed_at", "")).strip()
-        if not val:
-            return True
-        # If it looks like a timestamp (YYYY-...) it was written by this script.
-        import re as _re
-        return not bool(_re.match(r"^\d{4}-", val))
-
-    unprocessed: list[tuple[int, dict]] = []
-    for idx, row in enumerate(all_rows):
-        if args.force or _is_unprocessed(row):
-            sheet_row_number = idx + 2  # header is row 1
-            unprocessed.append((sheet_row_number, row))
-
-    label = "all rows (--force)" if args.force else "unprocessed rows (empty ai_processed_at)"
-    print(f"  {label}: {len(unprocessed)}")
-
-    # C-13 Task 1 (2026-07-04): one sync client for semantic clustering,
-    # shared by every call site below regardless of --async classification
-    # mode — clustering call volume is small (incremental), sync is enough.
-    dedup_client = anthropic.Anthropic(api_key=anthropic_key)
-
-    if not unprocessed:
-        print("  All rows already classified — nothing to do.")
-        # Still run clustering — duplicate coverage can arrive in a separate
-        # collect_naver.py run after the story was already classified.
-        cluster_stats = run_semantic_clustering_pass(ws, dedup_client, dry_run=args.dry_run, force=args.force_cluster)
-        promotions = run_canonical_succession(ws, dry_run=args.dry_run)
+    if not pending:
+        print("  No pending relevance judgements — nothing to classify.")
+        cluster_stats = run_semantic_clustering_pass(conn, ai_client, dry_run=args.dry_run, force=args.force_cluster)
+        promotions = run_canonical_succession(conn, dry_run=args.dry_run)
         emit_succession_notice(promotions)
-        print(f"articles_processed: 0 | written_to_sheets: 0 | "
+        conn.close()
+        print(f"articles_processed: 0 | written_to_sqlite: 0 | "
               f"duplicates_suppressed: {cluster_stats['suppressed']} | "
               f"canonical_promotions: {len(promotions)} | errors: 0")
         sys.exit(0)
 
-    # Apply --limit if set.
-    if args.limit is not None:
-        unprocessed = unprocessed[: args.limit]
-        print(f"  applying --limit: processing {len(unprocessed)} rows")
-
-    processed_at_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_ts = _utc_now_iso()
+    errors = 0
+    written = 0
 
     # --- ASYNC PATH -----------------------------------------------------------
     if args.async_mode:
         print(f"  launching async classification ({_ASYNC_CONCURRENCY} concurrent)...")
         t_start = time.monotonic()
-
-        results: list[tuple[int, dict]] = asyncio.run(
-            _classify_all_async(anthropic_key, unprocessed)
-        )
-
+        results: list[tuple[int, dict]] = asyncio.run(_classify_all_async(anthropic_key, pending))
         elapsed = time.monotonic() - t_start
         errors = sum(1 for _, cls in results if cls.get("_error"))
-        articles_processed = len(results)
-
-        print(f"  async classification done in {elapsed:.1f}s — {articles_processed} rows, {errors} errors")
+        print(f"  async classification done in {elapsed:.1f}s — {len(results)} rows, {errors} errors")
 
         if args.dry_run:
-            print()
-            print("[DRY RUN] Classification complete — no Sheets write.")
-            print("  First 5 results:")
-            for sheet_row_num, cls in results[:5]:
-                print(
-                    f"    row {sheet_row_num}: category={cls['category']} | "
-                    f"include_on_site={cls['include_on_site']} | "
-                    f"summary={cls['english_summary'][:80]!r}"
-                )
-            print(
-                f"articles_processed: {articles_processed} | "
-                f"written_to_sheets: 0 | "
-                f"errors: {errors}"
-            )
+            print("\n[DRY RUN] Classification complete — no sqlite write.")
+            for raw_id, cls in results[:5]:
+                print(f"    raw_id {raw_id}: category={cls['category']} | "
+                      f"include_on_site={cls['include_on_site']} | summary={cls['english_summary'][:80]!r}")
+            conn.close()
+            print(f"articles_processed: {len(results)} | written_to_sqlite: 0 | errors: {errors}")
             sys.exit(0)
 
-        written_to_sheets = _write_results_to_sheets(ws, results, processed_at_ts)
-
-        # Cluster near-duplicate stories across outlets after fresh
-        # classifications land, so newly written include_on_site rows are
-        # included in the clustering pass (Task 1a: same-run new rows can
-        # match each other, see run_semantic_clustering_pass docstring).
-        cluster_stats = run_semantic_clustering_pass(ws, dedup_client, dry_run=False, force=args.force_cluster)
-        promotions = run_canonical_succession(ws, dry_run=False)
-        emit_succession_notice(promotions)
-
-        print()
-        print(f"  DONE: {written_to_sheets} rows updated in '{TARGET_TAB}'.")
-        print(
-            f"articles_processed: {articles_processed} | "
-            f"written_to_sheets: {written_to_sheets} | "
-            f"duplicates_suppressed: {cluster_stats['suppressed']} | "
-            f"canonical_promotions: {len(promotions)} | "
-            f"errors: {errors}"
-        )
-        return
+        for i, (raw_id, cls) in enumerate(results):
+            write_relevance_and_classification(conn, raw_id, cls, now_ts)
+            written += 1
+            if (i + 1) % _WRITE_BATCH_SIZE == 0 or (i + 1) == len(results):
+                conn.commit()  # batch boundary (§4 rule 2)
 
     # --- SYNC PATH (default) --------------------------------------------------
-    # Unchanged from original implementation. --dry-run and --limit work here too.
+    else:
+        sync_results: list[tuple[int, dict]] = []
+        for i, row in enumerate(pending):
+            title_ko = str(row.get("title_ko") or "")
+            description = str(row.get("description") or "")
+            classification = classify_article(ai_client, title_ko, description)
+            if classification.get("_error"):
+                errors += 1
+            sync_results.append((row["id"], classification))
 
-    ai_client = anthropic.Anthropic(api_key=anthropic_key)
-    sync_results: list[tuple[int, dict]] = []
-    errors = 0
+            if (i + 1) % 10 == 0 or (i + 1) == len(pending):
+                print(f"  classified {i + 1}/{len(pending)} rows...")
+            if i < len(pending) - 1:
+                time.sleep(_API_SLEEP_SECONDS)
 
-    for i, (sheet_row_num, row) in enumerate(unprocessed):
-        # C-5h fix: live KVN_Articles sheet has data written to wrong columns by
-        # the original collector. The header names do not match the stored values:
-        #   'title' column (col B) → holds the article URL (http://...)
-        #   'url' column (col C)   → holds the Korean article title text
-        #   'content_hash' (col D) → holds the article description/content snippet
-        # Verified 2026-06-05 by direct row inspection (all 5,586 rows confirmed).
-        # Read 'url' for the Korean title and 'content_hash' for description.
-        title_ko = str(row.get("url") or row.get("title_ko", "")).strip()
-        description = str(row.get("content_hash", "")).strip()
+        if args.dry_run:
+            print("\n[DRY RUN] Classification complete — no sqlite write.")
+            for raw_id, cls in sync_results[:5]:
+                print(f"    raw_id {raw_id}: category={cls['category']} | "
+                      f"include_on_site={cls['include_on_site']} | summary={cls['english_summary'][:80]!r}")
+            conn.close()
+            print(f"articles_processed: {len(sync_results)} | written_to_sqlite: 0 | errors: {errors}")
+            sys.exit(0)
 
-        classification = classify_article(ai_client, title_ko, description)
+        for i, (raw_id, cls) in enumerate(sync_results):
+            write_relevance_and_classification(conn, raw_id, cls, now_ts)
+            written += 1
+            if (i + 1) % _WRITE_BATCH_SIZE == 0 or (i + 1) == len(sync_results):
+                conn.commit()  # batch boundary (§4 rule 2)
 
-        if classification.get("_error"):
-            errors += 1
-
-        sync_results.append((sheet_row_num, classification))
-
-        # Print progress every 10 rows.
-        if (i + 1) % 10 == 0 or (i + 1) == len(unprocessed):
-            print(f"  classified {i + 1}/{len(unprocessed)} rows...")
-
-        # Rate limiting: sleep between calls (not after the last one).
-        if i < len(unprocessed) - 1:
-            time.sleep(_API_SLEEP_SECONDS)
-
-    articles_processed = len(sync_results)
-
-    if args.dry_run:
-        print()
-        print("[DRY RUN] Classification complete — no Sheets write.")
-        print("  First 5 results:")
-        for sheet_row_num, cls in sync_results[:5]:
-            print(
-                f"    row {sheet_row_num}: category={cls['category']} | "
-                f"include_on_site={cls['include_on_site']} | "
-                f"summary={cls['english_summary'][:80]!r}"
-            )
-        print(
-            f"articles_processed: {articles_processed} | "
-            f"written_to_sheets: 0 | "
-            f"errors: {errors}"
-        )
-        sys.exit(0)
-
-    written_to_sheets = _write_results_to_sheets(ws, sync_results, processed_at_ts)
-
-    # Cluster near-duplicate stories across outlets (Task 1a: same-run new
-    # rows can match each other, see run_semantic_clustering_pass docstring).
-    cluster_stats = run_semantic_clustering_pass(ws, dedup_client, dry_run=False, force=args.force_cluster)
-    promotions = run_canonical_succession(ws, dry_run=False)
+    # --- Clustering + succession (post-write, sees newly-judged rows) --------
+    cluster_stats = run_semantic_clustering_pass(conn, ai_client, dry_run=False, force=args.force_cluster)
+    promotions = run_canonical_succession(conn, dry_run=False)
     emit_succession_notice(promotions)
+    conn.close()
 
     print()
-    print(f"  DONE: {written_to_sheets} rows updated in '{TARGET_TAB}'.")
+    print(f"  DONE: {written} row(s) written to news_articles.")
     print(
-        f"articles_processed: {articles_processed} | "
-        f"written_to_sheets: {written_to_sheets} | "
+        f"articles_processed: {written} | "
+        f"written_to_sqlite: {written} | "
         f"duplicates_suppressed: {cluster_stats['suppressed']} | "
         f"canonical_promotions: {len(promotions)} | "
         f"errors: {errors}"
