@@ -2,7 +2,7 @@
 #
 # test_smoke.py — VKH pipeline smoke test (C-12c, code review addendum C2).
 #
-# No test framework (matches test_news_pipeline.py's existing convention: this
+# No test framework (matches test_dedup_logic.py's existing convention: this
 # repo has no pytest config). A single assert-based script, run as a CI step
 # before build (addendum C2), that would have caught the "—" regression and
 # the float/string HS-code bug (L-9/L-15) before they shipped.

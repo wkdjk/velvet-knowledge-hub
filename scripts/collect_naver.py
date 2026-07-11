@@ -1,41 +1,36 @@
 # Run as: PYTHONPATH=. python scripts/collect_naver.py [--dry-run] [--limit N]
 #
 # collect_naver.py — Velvet Knowledge Hub Naver News API collection script
-# (D3, Phase D rebuild, sqlite storage — 2026-07-11; collection logic ported
-# as-is from the pre-rebuild Sheets version, only storage changed).
 #
 # What this script does:
 #   1. Reads the keyword list from the _keywords Sheets tab (one API call).
-#      Stays Sheets-native — a handful of Commander-edited search terms, not
-#      collected data (proposal §6b, resolved item 6).
+#      If the tab is empty, seeds it with the default list and uses those keywords.
 #   2. For each keyword, calls the Naver News API (display=100, sort=date).
 #   3. Deduplicates articles using content_hash = sha256(url + title_ko)[:16].
-#   4. Inserts new articles into raw_news_articles (sqlite) via
-#      INSERT OR IGNORE — UNIQUE(content_hash) is the authoritative dedup
-#      guard; a re-poll of an already-seen article is a no-op.
+#   4. Reads all existing KVN_Articles rows in ONE call (L-4 — never loop).
+#   5. Appends only new rows using append_rows() (L-4 — single bulk write).
 #
-# Columns are named for what they actually hold — no more column-swap
-# workaround (the old KVN_Articles Sheet's title/url/content_hash swap, see
-# classify_articles.py's historical C-5h comment, does not exist in this
-# schema; it only ever existed because collect_naver.py's old row-writer
-# built rows in the wrong order — see news_schema.py's module comment).
+# Columns populated by this script (AI columns left blank for B-9):
+#   content_hash | url | title_ko | description | published_date |
+#   source_name | source_type | keyword_matched
 #
 # Security: no credentials in this file. All secrets from .env or environment.
 # L-1: Run with PYTHONPATH=. to resolve project-level imports.
 # L-2: .env must be in the repo root, not in Q-Submarine.
 # L-3: GOOGLE_SERVICE_ACCOUNT_JSON must be a single-line JSON string.
+# L-4: Sheets API called once for reads; once for writes — never inside a loop.
 
 import argparse
 import hashlib
 import os
 import re
-import sqlite3
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
+import gspread
 import requests
 
 # ---------------------------------------------------------------------------
@@ -43,9 +38,8 @@ import requests
 # ---------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts import vkh_sqlite  # noqa: E402
-from scripts.news_schema import NEWS_DDL  # noqa: E402
-from scripts.sheets_auth import _load_config, connect_sheets, resolve_sheet_id  # noqa: E402
+from scripts.sheets_auth import FULL_SCOPES, _load_config, connect_sheets, resolve_sheet_id  # noqa: E402
+from scripts.schema import KVN_ARTICLES_HEADERS, verify_header  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -63,10 +57,18 @@ _HTML_ENTITIES = {
     "&#39;": "'",
 }
 
-# Schema for the _keywords tab (still Sheets-native — proposal §6b).
+# A3 fix (2026-07-03): KVN_ARTICLES_HEADER used to be a second, independent
+# copy of the tab schema that had drifted from the live sheet (13 columns,
+# wrong order, columns with no home — source_type, keyword_matched,
+# source_domain). schema.py's KVN_ARTICLES_HEADERS is now the only copy;
+# imported below as KVN_ARTICLES_HEADER for this file's existing call sites.
+KVN_ARTICLES_HEADER = KVN_ARTICLES_HEADERS
+
+# Schema for the _keywords tab.
 KEYWORDS_HEADER = ["term", "type", "language"]
 
 # Default keyword list — used when _keywords tab is empty.
+# Also used to seed the tab on first run.
 DEFAULT_KEYWORDS = [
     ("녹용", "primary", "ko"),
     ("뉴질랜드 녹용", "compound", "ko"),
@@ -75,9 +77,13 @@ DEFAULT_KEYWORDS = [
     ("녹용 건강기능식품", "compound", "ko"),
 ]
 
+# Batch write size for append_rows (L-4: bulk write, never loop).
+WRITE_BATCH_SIZE = 200
+BATCH_SLEEP_SECONDS = 1.1
+
 
 # ---------------------------------------------------------------------------
-# Helpers — HTML cleaning and date parsing (unchanged from the pre-rebuild version)
+# Helpers — HTML cleaning and date parsing (reused from KVN naver.py)
 # ---------------------------------------------------------------------------
 
 def _clean(text: str) -> str:
@@ -111,10 +117,6 @@ def _content_hash(url: str, title_ko: str) -> str:
     return hashlib.sha256(raw).hexdigest()[:16]
 
 
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 # ---------------------------------------------------------------------------
 # Step 1 — Configuration and credentials
 # ---------------------------------------------------------------------------
@@ -131,7 +133,8 @@ def get_naver_credentials() -> tuple[str, str]:
     if not client_id or not client_secret:
         print(
             "ERROR: NAVER_CLIENT_ID and NAVER_CLIENT_SECRET must be set in .env "
-            "or GitHub Secrets.",
+            "or GitHub Secrets.\n"
+            "  Reuse the credentials from the KVN project — do NOT create a new app.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -139,11 +142,14 @@ def get_naver_credentials() -> tuple[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Step 2 — Keyword management (Sheets-native, unchanged)
+# Step 2 — Keyword management
 # ---------------------------------------------------------------------------
 
 def _get_or_create_worksheet(sheet, tab_name: str, headers: list[str]):
-    """Return the named worksheet, creating it with the given headers if absent."""
+    """
+    Return the named worksheet, creating it with the given headers if absent.
+    Uses batchUpdate for creation (L-5: Drive API absent on velvet-trade-watch GCP).
+    """
     all_ws = {ws.title: ws for ws in sheet.worksheets()}
     if tab_name in all_ws:
         return all_ws[tab_name]
@@ -156,11 +162,14 @@ def _get_or_create_worksheet(sheet, tab_name: str, headers: list[str]):
 
 def read_keywords(sheet, limit: int | None = None) -> list[str]:
     """
-    Read keyword terms from the _keywords tab (one API call).
-    If the tab is empty, seed it with defaults and return the default terms.
+    Read keyword terms from the _keywords tab (one API call — L-4).
+    If the tab is empty (no data rows beyond header), seed it with defaults
+    and return the default term list.
+    Returns a plain list of term strings.
     """
     keywords_ws = _get_or_create_worksheet(sheet, "_keywords", KEYWORDS_HEADER)
 
+    # L-4: single bulk read.
     rows = keywords_ws.get_all_records()
 
     if rows:
@@ -172,6 +181,7 @@ def read_keywords(sheet, limit: int | None = None) -> list[str]:
             print(f"  keywords: {len(terms)} loaded from _keywords tab")
             return terms
 
+    # Tab is empty — seed it with defaults (one bulk write).
     print("  _keywords tab is empty — seeding with defaults")
     seed_rows = [list(row) for row in DEFAULT_KEYWORDS]
     keywords_ws.append_rows(seed_rows, value_input_option="RAW")
@@ -184,7 +194,7 @@ def read_keywords(sheet, limit: int | None = None) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Step 3 — Naver News API collection (unchanged)
+# Step 3 — Naver News API collection
 # ---------------------------------------------------------------------------
 
 def search_naver(keyword: str, client_id: str, client_secret: str) -> list[dict]:
@@ -204,6 +214,9 @@ def search_naver(keyword: str, client_id: str, client_secret: str) -> list[dict]
     articles = []
     for item in resp.json().get("items", []):
         # OI-3: use originallink (publisher URL) as preferred URL source.
+        # Naver API always returns originallink for news items.
+        # _source_name_from_url() extracts the domain (strips www.) from it,
+        # giving the publisher domain (e.g. "yna.co.kr"), not the search platform.
         original_url = item.get("originallink", "")
         link_url = item.get("link", "")
         url = original_url or link_url
@@ -251,40 +264,143 @@ def fetch_all_articles(
 
 
 # ---------------------------------------------------------------------------
-# Step 4 — Write path: raw_news_articles (sqlite)
+# Step 4 — Deduplication
 # ---------------------------------------------------------------------------
 
-def ingest_articles(conn: sqlite3.Connection, articles: list[dict], dry_run: bool) -> dict:
+def dedup_against_sheet(
+    articles: list[dict], existing_hashes: set[str]
+) -> tuple[list[dict], int]:
     """
-    Insert articles into raw_news_articles, one INSERT OR IGNORE per article.
-    UNIQUE(content_hash) is the authoritative dedup guard — a duplicate
-    within this batch OR already present from an earlier run is a no-op, not
-    an error, and both land in the same skipped_duplicate count.
+    Remove articles whose content_hash already exists in the sheet or appeared
+    earlier in this batch.
 
-    Returns {"fetched": int, "inserted": int, "skipped_duplicate": int}.
-    dry_run performs no writes.
+    Returns (new_articles, skipped_count).
     """
-    if dry_run:
-        return {"fetched": len(articles), "inserted": 0, "skipped_duplicate": 0}
+    seen: set[str] = set()
+    new_articles: list[dict] = []
+    skipped = 0
 
-    inserted = 0
-    now = _utc_now_iso()
+    for article in articles:
+        h = article["content_hash"]
+        if h in existing_hashes or h in seen:
+            skipped += 1
+            continue
+        seen.add(h)
+        new_articles.append(article)
+
+    return new_articles, skipped
+
+
+# ---------------------------------------------------------------------------
+# Step 5 — Sheets read and write
+# ---------------------------------------------------------------------------
+
+def read_existing_hashes(sheet) -> set[str]:
+    """
+    Read the KVN_Articles tab once (L-4). Extract all known dedup-hash values.
+
+    Root-cause fix (A3, 2026-07-03): this used to read the 'content_hash'
+    column, but rows_to_write() below was writing the hash into 'article_id'
+    (a pre-existing bug — see that function's docstring). Reading the wrong
+    column meant dedup never matched a freshly computed hash against
+    anything, so every run re-added every article already in the sheet.
+    'article_id' is where the hash has actually landed for all 8,700+ live
+    rows; read from there.
+    Returns an empty set if the tab is missing or has no rows.
+    """
+    articles_ws = _get_or_create_worksheet(sheet, "KVN_Articles", KVN_ARTICLES_HEADER)
+
+    # L-4: single bulk read.
+    rows = articles_ws.get_all_records()
+    hashes = {str(r.get("article_id", "")) for r in rows if r.get("article_id")}
+    print(f"  existing KVN_Articles rows: {len(rows)} | known hashes: {len(hashes)}")
+    return hashes
+
+
+def rows_to_write(articles: list[dict]) -> list[list]:
+    """
+    Convert article dicts to ordered rows matching KVN_ARTICLES_HEADERS
+    (schema.py) — the real live sheet column order.
+
+    Root-cause fix (A3, 2026-07-03): the previous version built rows in this
+    file's own (wrong, drifted) 13-column order and appended positionally.
+    gspread's append_rows() has no knowledge of header names — it just fills
+    columns left to right — so every column past 'source' silently landed
+    one or more columns off from where its name said it would. This is the
+    origin of the "column-swap" live-sheet state classify_articles.py has
+    been working around since C-5h (title=URL, url=Korean title,
+    content_hash=description are not the intended layout, they are this bug).
+
+    Fixed mapping (matches the real 15-column header, and matches what
+    classify_articles.py already reads from each of these columns):
+      article_id      <- content_hash (the computed dedup hash)
+      title           <- article URL
+      url             <- Korean title text
+      content_hash    <- description (classify_articles.py already reads
+                          this column as the description passed to Haiku)
+      published_date, source <- as collected
+      category / english_summary / ai_processed_at / include_on_site /
+        english_title <- blank, filled by classify_articles.py
+      crawled_at      <- ISO collection timestamp (previously never written)
+      duplicate_of_article_id / dedup_judged_at / manual_override <- blank,
+        filled (or left for a human) by classify_articles.py's semantic
+        clustering pass (C-13 Task 1, 2026-07-04)
+
+    'source_type', 'keyword_matched', 'source_domain' have no column in the
+    live schema and are no longer written — they were being silently
+    misplaced into other columns before this fix.
+    """
+    crawled_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    output_rows = []
     for a in articles:
-        cur = conn.execute(
-            "INSERT OR IGNORE INTO raw_news_articles "
-            "(content_hash, url, title_ko, description, published_date, source_name, "
-            "source_domain, keyword_matched, collected_at, raw_metadata) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                a["content_hash"], a["url"], a["title_ko"], a.get("description", ""),
-                a.get("published_date", ""), a.get("source_name", ""), a.get("source_domain", ""),
-                a.get("keyword_matched", ""), now, None,
-            ),
-        )
-        if cur.rowcount > 0:
-            inserted += 1
-    conn.commit()
-    return {"fetched": len(articles), "inserted": inserted, "skipped_duplicate": len(articles) - inserted}
+        row = [
+            a.get("content_hash", ""),   # article_id
+            a.get("url", ""),            # title
+            a.get("title_ko", ""),       # url
+            a.get("description", ""),    # content_hash
+            a.get("published_date", ""),
+            a.get("source_name", ""),    # source
+            "",                          # category — filled by classify_articles.py
+            "",                          # english_summary
+            "",                          # ai_processed_at
+            "",                          # include_on_site
+            crawled_at,
+            "",                          # english_title
+            "",                          # duplicate_of_article_id — C-13 Task 1, filled by classify_articles.py
+            "",                          # dedup_judged_at
+            "",                          # manual_override — human-only column, never written here
+        ]
+        output_rows.append(row)
+    return output_rows
+
+
+def write_new_articles(sheet, articles: list[dict], dry_run: bool) -> int:
+    """
+    Append new article rows to KVN_Articles in batches (L-4).
+    Returns the number of rows written (0 on dry_run).
+    """
+    if not articles:
+        print("  no new articles to write")
+        return 0
+
+    output_rows = rows_to_write(articles)
+
+    if dry_run:
+        print(f"  [dry-run] would write {len(output_rows)} rows to KVN_Articles")
+        return 0
+
+    articles_ws = _get_or_create_worksheet(sheet, "KVN_Articles", KVN_ARTICLES_HEADER)
+
+    # Batch write in chunks of WRITE_BATCH_SIZE (L-4 pattern from VFI A-3).
+    written = 0
+    for i in range(0, len(output_rows), WRITE_BATCH_SIZE):
+        batch = output_rows[i : i + WRITE_BATCH_SIZE]
+        articles_ws.append_rows(batch, value_input_option="RAW")
+        written += len(batch)
+        if i + WRITE_BATCH_SIZE < len(output_rows):
+            time.sleep(BATCH_SLEEP_SECONDS)
+
+    return written
 
 
 # ---------------------------------------------------------------------------
@@ -293,12 +409,12 @@ def ingest_articles(conn: sqlite3.Connection, articles: list[dict], dry_run: boo
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Collect Naver News articles into raw_news_articles (sqlite)."
+        description="Collect Naver News articles into VKH KVN_Articles Sheets tab."
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Fetch but do not write to sqlite.",
+        help="Fetch and deduplicate but do not write to Sheets.",
     )
     parser.add_argument(
         "--limit",
@@ -313,43 +429,47 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    print("collect_naver.py — VKH Naver News API collection (sqlite)")
+    print("collect_naver.py — VKH Naver News API collection")
     if args.dry_run:
         print("  mode: dry-run (no writes)")
 
-    # --- Credentials ------------------------------------------------------
+    # --- Credentials ----------------------------------------------------------
     config = load_config()
     sheet_id = resolve_sheet_id(config)
-    sheet = connect_sheets(sheet_id)  # keywords only — see module docstring
+    sheet = connect_sheets(sheet_id, scopes=FULL_SCOPES)
     client_id, client_secret = get_naver_credentials()
-    print(f"  keywords sheet: {sheet.title} ({sheet_id})")
+    print(f"  sheet: {sheet.title} ({sheet_id})")
 
-    # --- Keywords -----------------------------------------------------------
+    # A3 fix: fail loudly (not silently) if the live header has drifted
+    # from schema.py's KVN_ARTICLES_HEADERS.
+    articles_ws = _get_or_create_worksheet(sheet, "KVN_Articles", KVN_ARTICLES_HEADER)
+    verify_header(articles_ws)
+
+    # --- Keywords -------------------------------------------------------------
     keywords = read_keywords(sheet, limit=args.limit)
 
     # --- Fetch ----------------------------------------------------------------
     all_articles = fetch_all_articles(keywords, client_id, client_secret)
     total_fetched = len(all_articles)
 
-    # --- Write to sqlite --------------------------------------------------
-    conn = vkh_sqlite.connect()
-    vkh_sqlite.migrate(conn, NEWS_DDL)
-    try:
-        result = ingest_articles(conn, all_articles, dry_run=args.dry_run)
-    finally:
-        conn.close()
+    # --- Dedup against sheet --------------------------------------------------
+    existing_hashes = read_existing_hashes(sheet)
+    new_articles, skipped = dedup_against_sheet(all_articles, existing_hashes)
+
+    # --- Write ----------------------------------------------------------------
+    written = write_new_articles(sheet, new_articles, dry_run=args.dry_run)
 
     # --- Summary line (required output format) --------------------------------
     print(
         f"keywords_searched: {len(keywords)} | "
         f"articles_fetched: {total_fetched} | "
-        f"new_articles: {result['inserted']} | "
-        f"skipped_duplicates: {result['skipped_duplicate']}"
+        f"new_articles: {len(new_articles)} | "
+        f"skipped_duplicates: {skipped}"
     )
     if args.dry_run:
         print("  dry-run complete — no rows written")
     else:
-        print(f"  rows written to raw_news_articles: {result['inserted']}")
+        print(f"  rows written to KVN_Articles: {written}")
 
 
 if __name__ == "__main__":

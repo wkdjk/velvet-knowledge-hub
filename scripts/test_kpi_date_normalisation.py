@@ -11,7 +11,7 @@
 # after "YYYY-12" and gets mistaken for "the latest month", corrupting the
 # rolling-12m window end-date and the YoY %.
 #
-# This repo has no test framework (see scripts/test_news_pipeline.py) — a
+# This repo has no test framework (see scripts/test_dedup_logic.py) — a
 # single assert-based script matches the existing convention.
 #
 # Ported 2026-07-04 (post C-12b module split): build.load_all_tabs /

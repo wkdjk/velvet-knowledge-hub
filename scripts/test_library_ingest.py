@@ -3,7 +3,7 @@
 # test_library_ingest.py — coverage for ingest_library.py / library_data.py
 # (D1 full build, 2026-07-10).
 #
-# No test framework (matches test_news_pipeline.py/test_validate_config.py
+# No test framework (matches test_dedup_logic.py/test_validate_config.py
 # convention — this repo has no pytest config). Assert-based script,
 # in-memory sqlite only — no network, no Sheets, no credentials required.
 #

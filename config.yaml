@@ -180,25 +180,6 @@ sources:
       by the model named in ai_model above. Keyword list maintained in the
       _keywords Sheets tab (Phase B — Phase A ships hard-coded).
 
-  # --- News (D3, Phase D rebuild) --------------------------------------------
-  # sqlite-backed. enabled stays false until this source's live-Sheet
-  # migration (scripts/migrate_news_to_sqlite.py --live) has run and been
-  # verified — same initial posture as D1 Library (2026-07-10). Flip to
-  # true only after CaptainQ review of that separate, later step.
-
-  - id: news_articles
-    db_table: news_articles
-    kind: news
-    section: news_pulse
-    enabled: false
-    description: >
-      Korean-language deer velvet news via Naver News API. Raw collection in
-      raw_news_articles; relevance judgement, classification, and semantic
-      clustering land in news_articles. Weekly brief absorbed into this
-      section's read path (see scripts/news_data.py). Schema + pipeline:
-      scripts/news_schema.py,
-      Domain_Knowledge_staging/VKH_D3_news_scaffolding_proposal_2026-07-11.md.
-
 # ---------------------------------------------------------------------------
 # CSV-by-email — Google Apps Script web app URL.
 # Leave empty until the script is deployed (C8-P2).
