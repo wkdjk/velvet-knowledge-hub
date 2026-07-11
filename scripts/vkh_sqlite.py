@@ -32,10 +32,18 @@ def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
 
     sqlite3.Row gives column-name access (row["title"]) without adding a
     dependency — the ladder's rung 3 (stdlib) before rung 5 (a new package).
+
+    busy_timeout (D3 side-observation, SurveyorQ advisory 2026-07-11, applies
+    fleet-wide to D1/D2/D3): without this, a write from a scheduled
+    collection run overlapping a manual classify/build run fails immediately
+    with "database is locked" instead of waiting briefly. One line, cheap,
+    solo-operator-safe — no behaviour change for the common case of one
+    writer at a time.
     """
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 5000")
     return conn
 
 

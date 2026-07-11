@@ -1,35 +1,38 @@
-# Import only — do not run directly. Called from scripts/build.py.
+# Import only — do not run directly. Called from scripts/news_data.py.
 #
 # vkh_brief.py — Velvet Knowledge Hub: "this week at a glance" auto-drafted
-# brief + human publication gate (C-14 item 4, 2026-07-05).
+# brief + human publication gate (C-14 item 4, 2026-07-05; rewired to sqlite
+# storage, D3 Phase D rebuild, 2026-07-11).
 #
-# Design (잠망경-approved 2026-07-04, Domain_Knowledge/vkh_brief_gate_premortem_2026-07-04.md):
+# Design (잠망경-approved 2026-07-04, Domain_Knowledge/vkh_brief_gate_premortem_2026-07-04.md;
+# storage rewire per Domain_Knowledge_staging/VKH_D3_news_scaffolding_proposal_2026-07-11.md §5):
 #   1. One Haiku call per build synthesises this week's KPI deltas, the
 #      Section 2 triangulation headline, top news, and notable import
-#      records into 4-6 plain-English sentences.
+#      records into 4-6 plain-English sentences. UNCHANGED from C-14.
 #   2. A cheap, non-LLM fact check extracts every %/kg/tonnes/articles/
 #      declarations figure the draft cites and mechanically compares it
-#      against the actual numbers computed this same build. A mismatch
-#      flags the draft "review_needed" — it never blocks the draft from
-#      being written, only warns the Commander before they approve it.
-#   3. Human gate: the draft lands in the weekly_brief Sheets tab. Nothing
-#      is shown on the live site until the Commander sets approved=TRUE.
-#      No "publish automatically after N days" fallback exists in this file
-#      — that code path was deliberately never written (pre-mortem
-#      Pre-Mortem #4). Add it only after a fresh 잠망경 if ever requested.
+#      against the actual numbers computed this same build. UNCHANGED.
+#   3. Human gate: the draft is written to raw_weekly_brief_drafts (sqlite,
+#      script-authored) AND pushed to the existing weekly_brief Sheets tab
+#      (Commander's edit/approve surface — reused as-is, not a new tab; see
+#      §7 deviation note in the D3 implementation report). Nothing is shown
+#      on the live site until the Commander sets approved=TRUE there.
+#      sync_weekly_brief_approvals() pulls approved/published_text/notes
+#      back into weekly_briefs (sqlite, canonical). No "publish automatically
+#      after N days" fallback exists in this file — deliberately never
+#      written (Pre-Mortem #4).
 #   4. Once approved, the site shows the most recently *approved* week's
 #      text (never an unapproved newer draft) with a staleness warning once
-#      the approval is more than stale_after_days old — same pattern as
-#      _kpta_estimate_context() in vkh_charts.py.
-#   5. weekly_brief.enabled in config.yaml is a hard kill switch: false means
-#      no draft is generated and no section is rendered — not an empty box.
+#      the approval is more than stale_after_days old.
+#   5. weekly_brief.enabled in config.yaml is a hard kill switch.
 #
 # Security: no credentials in this file. All secrets from environment only.
 
 import os
 import re
+import sqlite3
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 
 import anthropic
 import gspread
@@ -37,17 +40,18 @@ import gspread
 from scripts.classify_articles import validate_api_key
 
 _HAIKU_MODEL = "claude-haiku-4-5-20251001"
-_BRIEF_TAB = "weekly_brief"
+_BRIEF_TAB = "weekly_brief"  # reused as the Commander's curation surface — see module docstring point 3
 
-# weekly_brief tab columns — see scripts/schema.py WEEKLY_BRIEF_HEADERS for
-# the single source of truth. Referenced here by name (get_all_records()),
-# not by index, per L-COLUMN-ALIAS.
 _DEFAULT_STALE_AFTER_DAYS = 14  # ~2 weekly build cycles (build_site.yml cron)
 
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 # ---------------------------------------------------------------------------
-# Fact check — mechanical, no LLM. Extracts every number immediately
-# followed by a unit the brief is allowed to cite, and compares it against
-# the actual KPI/chart_data values from this same build.
+# Fact check — mechanical, no LLM. UNCHANGED from C-14 (§5: "prompt/fact-check/
+# approval-gate logic unchanged; storage retargeted").
 # ---------------------------------------------------------------------------
 
 _CITED_NUMBER_RE = re.compile(
@@ -134,10 +138,8 @@ def fact_check_draft(draft_text: str, kpi: dict, chart_data: dict) -> tuple[str,
     Mechanically compare every %/kg/tonnes/articles/declarations figure cited
     in draft_text against this build's actual KPI/chart_data values.
 
-    Returns (status, detail): status is "ok" or "review_needed". detail is a
-    human-readable list of unmatched figures (empty string if ok). Never
-    raises — a regex/parse issue degrades to "review_needed" with a note,
-    not a crash (L-12).
+    Returns (status, detail): status is "ok" or "review_needed". Never raises
+    — a regex/parse issue degrades to "review_needed" with a note (L-12).
     """
     try:
         reference = _reference_numbers(kpi, chart_data)
@@ -157,7 +159,7 @@ def fact_check_draft(draft_text: str, kpi: dict, chart_data: dict) -> tuple[str,
 
 
 # ---------------------------------------------------------------------------
-# Prompt construction
+# Prompt construction — UNCHANGED from C-14.
 # ---------------------------------------------------------------------------
 
 _SYSTEM_PROMPT = (
@@ -252,39 +254,21 @@ def _call_haiku(prompt: str) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Sheets I/O
+# sqlite write path — raw_weekly_brief_drafts (script-authored)
 # ---------------------------------------------------------------------------
-
-def _get_brief_worksheet(sheet) -> "gspread.Worksheet | None":
-    """Return the weekly_brief worksheet, or None if it does not exist yet
-    (run scripts/setup_weekly_brief_tab.py first) — graceful degradation,
-    never crashes the build (L-12)."""
-    try:
-        return sheet.worksheet(_BRIEF_TAB)
-    except gspread.exceptions.WorksheetNotFound:
-        print(f"WARNING: '{_BRIEF_TAB}' tab not found — run scripts/setup_weekly_brief_tab.py. "
-              "Weekly brief section will be unavailable.", file=sys.stderr)
-        return None
-
-
-def _is_truthy(val) -> bool:
-    if isinstance(val, bool):
-        return val
-    return str(val).strip().upper() in ("TRUE", "1", "YES")
-
 
 def generate_weekly_brief_draft(
     config: dict,
-    sheet,
+    conn: sqlite3.Connection,
     kpi: dict,
     chart_data: dict,
     sections: dict,
     week_ending_date: str,
 ) -> dict:
     """
-    Generate and write this week's draft brief, if one does not already
-    exist for week_ending_date. Also auto-stamps approved_at the first time
-    it sees an approved=TRUE row with approved_at still blank.
+    Generate this week's draft brief, if one does not already exist for
+    week_ending_date (UNIQUE(week_ending_date) makes this idempotent across
+    multiple builds in the same week — e.g. push-triggered rebuilds).
 
     Returns a notice dict: {"new_draft": bool, "fact_check_status": str,
     "week_ending_date": str} for emit_weekly_brief_notice().
@@ -293,32 +277,10 @@ def generate_weekly_brief_draft(
     if not weekly_cfg.get("enabled", False):
         return {"new_draft": False}
 
-    ws = _get_brief_worksheet(sheet)
-    if ws is None:
-        return {"new_draft": False}
-
-    rows = ws.get_all_records()
-
-    # --- Auto-stamp approved_at once, for any row a human just approved ---
-    header = ws.row_values(1)
-    stamp_updates = []
-    if "approved_at" in header and "approved" in header:
-        approved_col = header.index("approved") + 1
-        approved_at_col = header.index("approved_at") + 1
-        for i, row in enumerate(rows):
-            if _is_truthy(row.get("approved")) and not str(row.get("approved_at", "")).strip():
-                sheet_row_num = i + 2  # header is row 1
-                stamp_updates.append({
-                    "range": gspread.utils.rowcol_to_a1(sheet_row_num, approved_at_col),
-                    "values": [[week_ending_date]],
-                })
-                row["approved_at"] = week_ending_date  # keep in-memory rows fresh for this same render
-        if stamp_updates:
-            ws.batch_update(stamp_updates, value_input_option="USER_ENTERED")
-
-    # --- Skip generation if this week already has a row (idempotent across
-    # multiple builds in the same week, e.g. push-triggered rebuilds) ---
-    if any(str(r.get("week_ending_date", "")).strip() == week_ending_date for r in rows):
+    existing = conn.execute(
+        "SELECT id FROM raw_weekly_brief_drafts WHERE week_ending_date = ?", (week_ending_date,)
+    ).fetchone()
+    if existing is not None:
         return {"new_draft": False}
 
     prompt = _build_prompt(kpi, chart_data, sections, week_ending_date)
@@ -328,10 +290,13 @@ def generate_weekly_brief_draft(
 
     fact_check_status, fact_check_detail = fact_check_draft(draft_text, kpi, chart_data)
 
-    ws.append_row(
-        [week_ending_date, draft_text, fact_check_status, fact_check_detail, "", "", "", ""],
-        value_input_option="USER_ENTERED",
+    conn.execute(
+        "INSERT INTO raw_weekly_brief_drafts "
+        "(week_ending_date, draft_text, fact_check_status, fact_check_detail, generated_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (week_ending_date, draft_text, fact_check_status, fact_check_detail, _utc_now_iso()),
     )
+    conn.commit()
 
     return {
         "new_draft": True,
@@ -344,10 +309,9 @@ def generate_weekly_brief_draft(
 
 def emit_weekly_brief_notice(result: dict) -> None:
     """
-    Write a GitHub Actions step output when a new draft was generated, so a
-    workflow step can turn it into an email (same pattern as
-    classify_articles.emit_succession_notice — C-13). A no-op if
-    GITHUB_OUTPUT is not set (local run) or no new draft was written.
+    Write a GitHub Actions step output when a new draft was generated (same
+    pattern as classify_articles.emit_succession_notice). No-op if
+    GITHUB_OUTPUT isn't set (local run) or no new draft was written.
     """
     if not result.get("new_draft"):
         return
@@ -362,19 +326,150 @@ def emit_weekly_brief_notice(result: dict) -> None:
         f.write(f"brief_fact_check_status={result.get('fact_check_status', '')}\n")
 
 
-def get_weekly_brief_context(config: dict, sheet) -> dict:
+# ---------------------------------------------------------------------------
+# Sheets curation surface — the existing weekly_brief tab, reused (§5
+# deviation, see D3 implementation report). Push: new drafts appear for the
+# Commander to review. Pull: approved/published_text/notes sync back into
+# weekly_briefs (sqlite, canonical) — this is the ONLY write path to
+# weekly_briefs, mirroring D1's sync_curation_tab() pattern.
+# ---------------------------------------------------------------------------
+
+def _get_brief_worksheet(sheet) -> "gspread.Worksheet | None":
+    """Return the weekly_brief worksheet, or None if it does not exist yet."""
+    try:
+        return sheet.worksheet(_BRIEF_TAB)
+    except gspread.exceptions.WorksheetNotFound:
+        print(f"WARNING: '{_BRIEF_TAB}' tab not found — run scripts/setup_weekly_brief_tab.py. "
+              "Weekly brief section will be unavailable.", file=sys.stderr)
+        return None
+
+
+def _is_truthy(val) -> bool:
+    if isinstance(val, bool):
+        return val
+    return str(val).strip().upper() in ("TRUE", "1", "YES")
+
+
+def push_pending_drafts_to_sheet(conn: sqlite3.Connection, sheet) -> int:
     """
-    Read the weekly_brief tab and return the most recently *approved* week's
-    context for template rendering.
+    Append any raw_weekly_brief_drafts row not yet present in the
+    weekly_brief Sheets tab, so the Commander can see and approve it.
+    Returns the number of rows pushed.
+    """
+    ws = _get_brief_worksheet(sheet)
+    if ws is None:
+        return 0
+
+    rows = ws.get_all_records()
+    existing_weeks = {str(r.get("week_ending_date", "")).strip() for r in rows}
+
+    drafts = conn.execute(
+        "SELECT week_ending_date, draft_text, fact_check_status, fact_check_detail "
+        "FROM raw_weekly_brief_drafts ORDER BY week_ending_date"
+    ).fetchall()
+
+    new_rows = [
+        [d["week_ending_date"], d["draft_text"], d["fact_check_status"], d["fact_check_detail"] or "", "", "", "", ""]
+        for d in drafts
+        if d["week_ending_date"] not in existing_weeks
+    ]
+    if new_rows:
+        ws.append_rows(new_rows, value_input_option="USER_ENTERED")
+    return len(new_rows)
+
+
+def sync_weekly_brief_approvals(conn: sqlite3.Connection, sheet) -> dict:
+    """
+    Pull approved/published_text/notes from the weekly_brief Sheets tab into
+    weekly_briefs (sqlite, canonical). Upserts keyed on draft_ref (UNIQUE),
+    same promote-or-update posture as ingest_library.promote_or_update_one().
+
+    Also auto-stamps approved_at in the Sheet the first time it sees
+    approved=TRUE with approved_at still blank (ported from C-14 unchanged).
+
+    Returns a summary dict: promoted / updated / skipped_no_draft.
+    """
+    ws = _get_brief_worksheet(sheet)
+    if ws is None:
+        return {"promoted": 0, "updated": 0, "skipped_no_draft": 0}
+
+    rows = ws.get_all_records()
+    header = ws.row_values(1)
+
+    stamp_updates = []
+    if "approved_at" in header and "approved" in header:
+        approved_col = header.index("approved") + 1
+        approved_at_col = header.index("approved_at") + 1
+        for i, row in enumerate(rows):
+            if _is_truthy(row.get("approved")) and not str(row.get("approved_at", "")).strip():
+                sheet_row_num = i + 2
+                week = str(row.get("week_ending_date", "")).strip()
+                stamp_updates.append({
+                    "range": gspread.utils.rowcol_to_a1(sheet_row_num, approved_at_col),
+                    "values": [[week]],
+                })
+                row["approved_at"] = week
+        if stamp_updates:
+            ws.batch_update(stamp_updates, value_input_option="USER_ENTERED")
+
+    promoted = 0
+    updated = 0
+    skipped_no_draft = 0
+
+    for row in rows:
+        week = str(row.get("week_ending_date", "")).strip()
+        if not week:
+            continue
+        draft = conn.execute(
+            "SELECT id FROM raw_weekly_brief_drafts WHERE week_ending_date = ?", (week,)
+        ).fetchone()
+        if draft is None:
+            skipped_no_draft += 1
+            continue
+        draft_id = draft[0]
+
+        approved = 1 if _is_truthy(row.get("approved")) else 0
+        approved_at = str(row.get("approved_at", "")).strip() or None
+        published_text = str(row.get("published_text", "")).strip() or None
+        notes = str(row.get("notes", "")).strip() or None
+
+        existing = conn.execute(
+            "SELECT id FROM weekly_briefs WHERE draft_ref = ?", (draft_id,)
+        ).fetchone()
+        if existing is None:
+            conn.execute(
+                "INSERT INTO weekly_briefs (draft_ref, approved, approved_at, published_text, notes) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (draft_id, approved, approved_at, published_text, notes),
+            )
+            promoted += 1
+        else:
+            conn.execute(
+                "UPDATE weekly_briefs SET approved = ?, approved_at = ?, published_text = ?, notes = ? "
+                "WHERE draft_ref = ?",
+                (approved, approved_at, published_text, notes, draft_id),
+            )
+            updated += 1
+
+    conn.commit()
+    return {"promoted": promoted, "updated": updated, "skipped_no_draft": skipped_no_draft}
+
+
+# ---------------------------------------------------------------------------
+# Read path — News section's own read path (news_data.py) calls this
+# directly, per §5: the weekly brief is no longer a standalone build-level
+# section.
+# ---------------------------------------------------------------------------
+
+def get_weekly_brief_context(config: dict, conn: sqlite3.Connection) -> dict:
+    """
+    Return the most recently *approved* week's context for template
+    rendering, from weekly_briefs JOIN raw_weekly_brief_drafts.
 
     Returns:
-      {"enabled": False} — weekly_brief.enabled is false in config.yaml, or
-                            the tab does not exist yet. Template renders
-                            nothing (opt-out is a hard switch, not a hidden
-                            option — pre-mortem item 5).
+      {"enabled": False} — weekly_brief.enabled is false in config.yaml.
       {"enabled": True, "available": False} — feature on, but no approved
-                            brief exists yet (e.g. first run before the
-                            Commander has approved anything).
+                            brief exists yet.
       {"enabled": True, "available": True, "text": str, "week_ending_date":
        str, "approved_at": str, "fact_check_status": str, "age_days": int,
        "is_stale": bool}
@@ -383,19 +478,23 @@ def get_weekly_brief_context(config: dict, sheet) -> dict:
     if not weekly_cfg.get("enabled", False):
         return {"enabled": False}
 
-    ws = _get_brief_worksheet(sheet)
-    if ws is None:
-        return {"enabled": False}
-
-    rows = ws.get_all_records()
-    approved_rows = [r for r in rows if _is_truthy(r.get("approved"))]
-    if not approved_rows:
+    try:
+        row = conn.execute(
+            "SELECT d.week_ending_date, d.draft_text, d.fact_check_status, "
+            "w.approved_at, w.published_text "
+            "FROM weekly_briefs w JOIN raw_weekly_brief_drafts d ON d.id = w.draft_ref "
+            "WHERE w.approved = 1 "
+            "ORDER BY d.week_ending_date DESC LIMIT 1"
+        ).fetchone()
+    except sqlite3.OperationalError:
         return {"enabled": True, "available": False}
 
-    latest = max(approved_rows, key=lambda r: str(r.get("week_ending_date", "")))
+    if row is None:
+        return {"enabled": True, "available": False}
 
-    text = str(latest.get("published_text", "")).strip() or str(latest.get("draft_text", "")).strip() or "—"
-    approved_at_raw = str(latest.get("approved_at", "")).strip() or str(latest.get("week_ending_date", "")).strip()
+    week_ending_date, draft_text, fact_check_status, approved_at, published_text = row
+    text = str(published_text or "").strip() or str(draft_text or "").strip() or "—"
+    approved_at_raw = str(approved_at or "").strip() or str(week_ending_date or "").strip()
 
     stale_after_days = int(weekly_cfg.get("stale_after_days", _DEFAULT_STALE_AFTER_DAYS))
     age_days = None
@@ -412,9 +511,9 @@ def get_weekly_brief_context(config: dict, sheet) -> dict:
         "enabled": True,
         "available": True,
         "text": text,
-        "week_ending_date": str(latest.get("week_ending_date", "")),
+        "week_ending_date": str(week_ending_date),
         "approved_at": approved_at_raw,
-        "fact_check_status": str(latest.get("fact_check_status", "")),
+        "fact_check_status": str(fact_check_status or ""),
         "age_days": age_days,
         "is_stale": is_stale,
     }

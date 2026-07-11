@@ -144,6 +144,19 @@ LIBRARY_CURATION_HEADERS = [
 ]
 
 
+# articles_curation (D3, revision 2, Commander decision 2026-07-11): the
+# Commander-facing Sheets window onto news_articles' two human-only columns
+# (hidden_by_commander/manual_override) — closes SurveyorQ N-2. Mirrors
+# library_curation's "script writes reference columns, human writes the
+# rest" split. See scripts/sync_articles_curation.py for the read/write flow.
+ARTICLES_CURATION_HEADERS = [
+    "raw_ref",   # script-written — raw_news_articles.id, primary key for the sync join
+    "title_ko",  # script-written — Korean headline, for human reference only
+    "hidden",    # human-only — TRUE hides this article (writes hidden_by_commander)
+    "manual_override",  # human-only — TRUE protects this article from auto-suppression by clustering
+]
+
+
 def verify_header(worksheet, expected: list[str] = KVN_ARTICLES_HEADERS) -> None:
     """
     Read row 1 of worksheet and compare it to expected.
